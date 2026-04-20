@@ -46,7 +46,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const loadVersionRef = useRef(0);
   const playAtRef = useRef<(nIdx: number, iIdx: number) => void>(() => {});
   const endTimeRef = useRef<number | null>(null);
-  const handleEndedRef = useRef<() => void>(() => {});
+  const nextRef = useRef<() => void>(() => {});
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
     const audio = audioRef.current;
@@ -105,25 +105,6 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
 
   playAtRef.current = playAt;
 
-  handleEndedRef.current = () => {
-    const audio = audioRef.current;
-    const pos = posRef.current;
-    if (!pos || !audio) return;
-    const nxt = nextItemPosition(projectRef.current, pos);
-    if (!nxt) {
-      setState((s) => ({ ...s, isPlaying: false }));
-      return;
-    }
-    if (nxt.numeroIndex !== pos.numeroIndex) {
-      audio.src = "";
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-      posRef.current = nxt;
-      setState((s) => ({ ...s, position: nxt, isPlaying: false, progress: { position: 0, duration: 0 } }));
-      return;
-    }
-    playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
-  };
-
   useEffect(() => {
     const audio = new Audio();
     audioRef.current = audio;
@@ -133,7 +114,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       if (endTime !== null && audio.currentTime >= endTime) {
         endTimeRef.current = null;
         audio.pause();
-        handleEndedRef.current();
+        nextRef.current();
         return;
       }
       setState((s) => ({
@@ -145,7 +126,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       }));
     });
 
-    audio.addEventListener("ended", () => handleEndedRef.current());
+    audio.addEventListener("ended", () => nextRef.current());
 
     audio.addEventListener("error", () => {
       setState((s) => ({ ...s, isPlaying: false, audioError: "Erreur de lecture audio" }));
@@ -189,7 +170,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     }
   }, []);
 
-  const next = useCallback(() => {
+  const next = useCallback((): void => {
     const { position, isPlaying } = stateRef.current;
     const pos = position ?? firstItemPosition(projectRef.current);
     if (!pos) return;
@@ -215,6 +196,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
 
     playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
   }, []);
+
+  nextRef.current = next;
 
   const seek = useCallback((position: number) => {
     const audio = audioRef.current;
