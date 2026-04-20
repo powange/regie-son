@@ -20,6 +20,10 @@ interface Props {
 
 export default function AudioItem({ audio, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(audio.original_name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -30,9 +34,21 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
 
   useEffect(() => {
     if (isActive) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [isActive]);
+
+  useEffect(() => {
+    if (editingName) nameInputRef.current?.focus();
+  }, [editingName]);
+
+  function commitName() {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== audio.original_name) {
+      onChange({ ...audio, original_name: trimmed });
+    }
+    setEditingName(false);
+  }
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -61,9 +77,28 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
           {isMissing ? <AlertTriangle size={13} /> : isPlaying ? <Pause size={13} /> : isActive ? <Play size={13} /> : <Music size={13} />}
         </button>
 
-        <span className="audio-name" title={isMissing ? `Fichier introuvable : ${audio.filename}` : audio.original_name}>
-          {audio.original_name}
-        </span>
+        {editMode && editingName ? (
+          <input
+            ref={nameInputRef}
+            className="audio-name-input"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              if (e.key === "Escape") { setNameDraft(audio.original_name); setEditingName(false); }
+            }}
+          />
+        ) : (
+          <span
+            className="audio-name"
+            title={isMissing ? `Fichier introuvable : ${audio.filename}` : editMode ? "Cliquer pour renommer" : audio.original_name}
+            onClick={editMode ? () => { setNameDraft(audio.original_name); setEditingName(true); } : undefined}
+            style={editMode ? { cursor: "text" } : undefined}
+          >
+            {audio.original_name}
+          </span>
+        )}
 
         {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
           <span className="audio-badges">
@@ -111,7 +146,7 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
         )}
       </div>
 
-      {editMode && (
+      {editMode ? (
         <input
           className="item-note-input"
           type="text"
@@ -119,6 +154,8 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
           value={audio.note ?? ""}
           onChange={(e) => onChange({ ...audio, note: e.target.value || undefined })}
         />
+      ) : (
+        audio.note && <p className="item-note-display">{audio.note}</p>
       )}
 
       {showSettings && (

@@ -24,7 +24,7 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
 
   useEffect(() => {
     if (isActive) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [isActive]);
 
@@ -57,7 +57,7 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
         )}
       </div>
 
-      {editMode && (
+      {editMode ? (
         <input
           className="item-note-input"
           type="text"
@@ -65,6 +65,8 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
           value={pause.note ?? ""}
           onChange={(e) => onChange({ ...pause, note: e.target.value || undefined })}
         />
+      ) : (
+        pause.note && <p className="item-note-display">{pause.note}</p>
       )}
     </div>
   );
