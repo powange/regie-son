@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
 use tauri_plugin_dialog::DialogExt;
+use tauri::Emitter;
 use std::fs;
 
 // ===== Project types =====
@@ -213,6 +214,19 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
     Ok(())
 }
 
+#[derive(Serialize, Clone)]
+struct YtDlpProgress { step: String }
+
+fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
+    let cmd = Command::new(path);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 fn find_yt_dlp() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -229,15 +243,17 @@ fn find_yt_dlp() -> PathBuf {
 }
 
 #[tauri::command]
-async fn download_youtube_audio(url: String, project_path: String) -> Result<AudioFile, String> {
+async fn download_youtube_audio(url: String, project_path: String, app: tauri::AppHandle) -> Result<AudioFile, String> {
     let yt_dlp = find_yt_dlp();
 
-    let check = Command::new(&yt_dlp).arg("--version").output();
+    let check = silent_command(&yt_dlp).arg("--version").output();
     if check.is_err() || !check.unwrap().status.success() {
         return Err("yt-dlp est introuvable dans cette installation.".into());
     }
 
-    let title_out = Command::new(&yt_dlp)
+    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: "Récupération des informations de la vidéo…".into() });
+
+    let title_out = silent_command(&yt_dlp)
         .args(["--print", "%(title)s", "--no-download", &url])
         .output()
         .map_err(|e| format!("Erreur yt-dlp : {}", e))?;
@@ -248,11 +264,13 @@ async fn download_youtube_audio(url: String, project_path: String) -> Result<Aud
         "YouTube audio".to_string()
     };
 
+    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: format!("Téléchargement de « {} »…", title) });
+
     let id = uuid::Uuid::new_v4().to_string();
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let output_template = musiques_dir.join(format!("{}.%(ext)s", id)).to_string_lossy().to_string();
 
-    let download = Command::new(&yt_dlp)
+    let download = silent_command(&yt_dlp)
         .args([
             "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
             "-o", &output_template,

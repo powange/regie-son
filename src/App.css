@@ -89,7 +89,8 @@ button:active { transform: scale(0.97); }
 .btn-icon:hover { color: var(--text); opacity: 1; }
 
 /* ===== INPUTS ===== */
-input[type="text"] {
+input[type="text"],
+input[type="url"] {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -100,7 +101,9 @@ input[type="text"] {
   outline: none;
   transition: border-color 0.15s;
 }
-input[type="text"]:focus { border-color: var(--accent); }
+input[type="text"]:focus,
+input[type="url"]:focus { border-color: var(--accent); }
+input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
 
 /* ===== UPDATE BANNER ===== */
 .update-banner {
@@ -358,6 +361,26 @@ input[type="text"]:focus { border-color: var(--accent); }
 }
 
 .modal-error { color: var(--accent); font-size: 0.85rem; margin-top: 0.5rem; }
+.modal-hint { font-size: 0.78rem; color: var(--text2); }
+
+.download-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text2);
+  margin-top: 0.8rem;
+  min-height: 1.4rem;
+}
+.download-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
+}
 
 .source-list { display: flex; flex-direction: column; gap: 0.5rem; }
 

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Monitor, Link, FileVideo, X, Download } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 
 type View = "list" | "url" | "youtube";
 
@@ -7,25 +8,37 @@ interface DownloadFormProps {
   label: string;
   placeholder: string;
   hint?: string;
+  withProgress?: boolean;
   onSubmit: (url: string) => Promise<void>;
   onBack: () => void;
 }
 
-function DownloadForm({ label, placeholder, hint, onSubmit, onBack }: DownloadFormProps) {
+function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack }: DownloadFormProps) {
   const [url, setUrl] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!downloading || !withProgress) return;
+    let unlisten: (() => void) | undefined;
+    listen<{ step: string }>("yt-dlp-progress", (e) => setStep(e.payload.step))
+      .then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [downloading, withProgress]);
 
   async function handleDownload() {
     const trimmed = url.trim();
     if (!trimmed) return;
     setError(null);
+    setStep(null);
     setDownloading(true);
     try {
       await onSubmit(trimmed);
     } catch (err) {
       setError(String(err));
       setDownloading(false);
+      setStep(null);
     }
   }
 
@@ -42,14 +55,21 @@ function DownloadForm({ label, placeholder, hint, onSubmit, onBack }: DownloadFo
           autoFocus
           onKeyDown={(e) => e.key === "Enter" && handleDownload()}
         />
-        {hint && <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>{hint}</span>}
+        {hint && !downloading && <span className="modal-hint">{hint}</span>}
       </div>
+
+      {downloading && (
+        <div className="download-progress">
+          <div className="download-spinner" />
+          <span>{step ?? (withProgress ? "Initialisation…" : "Téléchargement en cours…")}</span>
+        </div>
+      )}
 
       {error && <p className="modal-error">{error}</p>}
 
       <div className="modal-actions">
         {!downloading && (
-          <button className="btn" onClick={onBack}>Retour</button>
+          <button className="btn btn-secondary" onClick={onBack}>Retour</button>
         )}
         <button
           className="btn btn-primary"
@@ -57,7 +77,7 @@ function DownloadForm({ label, placeholder, hint, onSubmit, onBack }: DownloadFo
           disabled={!url.trim() || downloading}
         >
           <Download size={14} />
-          {downloading ? "Téléchargement…" : "Télécharger"}
+          {downloading ? "En cours…" : "Télécharger"}
         </button>
       </div>
     </div>
@@ -115,6 +135,7 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
             label="Lien de la vidéo YouTube"
             placeholder="https://www.youtube.com/watch?v=..."
             hint="Télécharge l'audio depuis YouTube (inclus dans l'application)"
+            withProgress
             onSubmit={async (url) => { await onSelectYoutube(url); onClose(); }}
             onBack={back}
           />
