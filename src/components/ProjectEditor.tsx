@@ -13,7 +13,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowLeft, Plus, Coffee, Settings, Pencil, MonitorPlay, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Coffee, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -37,12 +37,38 @@ function newNumero(type: NumeroType, index: number): Numero {
   return { id: crypto.randomUUID(), type, name: names[type], items: [] };
 }
 
+interface VerifyResult { missing: string[]; orphans: string[] }
+
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
   const [saved, setSaved] = useState(true);
   const [editMode, setEditMode] = useState(true);
   const [showMode, setShowMode] = useState(false);
   const [showModeError, setShowModeError] = useState<string | null>(null);
+  const [verify, setVerify] = useState<VerifyResult>({ missing: [], orphans: [] });
+  const [verifyDismissed, setVerifyDismissed] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function runVerify() {
+    try {
+      const result = await invoke<VerifyResult>("verify_project", { project });
+      setVerify(result);
+    } catch (err) {
+      console.error("verify_project:", err);
+    }
+  }
+
+  useEffect(() => { runVerify(); }, [project]);
+
+  async function cleanupOrphans() {
+    try {
+      await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: verify.orphans });
+      setVerify((v) => ({ ...v, orphans: [] }));
+    } catch (err) {
+      alert("Erreur lors du nettoyage : " + err);
+    }
+  }
+
+  const missingSet = new Set(verify.missing);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editMode ? 5 : 99999 } }));
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
@@ -143,6 +169,28 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         </div>
       )}
 
+      {!verifyDismissed && (verify.missing.length > 0 || verify.orphans.length > 0) && (
+        <div className="verify-banner">
+          <AlertTriangle size={14} />
+          <div className="verify-banner-text">
+            {verify.missing.length > 0 && (
+              <span>{verify.missing.length} fichier{verify.missing.length > 1 ? "s" : ""} manquant{verify.missing.length > 1 ? "s" : ""}</span>
+            )}
+            {verify.missing.length > 0 && verify.orphans.length > 0 && <span>·</span>}
+            {verify.orphans.length > 0 && (
+              <span>{verify.orphans.length} fichier{verify.orphans.length > 1 ? "s" : ""} orphelin{verify.orphans.length > 1 ? "s" : ""} dans le dossier</span>
+            )}
+          </div>
+          {verify.orphans.length > 0 && (
+            <button className="btn-ghost verify-banner-btn" onClick={cleanupOrphans} title="Supprimer les fichiers orphelins">
+              <Trash2 size={13} />
+              Nettoyer
+            </button>
+          )}
+          <button className="btn-icon" onClick={() => setVerifyDismissed(true)} title="Masquer"><X size={13} /></button>
+        </div>
+      )}
+
       <PlayerBar
         state={playerState}
         project={project}
@@ -173,6 +221,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 editMode={editMode}
                 playerPosition={playerState.position}
                 isPlaying={playerState.isPlaying}
+                missingFiles={missingSet}
                 onPlayAudio={(aIdx) => playAt(nIdx, aIdx)}
                 onChange={updateNumero}
                 onDelete={() => deleteNumero(n.id)}

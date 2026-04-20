@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
+import { AlertTriangle, GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import AudioSettingsModal from "./AudioSettingsModal";
 
@@ -10,12 +10,13 @@ interface Props {
   editMode: boolean;
   isActive: boolean;
   isPlaying: boolean;
+  isMissing?: boolean;
   onPlay: () => void;
   onChange: (updated: AudioFile) => void;
   onDelete: () => void;
 }
 
-export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay, onChange, onDelete }: Props) {
+export default function AudioItem({ audio, editMode, isActive, isPlaying, isMissing, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
@@ -35,7 +36,7 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
   }
 
   return (
-    <div className={`audio-item${isActive ? " audio-item--active" : ""}`} ref={setNodeRef} style={style}>
+    <div className={`audio-item${isActive ? " audio-item--active" : ""}${isMissing ? " audio-item--missing" : ""}`} ref={setNodeRef} style={style}>
       <div className="audio-item-row">
         {editMode && (
           <span className="audio-drag-handle" {...attributes} {...listeners}>
@@ -43,11 +44,11 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
           </span>
         )}
 
-        <button className="audio-play-btn" onClick={onPlay} title={isPlaying ? "En lecture" : "Lire"}>
-          {isPlaying ? <Pause size={13} /> : isActive ? <Play size={13} /> : <Music size={13} />}
+        <button className="audio-play-btn" onClick={onPlay} disabled={isMissing} title={isMissing ? "Fichier introuvable" : isPlaying ? "En lecture" : "Lire"}>
+          {isMissing ? <AlertTriangle size={13} /> : isPlaying ? <Pause size={13} /> : isActive ? <Play size={13} /> : <Music size={13} />}
         </button>
 
-        <span className="audio-name" title={audio.original_name}>
+        <span className="audio-name" title={isMissing ? `Fichier introuvable : ${audio.filename}` : audio.original_name}>
           {audio.original_name}
         </span>
 

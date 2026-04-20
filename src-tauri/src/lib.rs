@@ -264,6 +264,52 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
     Ok(())
 }
 
+#[derive(Serialize)]
+pub struct VerifyResult {
+    missing: Vec<String>,
+    orphans: Vec<String>,
+}
+
+#[tauri::command]
+fn verify_project(project: Project) -> Result<VerifyResult, String> {
+    let musiques_dir = PathBuf::from(&project.path).join("musiques");
+    let mut referenced: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for n in &project.numeros {
+        for item in &n.items {
+            if let PlaylistItem::Audio(a) = item {
+                referenced.insert(a.filename.clone());
+            }
+        }
+    }
+    let mut missing: Vec<String> = referenced.iter()
+        .filter(|f| !musiques_dir.join(f).exists())
+        .cloned().collect();
+    missing.sort();
+
+    let mut orphans: Vec<String> = Vec::new();
+    if let Ok(entries) = fs::read_dir(&musiques_dir) {
+        for e in entries.filter_map(|e| e.ok()) {
+            if !e.file_type().map(|t| t.is_file()).unwrap_or(false) { continue; }
+            let name = e.file_name().to_string_lossy().to_string();
+            if !referenced.contains(&name) { orphans.push(name); }
+        }
+    }
+    orphans.sort();
+    Ok(VerifyResult { missing, orphans })
+}
+
+#[tauri::command]
+fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> Result<u32, String> {
+    let musiques_dir = PathBuf::from(&project_path).join("musiques");
+    let mut deleted = 0u32;
+    for name in filenames {
+        if safe_filename(&name).is_err() { continue; }
+        let p = musiques_dir.join(&name);
+        if p.exists() && fs::remove_file(&p).is_ok() { deleted += 1; }
+    }
+    Ok(deleted)
+}
+
 #[derive(Serialize, Clone)]
 struct YtDlpProgress { step: String }
 
@@ -504,6 +550,7 @@ pub fn run() {
             pick_folder, pick_audio_files,
             create_project, open_project, save_project,
             copy_audio_file, delete_audio_file,
+            verify_project, cleanup_orphan_files,
             read_audio_file, download_audio_from_url, download_youtube_audio,
             set_show_mode,
         ])

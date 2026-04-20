@@ -29,6 +29,7 @@ interface Props {
   editMode: boolean;
   playerPosition: PlayerPosition | null;
   isPlaying: boolean;
+  missingFiles: Set<string>;
   onPlayAudio: (itemIndex: number) => void;
   onChange: (updated: Numero) => void;
   onDelete: () => void;
@@ -36,7 +37,7 @@ interface Props {
 
 export default function NumeroCard({
   numero, numeroIndex, projectPath, editMode,
-  playerPosition, isPlaying, onPlayAudio,
+  playerPosition, isPlaying, missingFiles, onPlayAudio,
   onChange, onDelete,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -204,6 +205,7 @@ export default function NumeroCard({
                   editMode={editMode}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
+                  isMissing={missingFiles.has(item.filename)}
                   onPlay={() => onPlayAudio(iIdx)}
                   onChange={(updated) => updateAudio(updated, iIdx)}
                   onDelete={() => deleteItem(item)}

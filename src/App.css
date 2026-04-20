@@ -592,6 +592,40 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
   gap: 0.5rem;
 }
 
+.verify-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #3a2a10;
+  border-bottom: 1px solid #d4a02060;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #f0d080;
+  flex-shrink: 0;
+}
+.verify-banner-text {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+.verify-banner-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.6rem;
+  color: #f0d080;
+  border-color: #d4a02060;
+}
+.verify-banner-btn:hover { color: #fff; background: #d4a02020; opacity: 1; }
+
+.audio-item--missing {
+  border-color: #e9456060;
+  background: #2a1520;
+}
+.audio-item--missing .audio-name { color: #f08090; text-decoration: line-through; }
+.audio-item--missing .audio-play-btn { color: var(--accent); }
+
 .audio-item--active {
   border-color: var(--accent);
   background: #2a1020;
