@@ -624,6 +624,23 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
   text-overflow: ellipsis;
 }
 
+.audio-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.audio-badge {
+  font-size: 0.7rem;
+  color: var(--text2);
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  white-space: nowrap;
+}
+
 .audio-volume {
   display: flex;
   align-items: center;

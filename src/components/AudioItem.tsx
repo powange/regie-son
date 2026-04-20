@@ -28,6 +28,12 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
 
   const volume = audio.volume ?? 100;
 
+  function fmt(secs: number) {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }
+
   return (
     <div className={`audio-item${isActive ? " audio-item--active" : ""}`} ref={setNodeRef} style={style}>
       <div className="audio-item-row">
@@ -44,6 +50,15 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
         <span className="audio-name" title={audio.original_name}>
           {audio.original_name}
         </span>
+
+        {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
+          <span className="audio-badges">
+            {audio.startTime != null && <span className="audio-badge">▶ {fmt(audio.startTime)}</span>}
+            {audio.endTime   != null && <span className="audio-badge">⏹ {fmt(audio.endTime)}</span>}
+            {audio.fadeIn    != null && audio.fadeIn  > 0 && <span className="audio-badge">↑ {audio.fadeIn}s</span>}
+            {audio.fadeOut   != null && audio.fadeOut > 0 && <span className="audio-badge">↓ {audio.fadeOut}s</span>}
+          </span>
+        )}
 
         {editMode && (
           <div className="audio-volume">
