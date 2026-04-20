@@ -129,6 +129,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     audio.addEventListener("ended", () => nextRef.current());
 
     audio.addEventListener("error", () => {
+      if (!posRef.current) return;
       setState((s) => ({ ...s, isPlaying: false, audioError: "Erreur de lecture audio" }));
     });
 

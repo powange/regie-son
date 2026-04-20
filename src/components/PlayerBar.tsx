@@ -4,7 +4,12 @@ import { Project, PlaylistItem } from "../types";
 
 function getNextItem(state: PlayerState, project: Project): PlaylistItem | null {
   const { position, isPlaying } = state;
-  if (!position) return null;
+  if (!position) {
+    for (const numero of project.numeros) {
+      if (numero.items.length > 0) return numero.items[0];
+    }
+    return null;
+  }
   if (!isPlaying) {
     return project.numeros[position.numeroIndex]?.items[position.audioIndex] ?? null;
   }
