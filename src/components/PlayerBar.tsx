@@ -12,11 +12,15 @@ function getNextContext(state: PlayerState, project: Project): NextContext | nul
     }
     return null;
   }
-  if (!isPlaying) {
+  const currentItem = project.numeros[position.numeroIndex]?.items[position.audioIndex];
+  const onPause = currentItem?.type === "pause";
+  if (!isPlaying && !onPause) {
+    // Arrêté sur un item audio — affiche la note de cet item comme aperçu
     const numero = project.numeros[position.numeroIndex];
     const item = numero?.items[position.audioIndex];
     return item && numero ? { item, numero } : null;
   }
+  // En lecture OU sur une pause — cherche l'item suivant
   const currentNumero = project.numeros[position.numeroIndex];
   const items = currentNumero?.items ?? [];
   if (position.audioIndex + 1 < items.length) {
