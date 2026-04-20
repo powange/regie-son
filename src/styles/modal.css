@@ -65,7 +65,18 @@
   animation: spin 0.7s linear infinite;
 }
 
-.source-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.source-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.source-category-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-top: 0.5rem;
+  padding: 0 0.2rem;
+}
+.source-category-title:first-child { margin-top: 0; }
 
 .source-option {
   display: flex;

@@ -15,7 +15,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { GripVertical, Pencil, Trash2, Plus, PauseCircle } from "lucide-react";
+import { GripVertical, Pencil, Trash2, Plus } from "lucide-react";
 import { Numero, AudioFile, PauseItem, PlaylistItem } from "../types";
 import { PlayerPosition, FadeState } from "../usePlayer";
 import AddAudioSourceModal from "./AddAudioSourceModal";
@@ -222,11 +222,7 @@ export default function NumeroCard({
           <div className="add-item-bar">
             <button className="add-audio-btn" onClick={() => setShowSourceModal(true)}>
               <Plus size={14} />
-              Ajouter une musique
-            </button>
-            <button className="add-pause-btn" onClick={addPause}>
-              <PauseCircle size={14} />
-              Ajouter une pause
+              Ajouter une étape
             </button>
           </div>
         )}
@@ -237,6 +233,7 @@ export default function NumeroCard({
           onSelectLocal={addAudioFiles}
           onSelectUrl={addAudioFromUrl}
           onSelectYoutube={addAudioFromYoutube}
+          onSelectPause={addPause}
           onClose={() => setShowSourceModal(false)}
         />
       )}

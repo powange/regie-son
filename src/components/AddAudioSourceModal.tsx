@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Monitor, Link, FileVideo, X, Download, XCircle } from "lucide-react";
+import { Monitor, Link, FileVideo, PauseCircle, X, Download, XCircle } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { friendlyError } from "../friendlyError";
@@ -106,10 +106,11 @@ interface Props {
   onSelectLocal: () => void;
   onSelectUrl: (url: string, downloadId: string) => Promise<void>;
   onSelectYoutube: (url: string, downloadId: string) => Promise<void>;
+  onSelectPause: () => void;
   onClose: () => void;
 }
 
-export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSelectYoutube, onClose }: Props) {
+export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSelectYoutube, onSelectPause, onClose }: Props) {
   const [view, setView] = useState<View>("list");
 
   function back() { setView("list"); }
@@ -118,12 +119,13 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
     <div className="modal-overlay" onClick={view === "list" ? onClose : undefined}>
       <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title-row">
-          <h2>Ajouter une musique</h2>
+          <h2>Ajouter une étape</h2>
           {view === "list" && <button className="btn-icon" onClick={onClose}><X size={16} /></button>}
         </div>
 
         {view === "list" && (
           <div className="source-list">
+            <div className="source-category-title">Musique</div>
             <button className="source-option" onClick={() => { onClose(); onSelectLocal(); }}>
               <Monitor size={20} />
               <span>Cet ordinateur</span>
@@ -135,6 +137,12 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
             <button className="source-option" onClick={() => setView("youtube")}>
               <FileVideo size={20} />
               <span>YouTube</span>
+            </button>
+
+            <div className="source-category-title">Pause</div>
+            <button className="source-option" onClick={() => { onClose(); onSelectPause(); }}>
+              <PauseCircle size={20} />
+              <span>Ajouter une pause</span>
             </button>
           </div>
         )}
