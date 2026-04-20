@@ -165,6 +165,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     return () => {
       audio.pause();
       audio.src = "";
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     };
   }, []);
 
@@ -173,6 +174,17 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     if (!audio || !audioDeviceId) return;
     (audio as any).setSinkId?.(audioDeviceId).catch(() => {});
   }, [audioDeviceId]);
+
+  // Sync volume in real-time when the project changes (e.g. user drags volume slider)
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !posRef.current || fadingOutRef.current || fadeAnimRef.current !== null) return;
+    const { numeroIndex, audioIndex } = posRef.current;
+    const item = project.numeros[numeroIndex]?.items[audioIndex];
+    if (item?.type === "audio") {
+      audio.volume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
+    }
+  }, [project]);
 
   const togglePlay = useCallback(() => {
     const { position, isPlaying } = stateRef.current;

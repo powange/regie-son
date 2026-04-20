@@ -1,9 +1,51 @@
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, Component};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
 use tauri_plugin_dialog::DialogExt;
 use tauri::Emitter;
 use std::fs;
+
+// ===== Helpers =====
+
+fn safe_filename(filename: &str) -> Result<(), String> {
+    let p = Path::new(filename);
+    let valid = p.components().all(|c| matches!(c, Component::Normal(_)))
+        && p.file_name().map(|n| n == p.as_os_str()).unwrap_or(false);
+    if valid { Ok(()) } else { Err("Nom de fichier invalide".into()) }
+}
+
+fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
+    // RFC 6266: filename*=UTF-8''percent-encoded
+    let lower = disposition.to_ascii_lowercase();
+    if let Some(idx) = lower.find("filename*=utf-8''") {
+        let rest = &disposition[idx + "filename*=utf-8''".len()..];
+        let encoded = rest.split(';').next().unwrap_or(rest).trim();
+        let decoded: String = {
+            let bytes = encoded.as_bytes();
+            let mut out = String::new();
+            let mut i = 0;
+            while i < bytes.len() {
+                if bytes[i] == b'%' && i + 2 < bytes.len() {
+                    if let Ok(s) = std::str::from_utf8(&bytes[i+1..i+3]) {
+                        if let Ok(b) = u8::from_str_radix(s, 16) {
+                            out.push(b as char);
+                            i += 3;
+                            continue;
+                        }
+                    }
+                }
+                out.push(bytes[i] as char);
+                i += 1;
+            }
+            out
+        };
+        if !decoded.is_empty() { return Some(decoded); }
+    }
+    // Standard filename=
+    disposition.split("filename=").nth(1)
+        .map(|f| f.split(';').next().unwrap_or(f).trim_matches('"').trim_matches('\'').trim().to_string())
+        .filter(|f| !f.is_empty())
+}
 
 // ===== Project types =====
 
@@ -90,7 +132,8 @@ fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
         .map_err(|e| format!("Fichier projet invalide : {}", e))?;
     let numeros = legacy.numeros.into_iter().map(|n| {
         let items = if !n.items.is_empty() {
-            serde_json::from_value(serde_json::Value::Array(n.items)).unwrap_or_default()
+            serde_json::from_value(serde_json::Value::Array(n.items))
+                .unwrap_or_else(|e| { eprintln!("Migration: items invalides pour '{}': {}", n.name, e); vec![] })
         } else {
             n.audio_files.into_iter().map(|af| PlaylistItem::Audio(AudioFile {
                 id: af.id,
@@ -213,6 +256,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, 
 
 #[tauri::command]
 fn delete_audio_file(project_path: String, filename: String) -> Result<(), String> {
+    safe_filename(&filename)?;
     let path = PathBuf::from(&project_path).join("musiques").join(&filename);
     if path.exists() {
         fs::remove_file(&path).map_err(|e| format!("Impossible de supprimer : {}", e))?;
@@ -326,10 +370,7 @@ async fn download_audio_from_url(url: String, project_path: String) -> Result<Au
         .unwrap_or("")
         .to_string();
 
-    let original_name = content_disposition
-        .split("filename=").nth(1)
-        .map(|f| f.trim_matches('"').trim_matches('\'').to_string())
-        .filter(|f| !f.is_empty())
+    let original_name = parse_content_disposition_filename(&content_disposition)
         .or_else(|| {
             url.split('?').next()
                .and_then(|u| u.split('/').last())

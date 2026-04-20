@@ -77,7 +77,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   async function handleClose() {
     if (showMode) {
-      try { await invoke("set_show_mode", { active: false }); } catch {}
+      try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
     }
     onClose();
   }

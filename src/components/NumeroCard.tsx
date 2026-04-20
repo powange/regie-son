@@ -94,9 +94,6 @@ export default function NumeroCard({
 
   function updateAudio(updated: AudioFile, iIdx: number) {
     onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) });
-    if (isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying) {
-      invoke("audio_set_volume", { volume: updated.volume ?? 100 }).catch(() => {});
-    }
   }
 
   function addPause() {
