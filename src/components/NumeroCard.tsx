@@ -84,13 +84,13 @@ export default function NumeroCard({
     }
   }
 
-  async function addAudioFromUrl(url: string) {
-    const af = await invoke<AudioFile>("download_audio_from_url", { url, projectPath });
+  async function addAudioFromUrl(url: string, downloadId: string) {
+    const af = await invoke<AudioFile>("download_audio_from_url", { url, projectPath, downloadId });
     onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
   }
 
-  async function addAudioFromYoutube(url: string) {
-    const af = await invoke<AudioFile>("download_youtube_audio", { url, projectPath });
+  async function addAudioFromYoutube(url: string, downloadId: string) {
+    const af = await invoke<AudioFile>("download_youtube_audio", { url, projectPath, downloadId });
     onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
   }
 

@@ -133,7 +133,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
               setState((s) => ({ ...s, fade: null }));
               return;
             }
-            audio.volume = targetVolume * (elapsed / duration);
+            const t = elapsed / duration;
+            audio.volume = targetVolume * t * t; // courbe quadratique (perçue comme naturelle)
             setState((s) => ({ ...s, fade: { type: "in", remaining: duration - elapsed, total: duration } }));
             fadeAnimRef.current = requestAnimationFrame(tick);
           };
@@ -271,7 +272,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
           doAdvance();
           return;
         }
-        audio.volume = startVolume * (1 - elapsed / duration);
+        const r = 1 - elapsed / duration;
+        audio.volume = startVolume * r * r; // courbe quadratique descendante
         setState((s) => ({ ...s, fade: { type: "out", remaining: duration - elapsed, total: duration } }));
         fadeAnimRef.current = requestAnimationFrame(tick);
       };

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { Monitor, Link, FileVideo, X, Download } from "lucide-react";
+import { Monitor, Link, FileVideo, X, Download, XCircle } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { friendlyError } from "../friendlyError";
 
 type View = "list" | "url" | "youtube";
 
@@ -9,7 +11,7 @@ interface DownloadFormProps {
   placeholder: string;
   hint?: string;
   withProgress?: boolean;
-  onSubmit: (url: string) => Promise<void>;
+  onSubmit: (url: string, downloadId: string) => Promise<void>;
   onBack: () => void;
 }
 
@@ -18,6 +20,7 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<string | null>(null);
+  const [downloadId, setDownloadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!downloading || !withProgress) return;
@@ -30,16 +33,24 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
   async function handleDownload() {
     const trimmed = url.trim();
     if (!trimmed) return;
+    const id = crypto.randomUUID();
+    setDownloadId(id);
     setError(null);
     setStep(null);
     setDownloading(true);
     try {
-      await onSubmit(trimmed);
+      await onSubmit(trimmed, id);
     } catch (err) {
-      setError(String(err));
+      setError(friendlyError(err));
       setDownloading(false);
       setStep(null);
+      setDownloadId(null);
     }
+  }
+
+  async function handleCancel() {
+    if (!downloadId) return;
+    try { await invoke("cancel_download", { id: downloadId }); } catch { /* ignore */ }
   }
 
   return (
@@ -71,14 +82,21 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
         {!downloading && (
           <button className="btn btn-secondary" onClick={onBack}>Retour</button>
         )}
-        <button
-          className="btn btn-primary"
-          onClick={handleDownload}
-          disabled={!url.trim() || downloading}
-        >
-          <Download size={14} />
-          {downloading ? "En cours…" : "Télécharger"}
-        </button>
+        {downloading ? (
+          <button className="btn btn-ghost" onClick={handleCancel}>
+            <XCircle size={14} />
+            Annuler
+          </button>
+        ) : (
+          <button
+            className="btn btn-primary"
+            onClick={handleDownload}
+            disabled={!url.trim()}
+          >
+            <Download size={14} />
+            Télécharger
+          </button>
+        )}
       </div>
     </div>
   );
@@ -86,8 +104,8 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
 
 interface Props {
   onSelectLocal: () => void;
-  onSelectUrl: (url: string) => Promise<void>;
-  onSelectYoutube: (url: string) => Promise<void>;
+  onSelectUrl: (url: string, downloadId: string) => Promise<void>;
+  onSelectYoutube: (url: string, downloadId: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -125,7 +143,7 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
           <DownloadForm
             label="URL du fichier audio"
             placeholder="https://exemple.com/musique.mp3"
-            onSubmit={async (url) => { await onSelectUrl(url); onClose(); }}
+            onSubmit={async (url, id) => { await onSelectUrl(url, id); onClose(); }}
             onBack={back}
           />
         )}
@@ -136,7 +154,7 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
             placeholder="https://www.youtube.com/watch?v=..."
             hint="Télécharge l'audio depuis YouTube (inclus dans l'application)"
             withProgress
-            onSubmit={async (url) => { await onSelectYoutube(url); onClose(); }}
+            onSubmit={async (url, id) => { await onSelectYoutube(url, id); onClose(); }}
             onBack={back}
           />
         )}

@@ -420,8 +420,75 @@ fn find_yt_dlp() -> PathBuf {
     PathBuf::from("yt-dlp")
 }
 
+// ===== Cancellation =====
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::Notify;
+
+struct CancelToken {
+    cancelled: AtomicBool,
+    notify: Notify,
+}
+
+impl CancelToken {
+    fn new() -> Self { Self { cancelled: AtomicBool::new(false), notify: Notify::new() } }
+    fn is_cancelled(&self) -> bool { self.cancelled.load(Ordering::Relaxed) }
+    fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+        self.notify.notify_waiters();
+    }
+    async fn wait(&self) {
+        if self.is_cancelled() { return; }
+        self.notify.notified().await;
+    }
+}
+
+fn cancel_registry() -> &'static Mutex<HashMap<String, Arc<CancelToken>>> {
+    static R: OnceLock<Mutex<HashMap<String, Arc<CancelToken>>>> = OnceLock::new();
+    R.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+struct DownloadGuard {
+    id: String,
+    token: Arc<CancelToken>,
+}
+
+impl DownloadGuard {
+    fn new(id: String) -> Self {
+        let token = Arc::new(CancelToken::new());
+        cancel_registry().lock().unwrap().insert(id.clone(), token.clone());
+        Self { id, token }
+    }
+}
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        cancel_registry().lock().unwrap().remove(&self.id);
+    }
+}
+
 #[tauri::command]
-async fn download_youtube_audio(url: String, project_path: String, app: tauri::AppHandle) -> Result<AudioFile, String> {
+fn cancel_download(id: String) {
+    if let Some(token) = cancel_registry().lock().unwrap().get(&id) {
+        token.cancel();
+    }
+}
+
+fn cleanup_partial_files(musiques_dir: &Path, id: &str) {
+    if let Ok(entries) = fs::read_dir(musiques_dir) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(id) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn download_youtube_audio(url: String, project_path: String, download_id: String, app: tauri::AppHandle) -> Result<AudioFile, String> {
+    let guard = DownloadGuard::new(download_id);
     let yt_dlp = find_yt_dlp();
 
     let check = silent_command(&yt_dlp).arg("--version").output();
@@ -448,18 +515,32 @@ async fn download_youtube_audio(url: String, project_path: String, app: tauri::A
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let output_template = musiques_dir.join(format!("{}.%(ext)s", id)).to_string_lossy().to_string();
 
-    let download = silent_command(&yt_dlp)
-        .args([
-            "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
-            "-o", &output_template,
-            "--no-playlist",
-            &url,
-        ])
-        .output()
-        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+    let mut cmd = tokio::process::Command::new(&yt_dlp);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    cmd.args([
+        "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+        "-o", &output_template,
+        "--no-playlist",
+        &url,
+    ]).kill_on_drop(true);
+
+    let download_result = tokio::select! {
+        r = cmd.output() => r,
+        _ = guard.token.wait() => {
+            cleanup_partial_files(&musiques_dir, &id);
+            return Err("Téléchargement annulé.".into());
+        }
+    };
+
+    let download = download_result.map_err(|e| format!("Erreur de téléchargement : {}", e))?;
 
     if !download.status.success() {
         let stderr = String::from_utf8_lossy(&download.stderr).to_string();
+        cleanup_partial_files(&musiques_dir, &id);
         return Err(format!("Erreur yt-dlp : {}", stderr.lines().last().unwrap_or(&stderr)));
     }
 
@@ -478,16 +559,20 @@ async fn download_youtube_audio(url: String, project_path: String, app: tauri::A
 }
 
 #[tauri::command]
-async fn download_audio_from_url(url: String, project_path: String) -> Result<AudioFile, String> {
+async fn download_audio_from_url(url: String, project_path: String, download_id: String) -> Result<AudioFile, String> {
     use std::io::Write;
+
+    let guard = DownloadGuard::new(download_id);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| format!("Erreur client HTTP : {}", e))?;
 
-    let mut response = client.get(&url).send().await
-        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+    let mut response = tokio::select! {
+        r = client.get(&url).send() => r.map_err(|e| format!("Erreur de téléchargement : {}", e))?,
+        _ = guard.token.wait() => return Err("Téléchargement annulé.".into()),
+    };
 
     if !response.status().is_success() {
         return Err(format!("Erreur HTTP {} : {}", response.status().as_u16(), url));
@@ -549,7 +634,15 @@ async fn download_audio_from_url(url: String, project_path: String) -> Result<Au
         .map_err(|e| format!("Impossible de créer le fichier : {}", e))?;
     let mut total: u64 = 0;
     loop {
-        let chunk = match response.chunk().await {
+        let chunk_result = tokio::select! {
+            r = response.chunk() => r,
+            _ = guard.token.wait() => {
+                drop(file);
+                let _ = fs::remove_file(&dest);
+                return Err("Téléchargement annulé.".into());
+            }
+        };
+        let chunk = match chunk_result {
             Ok(Some(c)) => c,
             Ok(None) => break,
             Err(e) => {
@@ -748,6 +841,7 @@ pub fn run() {
             export_project, import_project,
             read_audio_file, download_audio_from_url, download_youtube_audio,
             set_show_mode,
+            cancel_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
