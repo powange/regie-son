@@ -16,9 +16,9 @@ pub struct AudioFile {
     pub original_name: String,
     #[serde(default = "default_volume")]
     pub volume: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "startTime")]
     pub start_time: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "endTime")]
     pub end_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
