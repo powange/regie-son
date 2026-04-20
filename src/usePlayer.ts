@@ -49,6 +49,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const nextRef = useRef<() => void>(() => {});
   const fadeAnimRef = useRef<number | null>(null);
   const fadingOutRef = useRef(false);
+  const ignoreSrcErrorRef = useRef(false);
 
   function cancelFade() {
     if (fadeAnimRef.current !== null) {
@@ -68,6 +69,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
 
     if (item.type === "pause") {
       audio.pause();
+      ignoreSrcErrorRef.current = true;
       audio.src = "";
       posRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
       setState((s) => ({
@@ -155,6 +157,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     });
 
     audio.addEventListener("error", () => {
+      if (ignoreSrcErrorRef.current) { ignoreSrcErrorRef.current = false; return; }
       if (!posRef.current) return;
       setState((s) => ({ ...s, isPlaying: false, audioError: "Erreur de lecture audio" }));
     });
