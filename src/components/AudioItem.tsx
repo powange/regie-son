@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
@@ -22,6 +22,17 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
   const [showSettings, setShowSettings] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const setRefs = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    rootRef.current = node;
+  };
+
+  useEffect(() => {
+    if (isActive) {
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isActive]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -38,7 +49,7 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
   }
 
   return (
-    <div className={`audio-item${isActive ? " audio-item--active" : ""}${isMissing ? " audio-item--missing" : ""}`} ref={setNodeRef} style={style}>
+    <div className={`audio-item${isActive ? " audio-item--active" : ""}${isMissing ? " audio-item--missing" : ""}`} ref={setRefs} style={style}>
       <div className="audio-item-row">
         {editMode && (
           <span className="audio-drag-handle" {...attributes} {...listeners}>

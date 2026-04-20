@@ -1,3 +1,4 @@
+import { useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, PauseCircle, Play, Trash2 } from "lucide-react";
@@ -15,6 +16,17 @@ interface Props {
 export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const setRefs = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    rootRef.current = node;
+  };
+
+  useEffect(() => {
+    if (isActive) {
+      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [isActive]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -25,7 +37,7 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
   return (
     <div
       className={`pause-track${isActive ? " pause-track--active" : ""}`}
-      ref={setNodeRef}
+      ref={setRefs}
       style={style}
     >
       <div className="audio-item-row">
