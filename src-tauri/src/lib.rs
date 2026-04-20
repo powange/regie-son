@@ -213,16 +213,31 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
     Ok(())
 }
 
+fn find_yt_dlp() -> PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            #[cfg(target_os = "windows")]
+            let candidate = exe_dir.join("yt-dlp.exe");
+            #[cfg(not(target_os = "windows"))]
+            let candidate = exe_dir.join("yt-dlp");
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from("yt-dlp")
+}
+
 #[tauri::command]
 async fn download_youtube_audio(url: String, project_path: String) -> Result<AudioFile, String> {
-    // Vérifier que yt-dlp est installé
-    let check = Command::new("yt-dlp").arg("--version").output();
+    let yt_dlp = find_yt_dlp();
+
+    let check = Command::new(&yt_dlp).arg("--version").output();
     if check.is_err() || !check.unwrap().status.success() {
-        return Err("yt-dlp n'est pas installé. Installez-le depuis https://github.com/yt-dlp/yt-dlp".into());
+        return Err("yt-dlp est introuvable dans cette installation.".into());
     }
 
-    // Récupérer le titre de la vidéo
-    let title_out = Command::new("yt-dlp")
+    let title_out = Command::new(&yt_dlp)
         .args(["--print", "%(title)s", "--no-download", &url])
         .output()
         .map_err(|e| format!("Erreur yt-dlp : {}", e))?;
@@ -237,11 +252,9 @@ async fn download_youtube_audio(url: String, project_path: String) -> Result<Aud
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let output_template = musiques_dir.join(format!("{}.%(ext)s", id)).to_string_lossy().to_string();
 
-    let download = Command::new("yt-dlp")
+    let download = Command::new(&yt_dlp)
         .args([
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
+            "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
             "-o", &output_template,
             "--no-playlist",
             &url,

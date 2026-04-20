@@ -114,7 +114,7 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
           <DownloadForm
             label="Lien de la vidéo YouTube"
             placeholder="https://www.youtube.com/watch?v=..."
-            hint="Requiert yt-dlp et ffmpeg installés sur cet ordinateur"
+            hint="Télécharge l'audio depuis YouTube (inclus dans l'application)"
             onSubmit={async (url) => { await onSelectYoutube(url); onClose(); }}
             onBack={back}
           />

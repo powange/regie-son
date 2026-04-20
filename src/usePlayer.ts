@@ -7,7 +7,7 @@ function mimeType(filename: string): string {
   const map: Record<string, string> = {
     mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
     flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac",
-    wma: "audio/x-ms-wma", opus: "audio/ogg; codecs=opus",
+    wma: "audio/x-ms-wma", opus: "audio/ogg; codecs=opus", webm: "audio/webm",
   };
   return map[ext] ?? "audio/mpeg";
 }
