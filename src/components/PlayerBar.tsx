@@ -96,19 +96,19 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           <button className="player-btn player-btn--play" onClick={onTogglePlay} disabled={!hasAudio} title={isPlaying ? "Pause" : "Lecture"}>
             {isPlaying ? <Pause size={22} /> : <Play size={22} />}
           </button>
+        </div>
+
+        <div className="player-next-card">
           <button className="player-btn player-btn--next" onClick={onNext} disabled={!hasAudio} title="Piste suivante">
             <SkipForward size={18} />
           </button>
+          {nextContext && (
+            <div className="player-next-info">
+              {nextNote && <span className="player-next-note">{nextNote}</span>}
+              {nextNumeroName && <span className="player-next-numero">{nextNumeroName}</span>}
+            </div>
+          )}
         </div>
-
-        {nextNote && (
-          <div className="player-next-info">
-            <span className="player-next-note">{nextNote}</span>
-            {nextNumeroName && (
-              <span className="player-next-numero">{nextNumeroName}</span>
-            )}
-          </div>
-        )}
       </div>
 
       {audioError ? (

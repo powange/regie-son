@@ -929,12 +929,32 @@ input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
   color: var(--accent);
 }
 
+.player-next-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.7rem 0.35rem 0.5rem;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.player-next-card .player-btn--next {
+  flex-shrink: 0;
+  background: transparent;
+  border-color: transparent;
+}
+.player-next-card .player-btn--next:hover:not(:disabled) {
+  background: var(--card);
+  border-color: var(--border);
+}
+
 .player-next-info {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding-left: 0.8rem;
-  border-left: 2px solid var(--border);
+  gap: 0.1rem;
   overflow: hidden;
 }
 
