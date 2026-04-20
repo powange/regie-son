@@ -172,30 +172,10 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }, []);
 
   const next = useCallback((): void => {
-    const { position, isPlaying } = stateRef.current;
-    const pos = position ?? firstItemPosition(projectRef.current);
+    const pos = stateRef.current.position ?? firstItemPosition(projectRef.current);
     if (!pos) return;
-
-    // Si le player est à l'arrêt (en attente entre deux numéros), démarrer l'item courant
-    if (!isPlaying) {
-      playAtRef.current(pos.numeroIndex, pos.audioIndex);
-      return;
-    }
-
     const nxt = nextItemPosition(projectRef.current, pos);
-    if (!nxt) return;
-
-    // Franchissement de frontière entre numéros : s'arrêter et préparer le suivant
-    if (nxt.numeroIndex !== pos.numeroIndex) {
-      const audio = audioRef.current;
-      if (audio) { audio.pause(); audio.src = ""; }
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-      posRef.current = nxt;
-      setState((s) => ({ ...s, position: nxt, isPlaying: false, progress: { position: 0, duration: 0 } }));
-      return;
-    }
-
-    playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+    if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
   }, []);
 
   nextRef.current = next;
