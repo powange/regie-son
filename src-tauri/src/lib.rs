@@ -214,6 +214,61 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+async fn download_youtube_audio(url: String, project_path: String) -> Result<AudioFile, String> {
+    // Vérifier que yt-dlp est installé
+    let check = Command::new("yt-dlp").arg("--version").output();
+    if check.is_err() || !check.unwrap().status.success() {
+        return Err("yt-dlp n'est pas installé. Installez-le depuis https://github.com/yt-dlp/yt-dlp".into());
+    }
+
+    // Récupérer le titre de la vidéo
+    let title_out = Command::new("yt-dlp")
+        .args(["--print", "%(title)s", "--no-download", &url])
+        .output()
+        .map_err(|e| format!("Erreur yt-dlp : {}", e))?;
+
+    let title = if title_out.status.success() {
+        String::from_utf8_lossy(&title_out.stdout).trim().to_string()
+    } else {
+        "YouTube audio".to_string()
+    };
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let musiques_dir = PathBuf::from(&project_path).join("musiques");
+    let output_template = musiques_dir.join(format!("{}.%(ext)s", id)).to_string_lossy().to_string();
+
+    let download = Command::new("yt-dlp")
+        .args([
+            "--extract-audio",
+            "--audio-format", "mp3",
+            "--audio-quality", "0",
+            "-o", &output_template,
+            "--no-playlist",
+            &url,
+        ])
+        .output()
+        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+
+    if !download.status.success() {
+        let stderr = String::from_utf8_lossy(&download.stderr).to_string();
+        return Err(format!("Erreur yt-dlp : {}", stderr.lines().last().unwrap_or(&stderr)));
+    }
+
+    // Trouver le fichier créé (l'extension peut varier si ffmpeg est absent)
+    let entry = fs::read_dir(&musiques_dir)
+        .map_err(|e| format!("Erreur : {}", e))?
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_name().to_string_lossy().starts_with(&id))
+        .ok_or("Fichier introuvable après téléchargement")?;
+
+    let filename = entry.file_name().to_string_lossy().to_string();
+    let ext = Path::new(&filename).extension().unwrap_or_default().to_string_lossy();
+    let original_name = format!("{}.{}", title, ext);
+
+    Ok(AudioFile { id, filename, original_name, volume: 100.0, start_time: None, end_time: None, note: None })
+}
+
+#[tauri::command]
 async fn download_audio_from_url(url: String, project_path: String) -> Result<AudioFile, String> {
     let response = reqwest::get(&url).await
         .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
@@ -312,7 +367,7 @@ pub fn run() {
             pick_folder, pick_audio_files,
             create_project, open_project, save_project,
             copy_audio_file, delete_audio_file,
-            read_audio_file, download_audio_from_url,
+            read_audio_file, download_audio_from_url, download_youtube_audio,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

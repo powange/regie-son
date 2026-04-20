@@ -87,6 +87,11 @@ export default function NumeroCard({
     onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
   }
 
+  async function addAudioFromYoutube(url: string) {
+    const af = await invoke<AudioFile>("download_youtube_audio", { url, projectPath });
+    onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
+  }
+
   function updateAudio(updated: AudioFile, iIdx: number) {
     onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) });
     if (isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying) {
@@ -229,6 +234,7 @@ export default function NumeroCard({
         <AddAudioSourceModal
           onSelectLocal={addAudioFiles}
           onSelectUrl={addAudioFromUrl}
+          onSelectYoutube={addAudioFromYoutube}
           onClose={() => setShowSourceModal(false)}
         />
       )}
