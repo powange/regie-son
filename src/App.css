@@ -423,6 +423,39 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
 .editor-header .saved-badge { font-size: 0.78rem; color: var(--success); }
 .btn-close-project { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
 
+.btn-show-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.8rem;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+.btn-show-mode:hover { color: var(--text); border-color: var(--text2); opacity: 1; }
+.btn-show-mode--active {
+  background: #1a3a1a;
+  color: #6fcf6f;
+  border-color: #4caf5060;
+  font-weight: 600;
+}
+.btn-show-mode--active:hover { background: #1f4a1f; opacity: 1; }
+
+.show-mode-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 1.2rem;
+  background: #2a1f0a;
+  border-bottom: 1px solid #a0700040;
+  font-size: 0.82rem;
+  color: #d4a04a;
+}
+
 .edit-mode-toggle {
   display: flex;
   align-items: center;

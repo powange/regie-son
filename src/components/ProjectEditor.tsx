@@ -13,7 +13,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowLeft, Plus, Coffee, Settings, Pencil, MonitorPlay } from "lucide-react";
+import { ArrowLeft, Plus, Coffee, Settings, Pencil, MonitorPlay, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -40,6 +40,8 @@ function newNumero(type: NumeroType, index: number): Numero {
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
   const [saved, setSaved] = useState(true);
   const [editMode, setEditMode] = useState(true);
+  const [showMode, setShowMode] = useState(false);
+  const [showModeError, setShowModeError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editMode ? 5 : 99999 } }));
 
@@ -60,6 +62,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   }
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  async function toggleShowMode() {
+    const next = !showMode;
+    try {
+      await invoke("set_show_mode", { active: next });
+      setShowMode(next);
+      setShowModeError(null);
+    } catch (err) {
+      setShowMode(next);
+      setShowModeError(String(err));
+    }
+  }
+
+  async function handleClose() {
+    if (showMode) {
+      try { await invoke("set_show_mode", { active: false }); } catch {}
+    }
+    onClose();
+  }
 
   function addItem(type: NumeroType) {
     const count = project.numeros.filter((n) => n.type === type).length + 1;
@@ -97,14 +118,30 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           </div>
         </label>
 
+        <button
+          className={`btn-show-mode${showMode ? " btn-show-mode--active" : ""}`}
+          onClick={toggleShowMode}
+          title={showMode ? "Mode spectacle actif — cliquer pour désactiver" : "Activer le mode spectacle"}
+        >
+          <MonitorPlay size={15} />
+          {showMode ? "Mode spectacle actif" : "Mode spectacle"}
+        </button>
+
         <button className="btn-icon" onClick={onOpenSettings} title="Paramètres">
           <Settings size={18} />
         </button>
-        <button className="btn-ghost btn-close-project" onClick={onClose}>
+        <button className="btn-ghost btn-close-project" onClick={handleClose}>
           <ArrowLeft size={15} />
           Fermer
         </button>
       </div>
+
+      {showModeError && (
+        <div className="show-mode-warning">
+          <span>{showModeError}</span>
+          <button className="btn-icon" onClick={() => setShowModeError(null)}><X size={13} /></button>
+        </div>
+      )}
 
       <PlayerBar
         state={playerState}

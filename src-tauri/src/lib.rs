@@ -382,6 +382,65 @@ fn save_project_to_disk(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
+// ===== Show mode =====
+
+#[tauri::command]
+fn set_show_mode(active: bool) -> Result<(), String> {
+    set_show_mode_impl(active)
+}
+
+#[cfg(target_os = "windows")]
+fn set_show_mode_impl(active: bool) -> Result<(), String> {
+    let arg = if active { "/start" } else { "/stop" };
+    let out = silent_command("PresentationSettings")
+        .arg(arg)
+        .output()
+        .map_err(|e| format!("Impossible de lancer PresentationSettings : {}", e))?;
+    if out.status.success() { Ok(()) } else {
+        Err("Le mode présentation Windows n'a pas pu être activé.".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn set_show_mode_impl(active: bool) -> Result<(), String> {
+    // Essayer AppleScript (macOS ≤ 12)
+    let value = if active { "true" } else { "false" };
+    let script = format!("tell application \"System Events\" to set Do Not Disturb to {}", value);
+    if let Ok(out) = Command::new("osascript").args(["-e", &script]).output() {
+        if out.status.success() { return Ok(()); }
+    }
+    // Fallback defaults + redémarrage NotificationCenter (macOS 12+)
+    let bool_val = if active { "YES" } else { "NO" };
+    let out = Command::new("defaults")
+        .args(["-currentHost", "write", "com.apple.notificationcenterui", "doNotDisturb", "-boolean", bool_val])
+        .output()
+        .map_err(|e| format!("Erreur : {}", e))?;
+    if out.status.success() {
+        let _ = Command::new("killall").arg("NotificationCenter").output();
+        Ok(())
+    } else {
+        Err("Activez manuellement le mode Ne pas déranger dans Réglages Système > Notifications.".into())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_show_mode_impl(active: bool) -> Result<(), String> {
+    // GNOME : inverser show-banners (false = muet)
+    let value = if active { "false" } else { "true" };
+    let out = Command::new("gsettings")
+        .args(["set", "org.gnome.desktop.notifications", "show-banners", value])
+        .output()
+        .map_err(|_| "gsettings non disponible. Activez manuellement le mode Ne pas déranger.".to_string())?;
+    if out.status.success() { Ok(()) } else {
+        Err("Impossible de modifier les notifications GNOME. Activez manuellement le mode Ne pas déranger.".into())
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn set_show_mode_impl(_active: bool) -> Result<(), String> {
+    Err("Mode spectacle non supporté sur cet OS.".into())
+}
+
 // ===== Entry point =====
 
 fn configure_wsl2_audio() {
@@ -405,6 +464,7 @@ pub fn run() {
             create_project, open_project, save_project,
             copy_audio_file, delete_audio_file,
             read_audio_file, download_audio_from_url, download_youtube_audio,
+            set_show_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
