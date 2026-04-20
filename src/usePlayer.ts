@@ -181,6 +181,12 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     });
 
     return () => {
+      if (fadeAnimRef.current !== null) {
+        cancelAnimationFrame(fadeAnimRef.current);
+        fadeAnimRef.current = null;
+      }
+      fadingOutRef.current = false;
+      loadVersionRef.current++;
       audio.pause();
       audio.src = "";
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }

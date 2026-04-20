@@ -130,10 +130,10 @@ struct LegacyProject {
 fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
     let legacy: LegacyProject = serde_json::from_str(raw)
         .map_err(|e| format!("Fichier projet invalide : {}", e))?;
-    let numeros = legacy.numeros.into_iter().map(|n| {
-        let items = if !n.items.is_empty() {
+    let numeros: Result<Vec<Numero>, String> = legacy.numeros.into_iter().map(|n| {
+        let items: Vec<PlaylistItem> = if !n.items.is_empty() {
             serde_json::from_value(serde_json::Value::Array(n.items))
-                .unwrap_or_else(|e| { eprintln!("Migration: items invalides pour '{}': {}", n.name, e); vec![] })
+                .map_err(|e| format!("Items invalides pour « {} » : {}", n.name, e))?
         } else {
             n.audio_files.into_iter().map(|af| PlaylistItem::Audio(AudioFile {
                 id: af.id,
@@ -147,9 +147,9 @@ fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
                 note: None,
             })).collect()
         };
-        Numero { id: n.id, numero_type: n.numero_type, name: n.name, items }
+        Ok(Numero { id: n.id, numero_type: n.numero_type, name: n.name, items })
     }).collect();
-    Ok(Project { name: legacy.name, path, numeros })
+    Ok(Project { name: legacy.name, path, numeros: numeros? })
 }
 
 // ===== File system helpers =====
@@ -479,11 +479,28 @@ async fn download_youtube_audio(url: String, project_path: String, app: tauri::A
 
 #[tauri::command]
 async fn download_audio_from_url(url: String, project_path: String) -> Result<AudioFile, String> {
-    let response = reqwest::get(&url).await
+    use std::io::Write;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("Erreur client HTTP : {}", e))?;
+
+    let mut response = client.get(&url).send().await
         .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("Erreur HTTP {} : {}", response.status().as_u16(), url));
+    }
+
+    if let Some(len) = response.content_length() {
+        if len > MAX_AUDIO_FILE_SIZE {
+            return Err(format!(
+                "Fichier trop volumineux ({} Mo). Limite : {} Mo.",
+                len / (1024 * 1024),
+                MAX_AUDIO_FILE_SIZE / (1024 * 1024)
+            ));
+        }
     }
 
     let content_type = response.headers()
@@ -528,17 +545,51 @@ async fn download_audio_from_url(url: String, project_path: String) -> Result<Au
     let new_filename = format!("{}{}", id, ext);
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
 
-    let bytes = response.bytes().await
-        .map_err(|e| format!("Erreur de lecture : {}", e))?;
-
-    fs::write(&dest, &bytes)
-        .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+    let mut file = fs::File::create(&dest)
+        .map_err(|e| format!("Impossible de créer le fichier : {}", e))?;
+    let mut total: u64 = 0;
+    loop {
+        let chunk = match response.chunk().await {
+            Ok(Some(c)) => c,
+            Ok(None) => break,
+            Err(e) => {
+                drop(file);
+                let _ = fs::remove_file(&dest);
+                return Err(format!("Erreur de lecture : {}", e));
+            }
+        };
+        total += chunk.len() as u64;
+        if total > MAX_AUDIO_FILE_SIZE {
+            drop(file);
+            let _ = fs::remove_file(&dest);
+            return Err(format!(
+                "Fichier trop volumineux (limite : {} Mo).",
+                MAX_AUDIO_FILE_SIZE / (1024 * 1024)
+            ));
+        }
+        if let Err(e) = file.write_all(&chunk) {
+            drop(file);
+            let _ = fs::remove_file(&dest);
+            return Err(format!("Erreur d'écriture : {}", e));
+        }
+    }
 
     Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
 }
 
+const MAX_AUDIO_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
+
 #[tauri::command]
 fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let metadata = fs::metadata(&path)
+        .map_err(|e| format!("Impossible de lire le fichier : {}", e))?;
+    if metadata.len() > MAX_AUDIO_FILE_SIZE {
+        return Err(format!(
+            "Fichier trop volumineux ({} Mo). Limite : {} Mo.",
+            metadata.len() / (1024 * 1024),
+            MAX_AUDIO_FILE_SIZE / (1024 * 1024)
+        ));
+    }
     let bytes = fs::read(&path).map_err(|e| format!("Impossible de lire le fichier : {}", e))?;
     Ok(tauri::ipc::Response::new(bytes))
 }
@@ -546,7 +597,12 @@ fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
 fn save_project_to_disk(project: &Project) -> Result<(), String> {
     let content = serde_json::to_string_pretty(project)
         .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
-    fs::write(Path::new(&project.path).join("projet.json"), content)
+    let dir = Path::new(&project.path);
+    let target = dir.join("projet.json");
+    let tmp = dir.join("projet.json.tmp");
+    fs::write(&tmp, &content)
+        .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+    fs::rename(&tmp, &target)
         .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
     Ok(())
 }
