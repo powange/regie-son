@@ -519,13 +519,18 @@ input[type="text"]:focus { border-color: var(--accent); }
 /* ===== AUDIO ITEM ===== */
 .audio-item {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.45rem 0.7rem;
   transition: border-color 0.15s, background 0.15s;
+}
+
+.audio-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .audio-item--active {
@@ -642,8 +647,7 @@ input[type="text"]:focus { border-color: var(--accent); }
 /* ===== PAUSE TRACK ===== */
 .pause-track {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
   border: 1px dashed var(--border);

@@ -27,13 +27,21 @@ export default function PauseTrack({ pause, editMode, isActive, onChange, onDele
       ref={setNodeRef}
       style={style}
     >
-      {editMode && (
-        <span className="audio-drag-handle" {...attributes} {...listeners}>
-          <GripVertical size={14} />
-        </span>
-      )}
-      <PauseCircle size={13} />
-      <span className="pause-track-label">Pause</span>
+      <div className="audio-item-row">
+        {editMode && (
+          <span className="audio-drag-handle" {...attributes} {...listeners}>
+            <GripVertical size={14} />
+          </span>
+        )}
+        <PauseCircle size={13} />
+        <span className="pause-track-label">Pause</span>
+        {editMode && (
+          <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+
       {editMode && (
         <input
           className="item-note-input"
@@ -42,12 +50,6 @@ export default function PauseTrack({ pause, editMode, isActive, onChange, onDele
           value={pause.note ?? ""}
           onChange={(e) => onChange({ ...pause, note: e.target.value || undefined })}
         />
-      )}
-
-      {editMode && (
-        <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
-          <Trash2 size={14} />
-        </button>
       )}
     </div>
   );
