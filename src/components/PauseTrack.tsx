@@ -1,17 +1,18 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, PauseCircle, Trash2 } from "lucide-react";
+import { GripVertical, PauseCircle, Play, Trash2 } from "lucide-react";
 import { PauseItem } from "../types";
 
 interface Props {
   pause: PauseItem;
   editMode: boolean;
   isActive: boolean;
+  onPlay: () => void;
   onChange: (updated: PauseItem) => void;
   onDelete: () => void;
 }
 
-export default function PauseTrack({ pause, editMode, isActive, onChange, onDelete }: Props) {
+export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
 
@@ -33,7 +34,9 @@ export default function PauseTrack({ pause, editMode, isActive, onChange, onDele
             <GripVertical size={14} />
           </span>
         )}
-        <PauseCircle size={13} />
+        <button className="audio-play-btn" onClick={onPlay} title="Se positionner sur cette étape">
+          {isActive ? <Play size={13} /> : <PauseCircle size={13} />}
+        </button>
         <span className="pause-track-label">Pause</span>
         {editMode && (
           <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">

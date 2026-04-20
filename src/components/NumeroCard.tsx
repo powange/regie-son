@@ -196,6 +196,7 @@ export default function NumeroCard({
                   pause={item}
                   editMode={editMode}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
+                  onPlay={() => onPlayAudio(iIdx)}
                   onChange={(updated) => onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) })}
                   onDelete={() => deleteItem(item)}
                 />
