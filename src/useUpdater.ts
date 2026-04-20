@@ -20,10 +20,10 @@ export function useUpdater() {
   });
 
   function checkUpdate() {
-    setState((s) => ({ ...s, checking: true, update: null, error: null }));
+    setState((s) => ({ ...s, checking: true, update: null, error: null, progress: null }));
     check()
       .then((update) => setState((s) => ({ ...s, checking: false, update: update ?? null })))
-      .catch(() => setState((s) => ({ ...s, checking: false })));
+      .catch((err) => setState((s) => ({ ...s, checking: false, error: String(err) })));
   }
 
   useEffect(() => { checkUpdate(); }, []);

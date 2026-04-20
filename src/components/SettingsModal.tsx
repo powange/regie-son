@@ -104,10 +104,16 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               </button>
             )}
 
-            {!updaterState.checking && !updaterState.update && (
+            {!updaterState.checking && !updaterState.update && !updaterState.error && (
               <span className="settings-update-status">
                 <CheckCircle size={13} />
                 À jour
+              </span>
+            )}
+
+            {!updaterState.checking && updaterState.error && (
+              <span className="settings-update-status settings-update-error" title={updaterState.error}>
+                Erreur de vérification
               </span>
             )}
           </div>

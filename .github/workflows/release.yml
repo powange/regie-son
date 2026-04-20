@@ -64,7 +64,15 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));c.version='${VERSION}';fs.writeFileSync('src-tauri/tauri.conf.json',JSON.stringify(c,null,2)+'\n');"
+          node -e "
+            const fs = require('fs');
+            const c = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            c.version = '${VERSION}';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
+            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+            cargo = cargo.replace(/^version = \"[^\"]+\"/m, 'version = \"${VERSION}\"');
+            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+          "
 
       - name: Download yt-dlp sidecar
         shell: bash

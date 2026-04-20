@@ -779,6 +779,8 @@ input[type="text"]:focus { border-color: var(--accent); }
   color: var(--text2);
 }
 
+.settings-update-error { color: var(--danger, #e05252); cursor: help; }
+
 .settings-install-btn { display: flex; align-items: center; gap: 0.4rem; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
