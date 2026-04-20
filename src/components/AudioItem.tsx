@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Music, Pause, Play, Trash2, Volume2 } from "lucide-react";
+import { GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
+import AudioSettingsModal from "./AudioSettingsModal";
 
 interface Props {
   audio: AudioFile;
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay, onChange, onDelete }: Props) {
+  const [showSettings, setShowSettings] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
 
@@ -58,9 +61,23 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
       )}
 
       {editMode && (
+        <button className="btn-icon" onClick={() => setShowSettings(true)} title="Paramètres">
+          <Settings size={14} />
+        </button>
+      )}
+
+      {editMode && (
         <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
           <Trash2 size={14} />
         </button>
+      )}
+
+      {showSettings && (
+        <AudioSettingsModal
+          audio={audio}
+          onSave={(updated) => onChange(updated)}
+          onClose={() => setShowSettings(false)}
+        />
       )}
     </div>
   );

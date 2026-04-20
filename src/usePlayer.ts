@@ -45,6 +45,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const blobUrlRef = useRef<string | null>(null);
   const loadVersionRef = useRef(0);
   const playAtRef = useRef<(nIdx: number, iIdx: number) => void>(() => {});
+  const endTimeRef = useRef<number | null>(null);
+  const handleEndedRef = useRef<() => void>(() => {});
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
     const audio = audioRef.current;
@@ -80,7 +82,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         blobUrlRef.current = url;
         audio.src = url;
         audio.load();
-        audio.currentTime = 0;
+        audio.currentTime = item.startTime ?? 0;
+        endTimeRef.current = item.endTime ?? null;
         audio.volume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
         return audio.play();
       })
@@ -102,11 +105,37 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
 
   playAtRef.current = playAt;
 
+  handleEndedRef.current = () => {
+    const audio = audioRef.current;
+    const pos = posRef.current;
+    if (!pos || !audio) return;
+    const nxt = nextItemPosition(projectRef.current, pos);
+    if (!nxt) {
+      setState((s) => ({ ...s, isPlaying: false }));
+      return;
+    }
+    if (nxt.numeroIndex !== pos.numeroIndex) {
+      audio.src = "";
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      posRef.current = nxt;
+      setState((s) => ({ ...s, position: nxt, isPlaying: false, progress: { position: 0, duration: 0 } }));
+      return;
+    }
+    playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+  };
+
   useEffect(() => {
     const audio = new Audio();
     audioRef.current = audio;
 
     audio.addEventListener("timeupdate", () => {
+      const endTime = endTimeRef.current;
+      if (endTime !== null && audio.currentTime >= endTime) {
+        endTimeRef.current = null;
+        audio.pause();
+        handleEndedRef.current();
+        return;
+      }
       setState((s) => ({
         ...s,
         progress: {
@@ -116,23 +145,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       }));
     });
 
-    audio.addEventListener("ended", () => {
-      const pos = posRef.current;
-      if (!pos) return;
-      const nxt = nextItemPosition(projectRef.current, pos);
-      if (!nxt) {
-        setState((s) => ({ ...s, isPlaying: false }));
-        return;
-      }
-      if (nxt.numeroIndex !== pos.numeroIndex) {
-        audio.src = "";
-        if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-        posRef.current = nxt;
-        setState((s) => ({ ...s, position: nxt, isPlaying: false, progress: { position: 0, duration: 0 } }));
-        return;
-      }
-      playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
-    });
+    audio.addEventListener("ended", () => handleEndedRef.current());
 
     audio.addEventListener("error", () => {
       setState((s) => ({ ...s, isPlaying: false, audioError: "Erreur de lecture audio" }));

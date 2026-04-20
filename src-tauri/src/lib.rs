@@ -15,6 +15,10 @@ pub struct AudioFile {
     pub original_name: String,
     #[serde(default = "default_volume")]
     pub volume: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -84,6 +88,8 @@ fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
                 filename: af.filename,
                 original_name: af.original_name,
                 volume: 100.0,
+                start_time: None,
+                end_time: None,
             })).collect()
         };
         Numero { id: n.id, numero_type: n.numero_type, name: n.name, items }
@@ -190,7 +196,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, 
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
     fs::copy(src, &dest)
         .map_err(|e| format!("Impossible de copier le fichier : {}", e))?;
-    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0 })
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None })
 }
 
 #[tauri::command]

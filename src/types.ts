@@ -4,6 +4,8 @@ export interface AudioFile {
   filename: string;
   original_name: string;
   volume: number; // 0–100
+  startTime?: number; // secondes
+  endTime?: number;   // secondes
 }
 
 export interface PauseItem {
