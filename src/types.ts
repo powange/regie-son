@@ -6,6 +6,8 @@ export interface AudioFile {
   volume: number; // 0–100
   startTime?: number; // secondes
   endTime?: number;   // secondes
+  fadeIn?: number;    // secondes
+  fadeOut?: number;   // secondes
   note?: string;
 }
 

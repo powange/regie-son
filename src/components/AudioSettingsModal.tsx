@@ -21,6 +21,14 @@ function parseTime(str: string): number | undefined {
   return undefined;
 }
 
+function parseDuration(str: string): number | undefined {
+  str = str.trim();
+  if (str === "") return undefined;
+  const n = Number(str);
+  if (!isNaN(n) && n > 0) return n;
+  return undefined;
+}
+
 interface Props {
   audio: AudioFile;
   onSave: (updated: AudioFile) => void;
@@ -30,11 +38,15 @@ interface Props {
 export default function AudioSettingsModal({ audio, onSave, onClose }: Props) {
   const [startRaw, setStartRaw] = useState(formatTime(audio.startTime));
   const [endRaw, setEndRaw] = useState(formatTime(audio.endTime));
+  const [fadeInRaw, setFadeInRaw] = useState(audio.fadeIn !== undefined ? String(audio.fadeIn) : "");
+  const [fadeOutRaw, setFadeOutRaw] = useState(audio.fadeOut !== undefined ? String(audio.fadeOut) : "");
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
     const startTime = parseTime(startRaw);
     const endTime = parseTime(endRaw);
+    const fadeIn = parseDuration(fadeInRaw);
+    const fadeOut = parseDuration(fadeOutRaw);
 
     if (startRaw.trim() !== "" && startTime === undefined) {
       setError("Heure de début invalide (format : mm:ss ou secondes)");
@@ -48,8 +60,16 @@ export default function AudioSettingsModal({ audio, onSave, onClose }: Props) {
       setError("L'heure de fin doit être supérieure à l'heure de début");
       return;
     }
+    if (fadeInRaw.trim() !== "" && fadeIn === undefined) {
+      setError("Durée de fade in invalide (en secondes, ex : 3)");
+      return;
+    }
+    if (fadeOutRaw.trim() !== "" && fadeOut === undefined) {
+      setError("Durée de fade out invalide (en secondes, ex : 3)");
+      return;
+    }
 
-    onSave({ ...audio, startTime, endTime });
+    onSave({ ...audio, startTime, endTime, fadeIn, fadeOut });
     onClose();
   }
 
@@ -61,31 +81,57 @@ export default function AudioSettingsModal({ audio, onSave, onClose }: Props) {
           <button className="btn-icon" onClick={onClose}><X size={16} /></button>
         </div>
 
-        <div className="modal-field">
-          <label>Début (optionnel)</label>
-          <input
-            type="text"
-            placeholder="ex : 0:30 ou 30"
-            value={startRaw}
-            onChange={(e) => { setStartRaw(e.target.value); setError(null); }}
-          />
-        </div>
+        <div className="audio-settings-grid">
+          <div className="modal-field">
+            <label>Début (optionnel)</label>
+            <input
+              type="text"
+              placeholder="ex : 0:30 ou 30"
+              value={startRaw}
+              onChange={(e) => { setStartRaw(e.target.value); setError(null); }}
+            />
+          </div>
 
-        <div className="modal-field" style={{ marginTop: "1rem" }}>
-          <label>Fin (optionnel)</label>
-          <input
-            type="text"
-            placeholder="ex : 2:45 ou 165"
-            value={endRaw}
-            onChange={(e) => { setEndRaw(e.target.value); setError(null); }}
-          />
+          <div className="modal-field">
+            <label>Fin (optionnel)</label>
+            <input
+              type="text"
+              placeholder="ex : 2:45 ou 165"
+              value={endRaw}
+              onChange={(e) => { setEndRaw(e.target.value); setError(null); }}
+            />
+          </div>
+
+          <div className="modal-field">
+            <label>Fade in — durée en secondes</label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              placeholder="ex : 3"
+              value={fadeInRaw}
+              onChange={(e) => { setFadeInRaw(e.target.value); setError(null); }}
+            />
+          </div>
+
+          <div className="modal-field">
+            <label>Fade out — durée en secondes</label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              placeholder="ex : 3"
+              value={fadeOutRaw}
+              onChange={(e) => { setFadeOutRaw(e.target.value); setError(null); }}
+            />
+          </div>
         </div>
 
         {error && <p className="modal-error">{error}</p>}
 
-        <div className="modal-actions" style={{ marginTop: "1.4rem" }}>
+        <div className="modal-actions">
           <button className="btn btn-primary" onClick={handleSave}>Enregistrer</button>
-          <button className="btn" onClick={onClose}>Annuler</button>
+          <button className="btn btn-secondary" onClick={onClose}>Annuler</button>
         </div>
       </div>
     </div>

@@ -20,6 +20,10 @@ pub struct AudioFile {
     pub start_time: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "endTime")]
     pub end_time: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "fadeIn")]
+    pub fade_in: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "fadeOut")]
+    pub fade_out: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
@@ -95,6 +99,8 @@ fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
                 volume: 100.0,
                 start_time: None,
                 end_time: None,
+                fade_in: None,
+                fade_out: None,
                 note: None,
             })).collect()
         };
@@ -202,7 +208,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, 
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
     fs::copy(src, &dest)
         .map_err(|e| format!("Impossible de copier le fichier : {}", e))?;
-    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, note: None })
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
 }
 
 #[tauri::command]
@@ -218,7 +224,7 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
 struct YtDlpProgress { step: String }
 
 fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
-    let cmd = Command::new(path);
+    let mut cmd = Command::new(path);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -296,7 +302,7 @@ async fn download_youtube_audio(url: String, project_path: String, app: tauri::A
     let ext = Path::new(&filename).extension().unwrap_or_default().to_string_lossy();
     let original_name = format!("{}.{}", title, ext);
 
-    Ok(AudioFile { id, filename, original_name, volume: 100.0, start_time: None, end_time: None, note: None })
+    Ok(AudioFile { id, filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
 }
 
 #[tauri::command]
@@ -359,7 +365,7 @@ async fn download_audio_from_url(url: String, project_path: String) -> Result<Au
     fs::write(&dest, &bytes)
         .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
 
-    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, note: None })
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
 }
 
 #[tauri::command]

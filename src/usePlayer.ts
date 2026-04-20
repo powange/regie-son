@@ -47,10 +47,21 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const playAtRef = useRef<(nIdx: number, iIdx: number) => void>(() => {});
   const endTimeRef = useRef<number | null>(null);
   const nextRef = useRef<() => void>(() => {});
+  const fadeAnimRef = useRef<number | null>(null);
+  const fadingOutRef = useRef(false);
+
+  function cancelFade() {
+    if (fadeAnimRef.current !== null) {
+      cancelAnimationFrame(fadeAnimRef.current);
+      fadeAnimRef.current = null;
+    }
+    fadingOutRef.current = false;
+  }
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
     const audio = audioRef.current;
     if (!audio) return;
+    cancelFade();
     const proj = projectRef.current;
     const item = proj.numeros[nIdx]?.items[iIdx];
     if (!item) return;
@@ -73,6 +84,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     const version = ++loadVersionRef.current;
     audio.pause();
 
+    const targetVolume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
+
     invoke<ArrayBuffer>("read_audio_file", { path: filePath })
       .then((buffer) => {
         if (version !== loadVersionRef.current) return;
@@ -84,7 +97,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         audio.load();
         audio.currentTime = item.startTime ?? 0;
         endTimeRef.current = item.endTime ?? null;
-        audio.volume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
+        audio.volume = (item.fadeIn && item.fadeIn > 0) ? 0 : targetVolume;
         return audio.play();
       })
       .then(() => {
@@ -96,6 +109,18 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
           isPlaying: true,
           audioError: null,
         }));
+        if (item.type === "audio" && item.fadeIn && item.fadeIn > 0) {
+          const duration = item.fadeIn;
+          const startTime = performance.now();
+          const tick = () => {
+            if (version !== loadVersionRef.current) return;
+            const elapsed = (performance.now() - startTime) / 1000;
+            if (elapsed >= duration) { audio.volume = targetVolume; return; }
+            audio.volume = targetVolume * (elapsed / duration);
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }
       })
       .catch((err) => {
         if (version !== loadVersionRef.current) return;
@@ -113,7 +138,6 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       const endTime = endTimeRef.current;
       if (endTime !== null && audio.currentTime >= endTime) {
         endTimeRef.current = null;
-        audio.pause();
         nextRef.current();
         return;
       }
@@ -126,7 +150,9 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       }));
     });
 
-    audio.addEventListener("ended", () => nextRef.current());
+    audio.addEventListener("ended", () => {
+      if (!fadingOutRef.current) nextRef.current();
+    });
 
     audio.addEventListener("error", () => {
       if (!posRef.current) return;
@@ -172,10 +198,44 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }, []);
 
   const next = useCallback((): void => {
+    if (fadingOutRef.current) return;
+
     const pos = stateRef.current.position ?? firstItemPosition(projectRef.current);
     if (!pos) return;
-    const nxt = nextItemPosition(projectRef.current, pos);
-    if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+
+    const audio = audioRef.current;
+    const item = projectRef.current.numeros[pos.numeroIndex]?.items[pos.audioIndex];
+
+    const doAdvance = () => {
+      const nxt = nextItemPosition(projectRef.current, pos);
+      if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+    };
+
+    if (
+      audio &&
+      stateRef.current.isPlaying &&
+      item?.type === "audio" &&
+      item.fadeOut && item.fadeOut > 0
+    ) {
+      fadingOutRef.current = true;
+      const startVolume = audio.volume;
+      const duration = item.fadeOut;
+      const startTime = performance.now();
+      const tick = () => {
+        const elapsed = (performance.now() - startTime) / 1000;
+        if (elapsed >= duration) {
+          audio.volume = 0;
+          fadingOutRef.current = false;
+          doAdvance();
+          return;
+        }
+        audio.volume = startVolume * (1 - elapsed / duration);
+        fadeAnimRef.current = requestAnimationFrame(tick);
+      };
+      fadeAnimRef.current = requestAnimationFrame(tick);
+    } else {
+      doAdvance();
+    }
   }, []);
 
   nextRef.current = next;
@@ -186,10 +246,12 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }, []);
 
   const stop = useCallback(() => {
+    cancelFade();
     const audio = audioRef.current;
     if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ""; }
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     posRef.current = null;
+    endTimeRef.current = null;
     setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null });
   }, []);
 
