@@ -18,6 +18,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { GripVertical, Pencil, Trash2, Plus, PauseCircle } from "lucide-react";
 import { Numero, AudioFile, PauseItem, PlaylistItem } from "../types";
 import { PlayerPosition } from "../usePlayer";
+import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
 import PauseTrack from "./PauseTrack";
 
@@ -40,6 +41,7 @@ export default function NumeroCard({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(numero.name);
+  const [showSourceModal, setShowSourceModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -205,7 +207,7 @@ export default function NumeroCard({
 
         {editMode && (
           <div className="add-item-bar">
-            <button className="add-audio-btn" onClick={addAudioFiles}>
+            <button className="add-audio-btn" onClick={() => setShowSourceModal(true)}>
               <Plus size={14} />
               Ajouter une musique
             </button>
@@ -216,6 +218,13 @@ export default function NumeroCard({
           </div>
         )}
       </div>
+
+      {showSourceModal && (
+        <AddAudioSourceModal
+          onSelectLocal={addAudioFiles}
+          onClose={() => setShowSourceModal(false)}
+        />
+      )}
     </div>
   );
 }

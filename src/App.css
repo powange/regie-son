@@ -359,6 +359,25 @@ input[type="text"]:focus { border-color: var(--accent); }
 
 .modal-error { color: var(--accent); font-size: 0.85rem; margin-top: 0.5rem; }
 
+.source-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.source-option {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+
+.source-option:hover { background: var(--card-hover, var(--border)); border-color: var(--primary); }
+
 /* ===== PROJECT EDITOR ===== */
 .project-editor {
   flex: 1;
