@@ -1,38 +1,7 @@
 import { Play, Pause, SkipForward, Square, AlertTriangle, PauseCircle } from "lucide-react";
 import { PlayerState } from "../usePlayer";
-import { Project, PlaylistItem, Numero } from "../types";
-
-interface NextContext { item: PlaylistItem; numero: Numero }
-
-function getNextContext(state: PlayerState, project: Project): NextContext | null {
-  const { position, isPlaying } = state;
-  if (!position) {
-    for (const numero of project.numeros) {
-      if (numero.items.length > 0) return { item: numero.items[0], numero };
-    }
-    return null;
-  }
-  const currentItem = project.numeros[position.numeroIndex]?.items[position.audioIndex];
-  const onPause = currentItem?.type === "pause";
-  if (!isPlaying && !onPause) {
-    // Arrêté sur un item audio — affiche la note de cet item comme aperçu
-    const numero = project.numeros[position.numeroIndex];
-    const item = numero?.items[position.audioIndex];
-    return item && numero ? { item, numero } : null;
-  }
-  // En lecture OU sur une pause — cherche l'item suivant
-  const currentNumero = project.numeros[position.numeroIndex];
-  const items = currentNumero?.items ?? [];
-  if (position.audioIndex + 1 < items.length) {
-    return { item: items[position.audioIndex + 1], numero: currentNumero };
-  }
-  for (let ni = position.numeroIndex + 1; ni < project.numeros.length; ni++) {
-    if (project.numeros[ni].items.length > 0) {
-      return { item: project.numeros[ni].items[0], numero: project.numeros[ni] };
-    }
-  }
-  return null;
-}
+import { Project } from "../types";
+import { getNextContext } from "../playerNav";
 
 interface Props {
   state: PlayerState;

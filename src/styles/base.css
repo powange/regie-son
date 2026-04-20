@@ -1,0 +1,83 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --bg3: #0f3460;
+  --accent: #e94560;
+  --accent2: #533483;
+  --text: #eaeaea;
+  --text2: #a0a0b0;
+  --border: #2a2a4a;
+  --card: #1e1e3a;
+  --card2: #252545;
+  --success: #4caf50;
+  --radius: 8px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 16px;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* ===== UPDATE BANNER ===== */
+.update-banner {
+  background: linear-gradient(90deg, #1a2a1a, #1e3a1e);
+  border-bottom: 1px solid #4caf5060;
+  padding: 0.5rem 1.2rem;
+  flex-shrink: 0;
+}
+.update-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.85rem;
+  color: #a0e0a0;
+}
+.update-banner-btn {
+  background: #4caf50;
+  color: #fff;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+.update-banner-btn:hover { opacity: 0.85; }
+.update-banner-close { color: #a0e0a0; padding: 0.2rem; }
+.update-banner-error { color: var(--accent); font-size: 0.8rem; }
+.update-banner-progress {
+  flex: 1;
+  max-width: 200px;
+  height: 4px;
+  background: #2a4a2a;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.update-banner-progress-fill {
+  height: 100%;
+  background: #4caf50;
+  transition: width 0.2s;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.update-banner-spin { animation: spin 1s linear infinite; }
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

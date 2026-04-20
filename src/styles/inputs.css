@@ -1,0 +1,16 @@
+/* ===== INPUTS ===== */
+input[type="text"],
+input[type="url"] {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input[type="text"]:focus,
+input[type="url"]:focus { border-color: var(--accent); }
+input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }

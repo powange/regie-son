@@ -1,0 +1,51 @@
+/* ===== BUTTONS ===== */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: opacity 0.15s, transform 0.1s;
+}
+button:hover { opacity: 0.88; }
+button:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+}
+
+.btn-secondary {
+  background: var(--bg3);
+  color: var(--text);
+  padding: 0.6rem 1.2rem;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text2);
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--text2); opacity: 1; }
+
+.btn-danger {
+  background: transparent;
+  color: #e94560;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #e9456040;
+}
+.btn-danger:hover { background: #e9456020; opacity: 1; }
+
+.btn-icon {
+  background: transparent;
+  color: var(--text2);
+  padding: 0.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+.btn-icon:hover { color: var(--text); opacity: 1; }

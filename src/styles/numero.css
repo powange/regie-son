@@ -1,0 +1,92 @@
+/* ===== NUMERO CARD ===== */
+.numero-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.numero-card.is-entracte { border-color: var(--accent2); background: #1a1030; }
+.numero-card.is-entracte .numero-header { background: #241545; }
+.numero-card.is-presentation { border-color: #2a6b4a; background: #0e1f17; }
+.numero-card.is-presentation .numero-header { background: #132b1f; }
+.numero-card.is-active { border-color: var(--accent) !important; }
+.numero-card.is-active .numero-header { background: #2a1525; }
+
+.numero-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: var(--card2);
+  user-select: none;
+}
+
+.numero-drag-handle {
+  color: var(--text2);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  padding: 0 0.1rem;
+}
+.numero-drag-handle:active { cursor: grabbing; }
+
+.numero-type-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: var(--bg3);
+  color: var(--text2);
+}
+.numero-card.is-entracte .numero-type-badge { background: var(--accent2); color: white; }
+.numero-card.is-presentation .numero-type-badge { background: #2a6b4a; color: white; }
+
+.numero-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
+
+.numero-title-input {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.numero-actions { display: flex; align-items: center; gap: 0.3rem; }
+
+.numero-body {
+  padding: 0.8rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.numero-body-empty {
+  color: var(--text2);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: 0.2rem 0;
+}
+/* ===== ADD NUMERO BAR ===== */
+.add-numero-bar {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.3rem 0 0.5rem;
+}
+
+.add-numero-bar button {
+  flex: 1;
+  padding: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}

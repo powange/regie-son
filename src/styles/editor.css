@@ -1,0 +1,97 @@
+/* ===== PROJECT EDITOR ===== */
+.project-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.editor-header h1 { font-size: 1.2rem; font-weight: 600; flex: 1; }
+.editor-header .saved-badge { font-size: 0.78rem; color: var(--success); }
+.btn-close-project { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+
+.btn-show-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.8rem;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+.btn-show-mode:hover { color: var(--text); border-color: var(--text2); opacity: 1; }
+.btn-show-mode--active {
+  background: #1a3a1a;
+  color: #6fcf6f;
+  border-color: #4caf5060;
+  font-weight: 600;
+}
+.btn-show-mode--active:hover { background: #1f4a1f; opacity: 1; }
+
+.show-mode-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 1.2rem;
+  background: #2a1f0a;
+  border-bottom: 1px solid #a0700040;
+  font-size: 0.82rem;
+  color: #d4a04a;
+  flex-shrink: 0;
+}
+
+.edit-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-switch {
+  width: 36px;
+  height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  padding: 2px;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch--on { background: var(--accent); }
+
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-switch--on .toggle-thumb { transform: translateX(16px); }
+
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
