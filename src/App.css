@@ -24,7 +24,7 @@
   color: var(--text);
 }
 
-html, body {
+html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--text);
