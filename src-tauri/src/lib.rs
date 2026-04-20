@@ -560,13 +560,68 @@ fn set_show_mode(active: bool) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn set_show_mode_impl(active: bool) -> Result<(), String> {
-    let arg = if active { "/start" } else { "/stop" };
-    let out = silent_command("PresentationSettings")
-        .arg(arg)
-        .output()
-        .map_err(|e| format!("Impossible de lancer PresentationSettings : {}", e))?;
-    if out.status.success() { Ok(()) } else {
-        Err("Le mode présentation Windows n'a pas pu être activé.".into())
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
+        IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
+    };
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::core::Interface;
+
+    unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let should_uninit = hr.is_ok();
+
+        let result = (|| -> Result<(), String> {
+            let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
+                .map_err(|e| format!("CoCreateInstance : {}", e))?;
+
+            let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)
+                .map_err(|e| format!("GetDefaultAudioEndpoint : {}", e))?;
+
+            let session_mgr: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)
+                .map_err(|e| format!("Activate IAudioSessionManager2 : {}", e))?;
+
+            let session_enum = session_mgr.GetSessionEnumerator()
+                .map_err(|e| format!("GetSessionEnumerator : {}", e))?;
+
+            let count = session_enum.GetCount()
+                .map_err(|e| format!("GetCount : {}", e))?;
+
+            let mut muted_any = false;
+            for i in 0..count {
+                let ctrl = match session_enum.GetSession(i) {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let ctrl2: IAudioSessionControl2 = match ctrl.cast() {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let pid = ctrl2.GetProcessId().unwrap_or(u32::MAX);
+                if pid == 0 {
+                    let vol: ISimpleAudioVolume = match ctrl2.cast() {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    vol.SetMute(active, std::ptr::null())
+                        .map_err(|e| format!("SetMute : {}", e))?;
+                    muted_any = true;
+                }
+            }
+
+            if !muted_any {
+                return Err("Session SystemSounds introuvable. Produisez un son système (ex : notification) puis réessayez.".into());
+            }
+            Ok(())
+        })();
+
+        if should_uninit {
+            CoUninitialize();
+        }
+
+        result
     }
 }
 
