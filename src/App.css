@@ -508,6 +508,7 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .numero-card.is-entracte { border-color: var(--accent2); background: #1a1030; }
