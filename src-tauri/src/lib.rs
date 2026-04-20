@@ -214,6 +214,69 @@ fn delete_audio_file(project_path: String, filename: String) -> Result<(), Strin
 }
 
 #[tauri::command]
+async fn download_audio_from_url(url: String, project_path: String) -> Result<AudioFile, String> {
+    let response = reqwest::get(&url).await
+        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Erreur HTTP {} : {}", response.status().as_u16(), url));
+    }
+
+    let content_type = response.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let content_disposition = response.headers()
+        .get("content-disposition")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let original_name = content_disposition
+        .split("filename=").nth(1)
+        .map(|f| f.trim_matches('"').trim_matches('\'').to_string())
+        .filter(|f| !f.is_empty())
+        .or_else(|| {
+            url.split('?').next()
+               .and_then(|u| u.split('/').last())
+               .filter(|f| !f.is_empty())
+               .map(|f| f.to_string())
+        })
+        .unwrap_or_else(|| "audio".to_string());
+
+    let ext = Path::new(&original_name).extension()
+        .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
+        .filter(|e| e.len() > 1)
+        .or_else(|| {
+            let ct = content_type.split(';').next().unwrap_or("").trim();
+            match ct {
+                "audio/mpeg" | "audio/mp3"  => Some(".mp3".into()),
+                "audio/ogg"                 => Some(".ogg".into()),
+                "audio/wav"                 => Some(".wav".into()),
+                "audio/flac"                => Some(".flac".into()),
+                "audio/aac"                 => Some(".aac".into()),
+                "audio/mp4"                 => Some(".m4a".into()),
+                _                           => Some(".mp3".into()),
+            }
+        })
+        .unwrap_or_else(|| ".mp3".into());
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let new_filename = format!("{}{}", id, ext);
+    let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
+
+    let bytes = response.bytes().await
+        .map_err(|e| format!("Erreur de lecture : {}", e))?;
+
+    fs::write(&dest, &bytes)
+        .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, note: None })
+}
+
+#[tauri::command]
 fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
     let bytes = fs::read(&path).map_err(|e| format!("Impossible de lire le fichier : {}", e))?;
     Ok(tauri::ipc::Response::new(bytes))
@@ -249,7 +312,7 @@ pub fn run() {
             pick_folder, pick_audio_files,
             create_project, open_project, save_project,
             copy_audio_file, delete_audio_file,
-            read_audio_file,
+            read_audio_file, download_audio_from_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
