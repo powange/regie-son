@@ -19,17 +19,14 @@ export function useUpdater() {
     error: null,
   });
 
-  useEffect(() => {
-    setState((s) => ({ ...s, checking: true }));
+  function checkUpdate() {
+    setState((s) => ({ ...s, checking: true, update: null, error: null }));
     check()
-      .then((update) => {
-        setState((s) => ({ ...s, checking: false, update: update ?? null }));
-      })
-      .catch(() => {
-        // Silently ignore update check failures (no internet, no endpoint configured, etc.)
-        setState((s) => ({ ...s, checking: false }));
-      });
-  }, []);
+      .then((update) => setState((s) => ({ ...s, checking: false, update: update ?? null })))
+      .catch(() => setState((s) => ({ ...s, checking: false })));
+  }
+
+  useEffect(() => { checkUpdate(); }, []);
 
   async function install() {
     if (!state.update) return;
@@ -58,5 +55,5 @@ export function useUpdater() {
     setState((s) => ({ ...s, update: null }));
   }
 
-  return { state, install, dismiss };
+  return { state, install, dismiss, checkUpdate };
 }

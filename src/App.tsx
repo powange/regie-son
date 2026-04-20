@@ -14,7 +14,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const { recents, add: addRecent, remove: removeRecent } = useRecentProjects();
   const { settings, update: updateSettings } = useSettings();
-  const { state: updaterState, install, dismiss } = useUpdater();
+  const { state: updaterState, install, dismiss, checkUpdate } = useUpdater();
 
   function handleProjectOpen(p: Project) {
     addRecent(p.name, p.path);
@@ -46,6 +46,9 @@ function App() {
           settings={settings}
           onUpdate={updateSettings}
           onClose={() => setShowSettings(false)}
+          updaterState={updaterState}
+          onCheckUpdate={checkUpdate}
+          onInstallUpdate={install}
         />
       )}
     </div>

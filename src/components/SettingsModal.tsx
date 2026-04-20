@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, Volume2, RefreshCw, CheckCircle } from "lucide-react";
+import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Settings } from "../useSettings";
+import { UpdaterState } from "../useUpdater";
 
 interface AudioDevice {
   deviceId: string;
@@ -12,9 +13,12 @@ interface Props {
   settings: Settings;
   onUpdate: (patch: Partial<Settings>) => void;
   onClose: () => void;
+  updaterState: UpdaterState;
+  onCheckUpdate: () => void;
+  onInstallUpdate: () => void;
 }
 
-export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
+export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
@@ -73,6 +77,40 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
             <RefreshCw size={13} />
             Actualiser la liste
           </button>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <Download size={15} />
+            Mises à jour
+          </div>
+
+          <div className="settings-update-row">
+            <button
+              className="settings-refresh"
+              onClick={onCheckUpdate}
+              disabled={updaterState.checking || updaterState.installing}
+            >
+              <RefreshCw size={13} className={updaterState.checking ? "spin" : ""} />
+              {updaterState.checking ? "Vérification…" : "Chercher les mises à jour"}
+            </button>
+
+            {!updaterState.checking && updaterState.update && (
+              <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing}>
+                <ArrowDownCircle size={14} />
+                {updaterState.installing
+                  ? updaterState.progress !== null ? `${updaterState.progress}%` : "Installation…"
+                  : `Installer v${updaterState.update.version}`}
+              </button>
+            )}
+
+            {!updaterState.checking && !updaterState.update && (
+              <span className="settings-update-status">
+                <CheckCircle size={13} />
+                À jour
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>

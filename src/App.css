@@ -763,6 +763,22 @@ input[type="text"]:focus { border-color: var(--accent); }
   cursor: pointer;
 }
 .settings-refresh:hover { color: var(--text); opacity: 1; }
+.settings-refresh:disabled { opacity: 0.4; cursor: default; }
+
+.settings-update-row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.5rem; }
+
+.settings-update-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text2);
+}
+
+.settings-install-btn { display: flex; align-items: center; gap: 0.4rem; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 /* ===== PLAYER BAR ===== */
 .player-bar {
