@@ -221,6 +221,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 editMode={editMode}
                 playerPosition={playerState.position}
                 isPlaying={playerState.isPlaying}
+                playerFade={playerState.fade}
                 missingFiles={missingSet}
                 onPlayAudio={(aIdx) => playAt(nIdx, aIdx)}
                 onChange={updateNumero}

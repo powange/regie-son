@@ -109,6 +109,17 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
             </div>
           )}
         </div>
+
+        {state.fade && (
+          <div className={`player-fade-card player-fade-card--${state.fade.type}`}>
+            <span className="player-fade-label">
+              {state.fade.type === "in" ? "Fade in" : "Fade out"}
+            </span>
+            <span className="player-fade-countdown">
+              {state.fade.remaining.toFixed(1)}s
+            </span>
+          </div>
+        )}
       </div>
 
       {audioError ? (

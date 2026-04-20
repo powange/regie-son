@@ -676,6 +676,20 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
   border-radius: 4px;
   padding: 0.1rem 0.35rem;
   white-space: nowrap;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.audio-badge--active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+  animation: fade-badge-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fade-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.5); }
+  50% { box-shadow: 0 0 0 3px rgba(233, 69, 96, 0); }
 }
 
 .audio-volume {
@@ -993,6 +1007,40 @@ input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.player-fade-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.9rem;
+  background: var(--accent);
+  color: white;
+  border-radius: 10px;
+  flex-shrink: 0;
+  animation: fade-card-pulse 1.2s ease-in-out infinite;
+}
+
+.player-fade-card--in { background: #2e7d32; }
+.player-fade-card--out { background: var(--accent); }
+
+.player-fade-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.player-fade-countdown {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fade-card-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0); }
 }
 
 .player-next-card .player-btn--next {

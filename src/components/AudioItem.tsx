@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
+import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
 
 interface Props {
@@ -11,12 +12,13 @@ interface Props {
   isActive: boolean;
   isPlaying: boolean;
   isMissing?: boolean;
+  activeFade?: FadeState | null;
   onPlay: () => void;
   onChange: (updated: AudioFile) => void;
   onDelete: () => void;
 }
 
-export default function AudioItem({ audio, editMode, isActive, isPlaying, isMissing, onPlay, onChange, onDelete }: Props) {
+export default function AudioItem({ audio, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
@@ -56,8 +58,16 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
           <span className="audio-badges">
             {audio.startTime != null && <span className="audio-badge">▶ {fmt(audio.startTime)}</span>}
             {audio.endTime   != null && <span className="audio-badge">⏹ {fmt(audio.endTime)}</span>}
-            {audio.fadeIn    != null && audio.fadeIn  > 0 && <span className="audio-badge">↑ {audio.fadeIn}s</span>}
-            {audio.fadeOut   != null && audio.fadeOut > 0 && <span className="audio-badge">↓ {audio.fadeOut}s</span>}
+            {audio.fadeIn    != null && audio.fadeIn  > 0 && (
+              <span className={`audio-badge${isActive && activeFade?.type === "in" ? " audio-badge--active" : ""}`}>
+                ↑ {isActive && activeFade?.type === "in" ? `${activeFade.remaining.toFixed(1)}s` : `${audio.fadeIn}s`}
+              </span>
+            )}
+            {audio.fadeOut   != null && audio.fadeOut > 0 && (
+              <span className={`audio-badge${isActive && activeFade?.type === "out" ? " audio-badge--active" : ""}`}>
+                ↓ {isActive && activeFade?.type === "out" ? `${activeFade.remaining.toFixed(1)}s` : `${audio.fadeOut}s`}
+              </span>
+            )}
           </span>
         )}
 

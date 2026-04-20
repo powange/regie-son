@@ -22,11 +22,18 @@ export interface PlayerProgress {
   duration: number;
 }
 
+export interface FadeState {
+  type: "in" | "out";
+  remaining: number;
+  total: number;
+}
+
 export interface PlayerState {
   position: PlayerPosition | null;
   isPlaying: boolean;
   progress: PlayerProgress;
   audioError: string | null;
+  fade: FadeState | null;
 }
 
 export function usePlayer(project: Project, audioDeviceId: string | null) {
@@ -35,6 +42,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     isPlaying: false,
     progress: { position: 0, duration: 0 },
     audioError: null,
+    fade: null,
   });
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -57,6 +65,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       fadeAnimRef.current = null;
     }
     fadingOutRef.current = false;
+    setState((s) => (s.fade === null ? s : { ...s, fade: null }));
   }
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
@@ -114,14 +123,23 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         if (item.type === "audio" && item.fadeIn && item.fadeIn > 0) {
           const duration = item.fadeIn;
           const startTime = performance.now();
+          setState((s) => ({ ...s, fade: { type: "in", remaining: duration, total: duration } }));
           const tick = () => {
             if (version !== loadVersionRef.current) return;
             const elapsed = (performance.now() - startTime) / 1000;
-            if (elapsed >= duration) { audio.volume = targetVolume; return; }
+            if (elapsed >= duration) {
+              audio.volume = targetVolume;
+              fadeAnimRef.current = null;
+              setState((s) => ({ ...s, fade: null }));
+              return;
+            }
             audio.volume = targetVolume * (elapsed / duration);
-            requestAnimationFrame(tick);
+            setState((s) => ({ ...s, fade: { type: "in", remaining: duration - elapsed, total: duration } }));
+            fadeAnimRef.current = requestAnimationFrame(tick);
           };
-          requestAnimationFrame(tick);
+          fadeAnimRef.current = requestAnimationFrame(tick);
+        } else {
+          setState((s) => (s.fade === null ? s : { ...s, fade: null }));
         }
       })
       .catch((err) => {
@@ -236,15 +254,19 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       const startVolume = audio.volume;
       const duration = item.fadeOut;
       const startTime = performance.now();
+      setState((s) => ({ ...s, fade: { type: "out", remaining: duration, total: duration } }));
       const tick = () => {
         const elapsed = (performance.now() - startTime) / 1000;
         if (elapsed >= duration) {
           audio.volume = 0;
           fadingOutRef.current = false;
+          fadeAnimRef.current = null;
+          setState((s) => ({ ...s, fade: null }));
           doAdvance();
           return;
         }
         audio.volume = startVolume * (1 - elapsed / duration);
+        setState((s) => ({ ...s, fade: { type: "out", remaining: duration - elapsed, total: duration } }));
         fadeAnimRef.current = requestAnimationFrame(tick);
       };
       fadeAnimRef.current = requestAnimationFrame(tick);
@@ -267,7 +289,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
     posRef.current = null;
     endTimeRef.current = null;
-    setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null });
+    setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null, fade: null });
   }, []);
 
   return { state, playAt, togglePlay, next, stop, seek };
