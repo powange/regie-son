@@ -1,16 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Project, PlaylistItem } from "./types";
-
-function mimeType(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
-    flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac",
-    wma: "audio/x-ms-wma", opus: "audio/ogg; codecs=opus", webm: "audio/webm",
-  };
-  return map[ext] ?? "audio/mpeg";
-}
+import { audioMimeType } from "./mime";
 
 export interface PlayerPosition {
   numeroIndex: number;
@@ -101,7 +92,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       .then((buffer) => {
         if (version !== loadVersionRef.current) return;
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-        const blob = new Blob([buffer], { type: mimeType(item.filename) });
+        const blob = new Blob([buffer], { type: audioMimeType(item.filename) });
         const url = URL.createObjectURL(blob);
         blobUrlRef.current = url;
         audio.src = url;
@@ -240,8 +231,12 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const next = useCallback((): void => {
     if (fadingOutRef.current) return;
 
-    const pos = stateRef.current.position ?? firstItemPosition(projectRef.current);
-    if (!pos) return;
+    const pos = stateRef.current.position;
+    if (!pos) {
+      const first = firstItemPosition(projectRef.current);
+      if (first) playAtRef.current(first.numeroIndex, first.audioIndex);
+      return;
+    }
 
     const audio = audioRef.current;
     const item = projectRef.current.numeros[pos.numeroIndex]?.items[pos.audioIndex];
