@@ -1,22 +1,31 @@
 import { Play, Pause, SkipForward, Square, AlertTriangle, PauseCircle } from "lucide-react";
 import { PlayerState } from "../usePlayer";
-import { Project, PlaylistItem } from "../types";
+import { Project, PlaylistItem, Numero } from "../types";
 
-function getNextItem(state: PlayerState, project: Project): PlaylistItem | null {
+interface NextContext { item: PlaylistItem; numero: Numero }
+
+function getNextContext(state: PlayerState, project: Project): NextContext | null {
   const { position, isPlaying } = state;
   if (!position) {
     for (const numero of project.numeros) {
-      if (numero.items.length > 0) return numero.items[0];
+      if (numero.items.length > 0) return { item: numero.items[0], numero };
     }
     return null;
   }
   if (!isPlaying) {
-    return project.numeros[position.numeroIndex]?.items[position.audioIndex] ?? null;
+    const numero = project.numeros[position.numeroIndex];
+    const item = numero?.items[position.audioIndex];
+    return item && numero ? { item, numero } : null;
   }
-  const items = project.numeros[position.numeroIndex]?.items ?? [];
-  if (position.audioIndex + 1 < items.length) return items[position.audioIndex + 1];
+  const currentNumero = project.numeros[position.numeroIndex];
+  const items = currentNumero?.items ?? [];
+  if (position.audioIndex + 1 < items.length) {
+    return { item: items[position.audioIndex + 1], numero: currentNumero };
+  }
   for (let ni = position.numeroIndex + 1; ni < project.numeros.length; ni++) {
-    if (project.numeros[ni].items.length > 0) return project.numeros[ni].items[0];
+    if (project.numeros[ni].items.length > 0) {
+      return { item: project.numeros[ni].items[0], numero: project.numeros[ni] };
+    }
   }
   return null;
 }
@@ -40,8 +49,9 @@ function formatTime(secs: number): string {
 export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop, onSeek }: Props) {
   const { position, isPlaying, progress, audioError } = state;
 
-  const nextItem = getNextItem(state, project);
-  const nextNote = nextItem?.note ?? null;
+  const nextContext = getNextContext(state, project);
+  const nextNote = nextContext?.item.note ?? null;
+  const nextNumeroName = nextContext?.numero.name ?? null;
 
   const currentNumero = position !== null ? project.numeros[position.numeroIndex] : null;
   const currentItem = currentNumero ? currentNumero.items[position!.audioIndex] : null;
@@ -60,6 +70,20 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
 
   return (
     <div className={`player-bar${isPlaying ? " player-bar--playing" : ""}${onPause ? " player-bar--on-pause" : ""}`}>
+
+      {(currentNumero || onPause) && (
+        <div className="player-section">
+          {onPause ? (
+            <span className="player-pause-indicator">
+              <PauseCircle size={13} />
+              En attente — appuyez sur Play pour continuer
+            </span>
+          ) : (
+            <span className="player-current-numero">{currentNumero!.name}</span>
+          )}
+        </div>
+      )}
+
       <div className="player-top">
         <div className="player-controls">
           <button className="player-btn player-btn--stop" onClick={onStop} disabled={!position} title="Stop">
@@ -71,29 +95,16 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           <button className="player-btn player-btn--next" onClick={onNext} disabled={!hasAudio} title="Piste suivante">
             <SkipForward size={18} />
           </button>
-          {nextNote && (
-            <span className="player-next-note">{nextNote}</span>
-          )}
         </div>
 
-        <div className="player-info">
-          {onPause ? (
-            <span className="player-pause-indicator">
-              <PauseCircle size={14} />
-              En attente — appuyez sur Play pour continuer
-            </span>
-          ) : currentNumero && currentItem?.type === "audio" ? (
-            <>
-              <span className="player-numero">{currentNumero.name}</span>
-              <span className="player-sep">›</span>
-              <span className="player-track">{currentItem.original_name}</span>
-            </>
-          ) : (
-            <span className="player-idle">
-              {hasAudio ? "Prêt à lire" : "Aucune musique dans ce spectacle"}
-            </span>
-          )}
-        </div>
+        {nextNote && (
+          <div className="player-next-info">
+            <span className="player-next-note">{nextNote}</span>
+            {nextNumeroName && (
+              <span className="player-next-numero">{nextNumeroName}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {audioError ? (
