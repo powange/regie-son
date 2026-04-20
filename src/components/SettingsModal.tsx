@@ -26,6 +26,9 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   async function loadDevices() {
     setLoading(true);
     try {
+      // getUserMedia unlocks device labels and Bluetooth devices in WebView2
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+      stream?.getTracks().forEach((t) => t.stop());
       const all = await navigator.mediaDevices.enumerateDevices();
       const outputs = all
         .filter((d) => d.kind === "audiooutput")
