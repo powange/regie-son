@@ -185,7 +185,8 @@ input[type="url"]::placeholder { color: var(--text2); opacity: 0.7; }
 }
 
 .home-actions .btn-primary,
-.home-actions .btn-secondary {
+.home-actions .btn-secondary,
+.home-actions .btn-ghost {
   width: 100%;
   padding: 0.9rem;
   font-size: 1rem;

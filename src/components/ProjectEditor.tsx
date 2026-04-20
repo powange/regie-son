@@ -13,7 +13,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Coffee, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Coffee, Download, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -101,6 +101,16 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
   }
 
+  async function handleExport() {
+    try {
+      const destFile = await invoke<string | null>("save_regieson_file", { defaultName: project.name });
+      if (!destFile) return;
+      await invoke("export_project", { projectPath: project.path, destFile });
+    } catch (err) {
+      alert("Erreur lors de l'export : " + err);
+    }
+  }
+
   async function handleClose() {
     if (showMode) {
       try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
@@ -153,6 +163,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           {showMode ? "Mode spectacle actif" : "Mode spectacle"}
         </button>
 
+        <button className="btn-icon" onClick={handleExport} title="Exporter le projet (.regieson)">
+          <Download size={18} />
+        </button>
         <button className="btn-icon" onClick={onOpenSettings} title="Paramètres">
           <Settings size={18} />
         </button>

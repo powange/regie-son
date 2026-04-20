@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings } from "lucide-react";
+import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings, Upload } from "lucide-react";
 import { Project } from "../types";
 import { RecentProject } from "../useRecentProjects";
 
@@ -24,6 +24,20 @@ export default function HomePage({ recents, onProjectOpen, onRemoveRecent, onOpe
       onProjectOpen(project);
     } catch (err) {
       setOpenError("Impossible d'ouvrir ce projet : " + err);
+    }
+  }
+
+  async function handleImportProject() {
+    setOpenError(null);
+    try {
+      const srcFile = await invoke<string | null>("pick_regieson_file");
+      if (!srcFile) return;
+      const destFolder = await invoke<string | null>("pick_folder");
+      if (!destFolder) return;
+      const project = await invoke<Project>("import_project", { srcFile, destFolder });
+      onProjectOpen(project);
+    } catch (err) {
+      setOpenError("Impossible d'importer : " + err);
     }
   }
 
@@ -62,6 +76,10 @@ export default function HomePage({ recents, onProjectOpen, onRemoveRecent, onOpe
         <button className="btn-secondary" onClick={handleOpenProject}>
           <FolderOpen size={18} />
           Ouvrir un spectacle
+        </button>
+        <button className="btn-ghost" onClick={handleImportProject}>
+          <Upload size={18} />
+          Importer un projet (.regieson)
         </button>
       </div>
 

@@ -310,6 +310,88 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> Result<
     Ok(deleted)
 }
 
+#[tauri::command]
+fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
+    app.dialog().file()
+        .add_filter("Régie Son", &["regieson"])
+        .blocking_pick_file()
+        .map(|p| p.to_string())
+}
+
+#[tauri::command]
+fn save_regieson_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
+    app.dialog().file()
+        .add_filter("Régie Son", &["regieson"])
+        .set_file_name(&format!("{}.regieson", default_name))
+        .blocking_save_file()
+        .map(|p| p.to_string())
+}
+
+#[tauri::command]
+fn export_project(project_path: String, dest_file: String) -> Result<(), String> {
+    use std::io::Write;
+    let src = PathBuf::from(&project_path);
+    let file = fs::File::create(&dest_file)
+        .map_err(|e| format!("Impossible de créer l'archive : {}", e))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options: zip::write::FileOptions<()> = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    let projet_json = src.join("projet.json");
+    if !projet_json.exists() {
+        return Err("Fichier projet.json introuvable".into());
+    }
+    let content = fs::read(&projet_json).map_err(|e| format!("Lecture projet.json : {}", e))?;
+    zip.start_file("projet.json", options).map_err(|e| format!("Zip : {}", e))?;
+    zip.write_all(&content).map_err(|e| format!("Écriture : {}", e))?;
+
+    let musiques_dir = src.join("musiques");
+    if musiques_dir.exists() {
+        let entries = fs::read_dir(&musiques_dir).map_err(|e| format!("Lecture dossier : {}", e))?;
+        for entry in entries.filter_map(|e| e.ok()) {
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) { continue; }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let content = fs::read(entry.path()).map_err(|e| format!("Lecture {} : {}", name, e))?;
+            zip.start_file(format!("musiques/{}", name), options).map_err(|e| format!("Zip : {}", e))?;
+            zip.write_all(&content).map_err(|e| format!("Écriture : {}", e))?;
+        }
+    }
+
+    zip.finish().map_err(|e| format!("Finalisation de l'archive : {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn import_project(src_file: String, dest_folder: String) -> Result<Project, String> {
+    let dest = PathBuf::from(&dest_folder);
+    fs::create_dir_all(&dest).map_err(|e| format!("Création du dossier : {}", e))?;
+
+    let file = fs::File::open(&src_file).map_err(|e| format!("Ouverture de l'archive : {}", e))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Archive invalide : {}", e))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| format!("Lecture entrée : {}", e))?;
+        let name = entry.name().to_string();
+        if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
+            return Err(format!("Chemin invalide dans l'archive : {}", name));
+        }
+        let out_path = dest.join(&name);
+        if entry.is_dir() {
+            fs::create_dir_all(&out_path).map_err(|e| format!("mkdir : {}", e))?;
+        } else {
+            if let Some(parent) = out_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("mkdir : {}", e))?;
+            }
+            let mut out = fs::File::create(&out_path).map_err(|e| format!("Création : {}", e))?;
+            std::io::copy(&mut entry, &mut out).map_err(|e| format!("Extraction : {}", e))?;
+        }
+    }
+
+    let content = fs::read_to_string(dest.join("projet.json"))
+        .map_err(|_| "Archive invalide : projet.json manquant".to_string())?;
+    migrate_project(&content, dest.to_string_lossy().to_string())
+}
+
 #[derive(Serialize, Clone)]
 struct YtDlpProgress { step: String }
 
@@ -551,6 +633,8 @@ pub fn run() {
             create_project, open_project, save_project,
             copy_audio_file, delete_audio_file,
             verify_project, cleanup_orphan_files,
+            pick_regieson_file, save_regieson_file,
+            export_project, import_project,
             read_audio_file, download_audio_from_url, download_youtube_audio,
             set_show_mode,
         ])
