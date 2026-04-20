@@ -660,6 +660,20 @@ input[type="text"]:focus { border-color: var(--accent); }
 }
 .pause-track-label { flex: 1; }
 
+.item-note-input {
+  width: 100%;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  margin-top: 0.25rem;
+  border-radius: 0;
+}
+.item-note-input:focus { outline: none; border-bottom-color: var(--primary); color: var(--text); }
+.item-note-input::placeholder { color: var(--text2); opacity: 0.5; }
+
 /* ===== ADD NUMERO BAR ===== */
 .add-numero-bar {
   display: flex;
@@ -802,6 +816,18 @@ input[type="text"]:focus { border-color: var(--accent); }
 .player-btn--play:hover:not(:disabled) { background: #c73350; color: white; border-color: transparent; }
 .player-btn--stop { width: 32px; height: 32px; }
 .player-btn--next { width: 34px; height: 34px; }
+
+.player-next-note {
+  font-size: 0.8rem;
+  color: var(--text2);
+  font-style: italic;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-left: 0.4rem;
+  border-left: 2px solid var(--border);
+}
 
 .player-info {
   flex: 1;

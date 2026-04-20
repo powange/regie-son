@@ -72,6 +72,16 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, onPlay
         </button>
       )}
 
+      {editMode && (
+        <input
+          className="item-note-input"
+          type="text"
+          placeholder="Note…"
+          value={audio.note ?? ""}
+          onChange={(e) => onChange({ ...audio, note: e.target.value || undefined })}
+        />
+      )}
+
       {showSettings && (
         <AudioSettingsModal
           audio={audio}

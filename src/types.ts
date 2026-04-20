@@ -6,11 +6,13 @@ export interface AudioFile {
   volume: number; // 0–100
   startTime?: number; // secondes
   endTime?: number;   // secondes
+  note?: string;
 }
 
 export interface PauseItem {
   type: "pause";
   id: string;
+  note?: string;
 }
 
 export type PlaylistItem = AudioFile | PauseItem;

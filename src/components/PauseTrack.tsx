@@ -7,10 +7,11 @@ interface Props {
   pause: PauseItem;
   editMode: boolean;
   isActive: boolean;
+  onChange: (updated: PauseItem) => void;
   onDelete: () => void;
 }
 
-export default function PauseTrack({ pause, editMode, isActive, onDelete }: Props) {
+export default function PauseTrack({ pause, editMode, isActive, onChange, onDelete }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
 
@@ -33,6 +34,16 @@ export default function PauseTrack({ pause, editMode, isActive, onDelete }: Prop
       )}
       <PauseCircle size={13} />
       <span className="pause-track-label">Pause</span>
+      {editMode && (
+        <input
+          className="item-note-input"
+          type="text"
+          placeholder="Note…"
+          value={pause.note ?? ""}
+          onChange={(e) => onChange({ ...pause, note: e.target.value || undefined })}
+        />
+      )}
+
       {editMode && (
         <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
           <Trash2 size={14} />

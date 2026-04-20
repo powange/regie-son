@@ -1,6 +1,20 @@
 import { Play, Pause, SkipForward, Square, AlertTriangle, PauseCircle } from "lucide-react";
 import { PlayerState } from "../usePlayer";
-import { Project } from "../types";
+import { Project, PlaylistItem } from "../types";
+
+function getNextItem(state: PlayerState, project: Project): PlaylistItem | null {
+  const { position, isPlaying } = state;
+  if (!position) return null;
+  if (!isPlaying) {
+    return project.numeros[position.numeroIndex]?.items[position.audioIndex] ?? null;
+  }
+  const items = project.numeros[position.numeroIndex]?.items ?? [];
+  if (position.audioIndex + 1 < items.length) return items[position.audioIndex + 1];
+  for (let ni = position.numeroIndex + 1; ni < project.numeros.length; ni++) {
+    if (project.numeros[ni].items.length > 0) return project.numeros[ni].items[0];
+  }
+  return null;
+}
 
 interface Props {
   state: PlayerState;
@@ -20,6 +34,9 @@ function formatTime(secs: number): string {
 
 export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop, onSeek }: Props) {
   const { position, isPlaying, progress, audioError } = state;
+
+  const nextItem = getNextItem(state, project);
+  const nextNote = nextItem?.note ?? null;
 
   const currentNumero = position !== null ? project.numeros[position.numeroIndex] : null;
   const currentItem = currentNumero ? currentNumero.items[position!.audioIndex] : null;
@@ -49,6 +66,9 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           <button className="player-btn player-btn--next" onClick={onNext} disabled={!hasAudio} title="Piste suivante">
             <SkipForward size={18} />
           </button>
+          {nextNote && (
+            <span className="player-next-note">{nextNote}</span>
+          )}
         </div>
 
         <div className="player-info">
