@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Volume2, RefreshCw, CheckCircle } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import { Settings } from "../useSettings";
 
 interface AudioDevice {
@@ -16,6 +17,7 @@ interface Props {
 export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState("");
 
   async function loadDevices() {
     setLoading(true);
@@ -32,7 +34,7 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
     }
   }
 
-  useEffect(() => { loadDevices(); }, []);
+  useEffect(() => { loadDevices(); getVersion().then(setVersion); }, []);
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
 
@@ -73,7 +75,8 @@ export default function SettingsModal({ settings, onUpdate, onClose }: Props) {
           </button>
         </div>
 
-        <div className="modal-actions">
+        <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          {version && <span style={{ fontSize: "0.8rem", color: "var(--text2)" }}>v{version}</span>}
           <button className="btn-primary" onClick={onClose}>Fermer</button>
         </div>
       </div>
