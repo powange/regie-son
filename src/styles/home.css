@@ -26,6 +26,23 @@
 
 .home-logo p { color: var(--text2); font-size: 1rem; }
 
+.home-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 380px;
+}
+
+.home-actions-title {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text2);
+  font-weight: 600;
+}
+
 .home-actions {
   display: flex;
   flex-direction: column;

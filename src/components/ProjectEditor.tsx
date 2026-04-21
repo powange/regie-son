@@ -13,7 +13,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Coffee, Download, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Coffee, Download, Settings, Pencil, MonitorPlay, Trash2, X, Upload } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -40,6 +40,7 @@ function newNumero(type: NumeroType, index: number): Numero {
 interface VerifyResult { missing: string[]; orphans: string[] }
 
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
+  const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
   const [editMode, setEditMode] = useState(true);
   const [showMode, setShowMode] = useState(false);
@@ -103,11 +104,32 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   async function handleExport() {
     try {
-      const destFile = await invoke<string | null>("save_regieson_file", { defaultName: project.name });
-      if (!destFile) return;
-      await invoke("export_project", { projectPath: project.path, destFile });
+      if (isSingle) {
+        const destFile = await invoke<string | null>("save_regiesonnumero_file", { defaultName: project.name });
+        if (!destFile) return;
+        await invoke("export_numero", { numeroPath: project.path, destFile });
+      } else {
+        const destFile = await invoke<string | null>("save_regieson_file", { defaultName: project.name });
+        if (!destFile) return;
+        await invoke("export_project", { projectPath: project.path, destFile });
+      }
     } catch (err) {
       alert("Erreur lors de l'export : " + err);
+    }
+  }
+
+  async function handleImportNumero() {
+    try {
+      const srcFile = await invoke<string | null>("pick_regiesonnumero_file");
+      if (!srcFile) return;
+      const updated = await invoke<Project>("import_numero_into_project", {
+        srcFile, projectPath: project.path,
+      });
+      onProjectChange(updated);
+      setSaved(true);
+      runVerify();
+    } catch (err) {
+      alert("Erreur lors de l'import : " + err);
     }
   }
 
@@ -163,7 +185,11 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           {showMode ? "Mode spectacle actif" : "Mode spectacle"}
         </button>
 
-        <button className="btn-icon" onClick={handleExport} title="Exporter le projet (.regieson)">
+        <button
+          className="btn-icon"
+          onClick={handleExport}
+          title={isSingle ? "Exporter le numéro (.regiesonnumero)" : "Exporter le projet (.regieson)"}
+        >
           <Download size={18} />
         </button>
         <button className="btn-icon" onClick={onOpenSettings} title="Paramètres">
@@ -214,7 +240,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       />
 
       <div className="editor-body">
-        {project.numeros.length === 0 && (
+        {project.numeros.length === 0 && !isSingle && (
           <p style={{ color: "var(--text2)", fontSize: "0.9rem", textAlign: "center", padding: "2rem 0" }}>
             Aucun élément — commencez par ajouter un numéro, un entracte ou une présentation.
           </p>
@@ -239,12 +265,14 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 onPlayAudio={(aIdx) => playAt(nIdx, aIdx)}
                 onChange={updateNumero}
                 onDelete={() => deleteNumero(n.id)}
+                canDelete={!isSingle}
+                showDragHandle={!isSingle}
               />
             ))}
           </SortableContext>
         </DndContext>
 
-        {editMode && (
+        {editMode && !isSingle && (
           <div className="add-numero-bar">
             <button className="btn-secondary" onClick={() => addItem("numero")}>
               <Plus size={16} />
@@ -257,6 +285,10 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
             <button className="btn-ghost" onClick={() => addItem("presentation")}>
               <MonitorPlay size={16} />
               Ajouter une présentation
+            </button>
+            <button className="btn-ghost" onClick={handleImportNumero}>
+              <Upload size={16} />
+              Importer un numéro (.regiesonnumero)
             </button>
           </div>
         )}

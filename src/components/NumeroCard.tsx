@@ -34,12 +34,16 @@ interface Props {
   onPlayAudio: (itemIndex: number) => void;
   onChange: (updated: Numero) => void;
   onDelete: () => void;
+  canDelete?: boolean;
+  showDragHandle?: boolean;
 }
 
 export default function NumeroCard({
   numero, numeroIndex, projectPath, editMode,
   playerPosition, isPlaying, playerFade, missingFiles, onPlayAudio,
   onChange, onDelete,
+  canDelete = true,
+  showDragHandle = true,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(numero.name);
@@ -140,7 +144,7 @@ export default function NumeroCard({
       style={style}
     >
       <div className="numero-header">
-        {editMode && (
+        {editMode && showDragHandle && (
           <span className="numero-drag-handle" {...attributes} {...listeners}>
             <GripVertical size={16} />
           </span>
@@ -172,9 +176,11 @@ export default function NumeroCard({
             >
               <Pencil size={14} />
             </button>
-            <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
-              <Trash2 size={14} />
-            </button>
+            {canDelete && (
+              <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         )}
       </div>

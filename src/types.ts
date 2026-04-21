@@ -32,4 +32,5 @@ export interface Project {
   name: string;
   path: string;
   numeros: Numero[];
+  singleNumero?: boolean;
 }
