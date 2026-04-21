@@ -1,7 +1,7 @@
 import { useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, PauseCircle, Play, Trash2 } from "lucide-react";
+import { GripVertical, Info, PauseCircle, Play, Trash2 } from "lucide-react";
 import { PauseItem } from "../types";
 
 interface Props {
@@ -59,14 +59,19 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
 
       {editMode ? (
         <input
-          className="item-note-input"
+          className="item-cue-input"
           type="text"
-          placeholder="Note…"
-          value={pause.note ?? ""}
-          onChange={(e) => onChange({ ...pause, note: e.target.value || undefined })}
+          placeholder="Top de départ…"
+          value={pause.cue ?? ""}
+          onChange={(e) => onChange({ ...pause, cue: e.target.value || undefined })}
         />
       ) : (
-        pause.note && <p className="item-note-display">{pause.note}</p>
+        pause.cue && (
+          <p className="item-cue-display" title="Top de départ">
+            <Info size={12} />
+            <span>{pause.cue}</span>
+          </p>
+        )
       )}
     </div>
   );

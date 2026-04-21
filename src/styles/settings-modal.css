@@ -38,25 +38,30 @@
 
 .settings-loading { color: var(--text2); font-size: 0.88rem; }
 
-.settings-devices { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
-
-.device-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg2);
+.settings-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--bg2);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.6rem 0.9rem;
-  text-align: left;
   color: var(--text);
+  padding: 0.6rem 2rem 0.6rem 0.9rem;
   font-size: 0.9rem;
-  transition: border-color 0.15s, background 0.15s;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  margin-bottom: 0.7rem;
+  transition: border-color 0.15s;
 }
-.device-option:hover:not(:disabled) { border-color: var(--accent); background: var(--card2); opacity: 1; }
-.device-option--selected { border-color: var(--accent); background: #2a1020; color: var(--accent); }
-.device-option:disabled { opacity: 0.4; cursor: not-allowed; }
-.device-label { flex: 1; }
+.settings-select:hover { border-color: var(--accent); }
+.settings-select:focus { border-color: var(--accent); }
+.settings-select option { background: var(--bg2); color: var(--text); }
 
 .settings-refresh {
   display: flex;

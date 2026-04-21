@@ -8,13 +8,13 @@ export interface AudioFile {
   endTime?: number;   // secondes
   fadeIn?: number;    // secondes
   fadeOut?: number;   // secondes
-  note?: string;
+  cue?: string;       // top de départ (indication pour le régisseur)
 }
 
 export interface PauseItem {
   type: "pause";
   id: string;
-  note?: string;
+  cue?: string;       // top de départ (indication pour le régisseur)
 }
 
 export type PlaylistItem = AudioFile | PauseItem;

@@ -85,13 +85,13 @@ interface AudioFile {
   endTime?: number;
   fadeIn?: number;
   fadeOut?: number;
-  note?: string;
+  cue?: string;           // "top de départ" — indication pour le régisseur (accepte "note" en lecture pour rétrocompat)
 }
 
 interface PauseItem {
   type: "pause";
   id: string;
-  note?: string;
+  cue?: string;           // "top de départ"
 }
 
 type PlaylistItem = AudioFile | PauseItem;
@@ -236,10 +236,10 @@ Pattern clé pour les downloads concurrents :
 | [ProjectEditor](src/components/ProjectEditor.tsx) | Vue projet. Gère les numéros (ajout, suppression, réordonnancement dnd), intègre `PlayerBar` + `usePlayer`. Helper `newNumero(type, index)`. |
 | [NumeroCard](src/components/NumeroCard.tsx) | Une carte "numéro" avec son nom, ses items (audios/pauses). Surface l'état de lecture (playerPosition, isPlaying, playerFade, missingFile). |
 | [AudioItem](src/components/AudioItem.tsx) | Une piste dans un numéro : bouton play, nom, état actif/playing/missing, fade en cours. |
-| [PauseTrack](src/components/PauseTrack.tsx) | Un slot "pause" entre deux pistes (note optionnelle). |
+| [PauseTrack](src/components/PauseTrack.tsx) | Un slot "pause" entre deux pistes (top de départ optionnel). |
 | [PlayerBar](src/components/PlayerBar.tsx) | Barre de contrôle bas d'écran : play/pause, next, stop, seek. Helper `formatTime(secs)`. |
 | [AddAudioSourceModal](src/components/AddAudioSourceModal.tsx) | Modal multi-vue (`View` = local / url / youtube / pause). Contient `DownloadForm` réutilisable avec progression. |
-| [AudioSettingsModal](src/components/AudioSettingsModal.tsx) | Édition des métadonnées d'une piste (startTime, endTime, fadeIn, fadeOut, volume, note). Helpers `formatTime` / `parseTime` / `parseDuration`. |
+| [AudioSettingsModal](src/components/AudioSettingsModal.tsx) | Édition des métadonnées d'une piste (startTime, endTime, fadeIn, fadeOut, volume). Helpers `formatTime` / `parseTime` / `parseDuration`. |
 | [SettingsModal](src/components/SettingsModal.tsx) | Paramètres globaux : sortie audio (`AudioDevice` via `navigator.mediaDevices.enumerateDevices`), updater manuel. |
 | [UpdateBanner](src/components/UpdateBanner.tsx) | Bandeau haut quand un update est dispo/téléchargé. |
 

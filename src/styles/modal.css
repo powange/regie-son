@@ -94,3 +94,16 @@
 }
 
 .source-option:hover { background: var(--card-hover, var(--border)); border-color: var(--primary); }
+
+.part-option { align-items: flex-start; gap: 0.9rem; padding: 0.85rem 1rem; }
+.part-option > svg { flex-shrink: 0; margin-top: 0.15rem; color: var(--text2); }
+.part-option-text { display: flex; flex-direction: column; gap: 0.15rem; }
+.part-option-text strong { font-weight: 600; font-size: 0.95rem; }
+.part-option-text span { font-size: 0.8rem; color: var(--text2); line-height: 1.3; }
+
+.part-option--numero > svg { color: var(--accent); }
+.part-option--numero:hover { border-color: var(--accent); background: #2a1525; }
+.part-option--entracte > svg { color: var(--accent2); }
+.part-option--entracte:hover { border-color: var(--accent2); background: #241545; }
+.part-option--presentation > svg { color: #2a6b4a; }
+.part-option--presentation:hover { border-color: #2a6b4a; background: #132b1f; }

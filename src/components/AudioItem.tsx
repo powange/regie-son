@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, GripVertical, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
+import { AlertTriangle, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
@@ -148,14 +148,19 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
 
       {editMode ? (
         <input
-          className="item-note-input"
+          className="item-cue-input"
           type="text"
-          placeholder="Note…"
-          value={audio.note ?? ""}
-          onChange={(e) => onChange({ ...audio, note: e.target.value || undefined })}
+          placeholder="Top de départ…"
+          value={audio.cue ?? ""}
+          onChange={(e) => onChange({ ...audio, cue: e.target.value || undefined })}
         />
       ) : (
-        audio.note && <p className="item-note-display">{audio.note}</p>
+        audio.cue && (
+          <p className="item-cue-display" title="Top de départ">
+            <Info size={12} />
+            <span>{audio.cue}</span>
+          </p>
+        )
       )}
 
       {showSettings && (

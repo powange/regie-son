@@ -66,15 +66,15 @@ pub struct AudioFile {
     pub fade_in: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "fadeOut")]
     pub fade_out: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "note")]
+    pub cue: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PauseItem {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "note")]
+    pub cue: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -148,7 +148,7 @@ fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
                 end_time: None,
                 fade_in: None,
                 fade_out: None,
-                note: None,
+                cue: None,
             })).collect()
         };
         Ok(Numero { id: n.id, numero_type: n.numero_type, name: n.name, items })
@@ -303,7 +303,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, 
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
     fs::copy(src, &dest)
         .map_err(|e| format!("Impossible de copier le fichier : {}", e))?;
-    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, cue: None })
 }
 
 #[tauri::command]
@@ -551,6 +551,7 @@ fn import_numero_into_project(src_file: String, project_path: String) -> Result<
 struct YtDlpProgress { step: String }
 
 fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(unused_mut)]
     let mut cmd = Command::new(path);
     #[cfg(target_os = "windows")]
     {
@@ -654,17 +655,30 @@ async fn download_youtube_audio(url: String, project_path: String, download_id: 
     let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: "Récupération des informations de la vidéo…".into() });
 
     let title_out = silent_command(&yt_dlp)
-        .args(["--print", "%(title)s", "--no-download", &url])
+        .args([
+            "--print", "%(title)s",
+            "--skip-download",
+            "--no-warnings",
+            "--no-playlist",
+            &url,
+        ])
         .output()
         .map_err(|e| format!("Erreur yt-dlp : {}", e))?;
 
     let title = if title_out.status.success() {
-        String::from_utf8_lossy(&title_out.stdout).trim().to_string()
+        String::from_utf8_lossy(&title_out.stdout)
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with("WARNING:") && !l.starts_with("ERROR:"))
+            .last()
+            .unwrap_or("")
+            .to_string()
     } else {
-        "YouTube audio".to_string()
+        String::new()
     };
+    let title_display = if title.is_empty() { "YouTube audio".to_string() } else { title.clone() };
 
-    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: format!("Téléchargement de « {} »…", title) });
+    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: format!("Téléchargement de « {} »…", title_display) });
 
     let id = uuid::Uuid::new_v4().to_string();
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
@@ -708,9 +722,10 @@ async fn download_youtube_audio(url: String, project_path: String, download_id: 
 
     let filename = entry.file_name().to_string_lossy().to_string();
     let ext = Path::new(&filename).extension().unwrap_or_default().to_string_lossy();
-    let original_name = format!("{}.{}", title, ext);
+    let display_title = if title.is_empty() { "YouTube audio".to_string() } else { title };
+    let original_name = format!("{}.{}", display_title, ext);
 
-    Ok(AudioFile { id, filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
+    Ok(AudioFile { id, filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, cue: None })
 }
 
 #[tauri::command]
@@ -822,7 +837,7 @@ async fn download_audio_from_url(url: String, project_path: String, download_id:
         }
     }
 
-    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, note: None })
+    Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, cue: None })
 }
 
 const MAX_AUDIO_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB

@@ -128,7 +128,7 @@
   overflow: hidden;
 }
 
-.player-next-note {
+.player-next-cue {
   font-size: 1rem;
   color: var(--text);
   font-weight: 500;

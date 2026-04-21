@@ -25,23 +25,37 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
 
   async function loadDevices() {
     setLoading(true);
+    const fallback = [{ deviceId: "default", label: "Défaut du système" }];
     try {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setDevices(fallback);
+        return;
+      }
       // getUserMedia unlocks device labels and Bluetooth devices in WebView2
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
-      stream?.getTracks().forEach((t) => t.stop());
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch { /* some platforms (WebKit2GTK) don't support it — continue anyway */ }
       const all = await navigator.mediaDevices.enumerateDevices();
       const outputs = all
         .filter((d) => d.kind === "audiooutput")
         .map((d) => ({ deviceId: d.deviceId, label: d.label || "Périphérique audio" }));
-      setDevices(outputs.length > 0 ? outputs : [{ deviceId: "default", label: "Défaut du système" }]);
+      setDevices(outputs.length > 0 ? outputs : fallback);
     } catch {
-      setDevices([{ deviceId: "default", label: "Défaut du système" }]);
+      setDevices(fallback);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { loadDevices(); getVersion().then(setVersion); }, []);
+  useEffect(() => {
+    loadDevices();
+    if (import.meta.env.DEV) {
+      setVersion(__DEV_VERSION__);
+    } else {
+      getVersion().then(setVersion);
+    }
+  }, []);
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
 
@@ -62,18 +76,15 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           {loading ? (
             <p className="settings-loading">Chargement des périphériques…</p>
           ) : (
-            <div className="settings-devices">
+            <select
+              className="settings-select"
+              value={selectedId}
+              onChange={(e) => onUpdate({ audioOutputDeviceId: e.target.value === "default" ? null : e.target.value })}
+            >
               {devices.map((d) => (
-                <button
-                  key={d.deviceId}
-                  className={`device-option${d.deviceId === selectedId ? " device-option--selected" : ""}`}
-                  onClick={() => onUpdate({ audioOutputDeviceId: d.deviceId === "default" ? null : d.deviceId })}
-                >
-                  <span className="device-label">{d.label}</span>
-                  {d.deviceId === selectedId && <CheckCircle size={15} />}
-                </button>
+                <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
               ))}
-            </div>
+            </select>
           )}
 
           <button className="settings-refresh" onClick={loadDevices}>

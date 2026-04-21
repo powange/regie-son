@@ -20,6 +20,10 @@ export function useUpdater() {
   });
 
   function checkUpdate() {
+    if (import.meta.env.DEV) {
+      setState((s) => ({ ...s, checking: false, update: null, error: null }));
+      return;
+    }
     setState((s) => ({ ...s, checking: true, update: null, error: null, progress: null }));
     check()
       .then((update) => setState((s) => ({ ...s, checking: false, update: update ?? null })))

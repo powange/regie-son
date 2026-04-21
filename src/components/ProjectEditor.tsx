@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import AddPartModal from "./AddPartModal";
 import {
   DndContext,
   closestCenter,
@@ -13,7 +14,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Coffee, Download, Settings, Pencil, MonitorPlay, Trash2, X, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Download, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -42,6 +43,7 @@ interface VerifyResult { missing: string[]; orphans: string[] }
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
+  const [showAddPart, setShowAddPart] = useState(false);
   const [editMode, setEditMode] = useState(true);
   const [showMode, setShowMode] = useState(false);
   const [showModeError, setShowModeError] = useState<string | null>(null);
@@ -274,25 +276,23 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
         {editMode && !isSingle && (
           <div className="add-numero-bar">
-            <button className="btn-secondary" onClick={() => addItem("numero")}>
+            <button className="btn-secondary" onClick={() => setShowAddPart(true)}>
               <Plus size={16} />
-              Ajouter un numéro
-            </button>
-            <button className="btn-ghost" onClick={() => addItem("entracte")}>
-              <Coffee size={16} />
-              Ajouter un entracte
-            </button>
-            <button className="btn-ghost" onClick={() => addItem("presentation")}>
-              <MonitorPlay size={16} />
-              Ajouter une présentation
-            </button>
-            <button className="btn-ghost" onClick={handleImportNumero}>
-              <Upload size={16} />
-              Importer un numéro (.regiesonnumero)
+              Ajouter une partie
             </button>
           </div>
         )}
       </div>
+
+      {showAddPart && (
+        <AddPartModal
+          onSelectNumero={() => addItem("numero")}
+          onSelectEntracte={() => addItem("entracte")}
+          onSelectPresentation={() => addItem("presentation")}
+          onSelectImport={handleImportNumero}
+          onClose={() => setShowAddPart(false)}
+        />
+      )}
     </div>
   );
 }

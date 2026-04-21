@@ -23,7 +23,7 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
   const { position, isPlaying, progress, audioError } = state;
 
   const nextContext = getNextContext(state, project);
-  const nextNote = nextContext?.item.note ?? null;
+  const nextCue = nextContext?.item.cue ?? null;
   const nextNumeroName = nextContext?.numero.name ?? null;
 
   const currentNumero = position !== null ? project.numeros[position.numeroIndex] : null;
@@ -73,7 +73,7 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           </button>
           {nextContext && (
             <div className="player-next-info">
-              {nextNote && <span className="player-next-note">{nextNote}</span>}
+              {nextCue && <span className="player-next-cue" title="Top de départ">{nextCue}</span>}
               {nextNumeroName && <span className="player-next-numero">{nextNumeroName}</span>}
             </div>
           )}
