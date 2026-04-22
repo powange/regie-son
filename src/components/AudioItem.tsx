@@ -8,6 +8,7 @@ import AudioSettingsModal from "./AudioSettingsModal";
 
 interface Props {
   audio: AudioFile;
+  projectPath: string;
   editMode: boolean;
   isActive: boolean;
   isPlaying: boolean;
@@ -18,7 +19,7 @@ interface Props {
   onDelete: () => void;
 }
 
-export default function AudioItem({ audio, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
+export default function AudioItem({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(audio.original_name);
@@ -166,6 +167,7 @@ export default function AudioItem({ audio, editMode, isActive, isPlaying, isMiss
       {showSettings && (
         <AudioSettingsModal
           audio={audio}
+          projectPath={projectPath}
           onSave={(updated) => onChange(updated)}
           onClose={() => setShowSettings(false)}
         />

@@ -148,3 +148,34 @@
   border-color: #6b552a;
   color: #f1d8a6;
 }
+
+.waveform-wrapper {
+  position: relative;
+  margin-bottom: 1.2rem;
+  background: #0f1520;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  min-height: 90px;
+}
+.waveform-container {
+  width: 100%;
+  min-height: 90px;
+}
+.waveform-play-btn {
+  position: absolute;
+  bottom: 0.6rem;
+  left: 0.6rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.waveform-play-btn:hover { filter: brightness(1.1); }

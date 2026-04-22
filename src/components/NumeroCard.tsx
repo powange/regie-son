@@ -210,6 +210,7 @@ export default function NumeroCard({
                 <AudioItem
                   key={item.id}
                   audio={item}
+                  projectPath={projectPath}
                   editMode={editMode}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
