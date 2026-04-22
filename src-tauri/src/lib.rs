@@ -861,6 +861,17 @@ fn project_json_filename(project: &Project) -> &'static str {
     if project.single_numero.unwrap_or(false) { "numero.json" } else { "projet.json" }
 }
 
+fn rotate_backups(dir: &Path, filename: &str) {
+    let bak = |n: u8| dir.join(format!("{}.bak{}", filename, n));
+    let _ = fs::remove_file(bak(3));
+    let _ = fs::rename(bak(2), bak(3));
+    let _ = fs::rename(bak(1), bak(2));
+    let current = dir.join(filename);
+    if current.exists() {
+        let _ = fs::rename(&current, bak(1));
+    }
+}
+
 fn save_project_to_disk(project: &Project) -> Result<(), String> {
     let content = serde_json::to_string_pretty(project)
         .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
@@ -870,6 +881,7 @@ fn save_project_to_disk(project: &Project) -> Result<(), String> {
     let tmp = dir.join(format!("{}.tmp", filename));
     fs::write(&tmp, &content)
         .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+    rotate_backups(dir, filename);
     fs::rename(&tmp, &target)
         .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
     Ok(())
