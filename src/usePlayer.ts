@@ -325,13 +325,44 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }, []);
 
   const stop = useCallback(() => {
-    cancelFade();
     const audio = audioRef.current;
-    if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ""; }
-    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-    posRef.current = null;
-    endTimeRef.current = null;
-    setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null, fade: null });
+    const wasPlaying = !!audio && !audio.paused && audio.volume > 0;
+    const finalize = () => {
+      if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ""; }
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      posRef.current = null;
+      endTimeRef.current = null;
+      setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null, fade: null });
+    };
+
+    cancelFade();
+
+    if (!wasPlaying || !audio) {
+      finalize();
+      return;
+    }
+
+    // Safety fade-out: avoid audible pop on abrupt cut.
+    const duration = 0.25; // 250ms
+    const startVolume = audio.volume;
+    const startTime = performance.now();
+    fadingOutRef.current = true;
+    setState((s) => ({ ...s, fade: { type: "out", remaining: duration, total: duration } }));
+    const tick = () => {
+      const elapsed = (performance.now() - startTime) / 1000;
+      if (elapsed >= duration) {
+        audio.volume = 0;
+        fadingOutRef.current = false;
+        fadeAnimRef.current = null;
+        finalize();
+        return;
+      }
+      const r = 1 - elapsed / duration;
+      audio.volume = startVolume * r * r;
+      setState((s) => ({ ...s, fade: { type: "out", remaining: duration - elapsed, total: duration } }));
+      fadeAnimRef.current = requestAnimationFrame(tick);
+    };
+    fadeAnimRef.current = requestAnimationFrame(tick);
   }, []);
 
   return { state, playAt, togglePlay, next, stop, seek };
