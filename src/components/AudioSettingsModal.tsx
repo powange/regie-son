@@ -178,7 +178,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ width: 640, maxWidth: "calc(100vw - 2rem)" }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" style={{ width: "calc(100vw - 4rem)", maxWidth: 1200 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title-row">
           <h2>Paramètres — {audio.original_name}</h2>
           <button className="btn-icon" onClick={onClose}><X size={16} /></button>
