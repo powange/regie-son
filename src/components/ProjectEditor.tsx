@@ -55,6 +55,11 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [preflightIssues, setPreflightIssues] = useState<PreflightIssue[] | null>(null);
   const [preflightConfirmActivation, setPreflightConfirmActivation] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoStackRef = useRef<Project[]>([]);
+  const redoStackRef = useRef<Project[]>([]);
+  const UNDO_LIMIT = 50;
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   async function runVerify() {
     try {
@@ -81,18 +86,41 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
 
-  function update(updated: Project) {
-    onProjectChange(updated);
+  function scheduleSave(p: Project) {
     setSaved(false);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
-        await invoke("save_project", { project: updated });
+        await invoke("save_project", { project: p });
         setSaved(true);
       } catch (err) {
         console.error("Erreur sauvegarde :", err);
       }
     }, 600);
+  }
+
+  function update(updated: Project) {
+    undoStackRef.current.push(projectRef.current);
+    if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
+    redoStackRef.current = [];
+    onProjectChange(updated);
+    scheduleSave(updated);
+  }
+
+  function undo() {
+    const prev = undoStackRef.current.pop();
+    if (!prev) return;
+    redoStackRef.current.push(projectRef.current);
+    onProjectChange(prev);
+    scheduleSave(prev);
+  }
+
+  function redo() {
+    const nxt = redoStackRef.current.pop();
+    if (!nxt) return;
+    undoStackRef.current.push(projectRef.current);
+    onProjectChange(nxt);
+    scheduleSave(nxt);
   }
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
@@ -102,12 +130,22 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const bindingsRef = useRef(mergeWithDefaults(settings.keyBindings));
   bindingsRef.current = mergeWithDefaults(settings.keyBindings);
 
+  const undoRef = useRef(undo);
+  undoRef.current = undo;
+  const redoRef = useRef(redo);
+  redoRef.current = redo;
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      // Undo / Redo — hardcoded, take priority over custom bindings
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
+        if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); redoRef.current(); return; }
       }
       const action = resolveAction(e, bindingsRef.current);
       if (!action) return;
