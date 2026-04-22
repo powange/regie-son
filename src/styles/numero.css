@@ -45,6 +45,57 @@
 .numero-card.is-entracte .numero-type-badge { background: var(--accent2); color: white; }
 .numero-card.is-presentation .numero-type-badge { background: #2a6b4a; color: white; }
 
+.numero-type-badge-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+.numero-type-badge--clickable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.15s;
+}
+.numero-type-badge--clickable:hover { filter: brightness(1.2); }
+
+.numero-type-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem;
+  min-width: 180px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.numero-type-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.numero-type-menu-item > span { flex: 1; }
+.numero-type-menu-item:hover { background: var(--border); }
+.numero-type-menu-item--active { color: var(--accent); font-weight: 600; }
+
 .numero-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
 
 .numero-title-input {

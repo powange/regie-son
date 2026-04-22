@@ -392,6 +392,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
+                canChangeType={!isSingle}
                 showDragHandle={!isSingle}
               />
             ))}

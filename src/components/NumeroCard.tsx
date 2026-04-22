@@ -15,8 +15,8 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { GripVertical, Pencil, Trash2, Plus } from "lucide-react";
-import { Numero, AudioFile, PauseItem, PlaylistItem } from "../types";
+import { GripVertical, Pencil, Trash2, Plus, ListMusic, Coffee, MicVocal, Check, ChevronDown } from "lucide-react";
+import { Numero, NumeroType, AudioFile, PauseItem, PlaylistItem } from "../types";
 import { PlayerPosition, FadeState } from "../usePlayer";
 import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
@@ -35,6 +35,7 @@ interface Props {
   onChange: (updated: Numero) => void;
   onDelete: () => void;
   canDelete?: boolean;
+  canChangeType?: boolean;
   showDragHandle?: boolean;
 }
 
@@ -43,12 +44,32 @@ function NumeroCardInner({
   playerPosition, isPlaying, playerFade, missingFiles, playAt,
   onChange, onDelete,
   canDelete = true,
+  canChangeType = true,
   showDragHandle = true,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(numero.name);
   const [showSourceModal, setShowSourceModal] = useState(false);
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typeMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showTypeMenu) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (typeMenuRef.current && !typeMenuRef.current.contains(e.target as Node)) {
+        setShowTypeMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [showTypeMenu]);
+
+  function changeType(type: NumeroType) {
+    setShowTypeMenu(false);
+    if (type === numero.type) return;
+    onChange({ ...numero, type });
+  }
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: numero.id });
@@ -132,6 +153,13 @@ function NumeroCardInner({
     presentation: "Présentation",
   };
 
+  const typeCanBeChanged = editMode && canChangeType;
+  const typeOptions: { id: NumeroType; label: string; icon: typeof ListMusic }[] = [
+    { id: "numero", label: "Numéro", icon: ListMusic },
+    { id: "entracte", label: "Entracte", icon: Coffee },
+    { id: "presentation", label: "Présentation", icon: MicVocal },
+  ];
+
   return (
     <div
       className={[
@@ -149,7 +177,41 @@ function NumeroCardInner({
             <GripVertical size={16} />
           </span>
         )}
-        <span className="numero-type-badge">{typeBadge[numero.type] ?? numero.type}</span>
+        {typeCanBeChanged ? (
+          <div className="numero-type-badge-wrapper" ref={typeMenuRef}>
+            <button
+              type="button"
+              className="numero-type-badge numero-type-badge--clickable"
+              onClick={() => setShowTypeMenu((v) => !v)}
+              title="Changer le type"
+            >
+              {typeBadge[numero.type] ?? numero.type}
+              <ChevronDown size={12} />
+            </button>
+            {showTypeMenu && (
+              <div className="numero-type-menu">
+                {typeOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  const isCurrent = opt.id === numero.type;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`numero-type-menu-item${isCurrent ? " numero-type-menu-item--active" : ""}`}
+                      onClick={() => changeType(opt.id)}
+                    >
+                      <Icon size={14} />
+                      <span>{opt.label}</span>
+                      {isCurrent && <Check size={14} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="numero-type-badge">{typeBadge[numero.type] ?? numero.type}</span>
+        )}
 
         {editing && editMode ? (
           <input
