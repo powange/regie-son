@@ -49,6 +49,36 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const fadeAnimRef = useRef<number | null>(null);
   const fadingOutRef = useRef(false);
   const ignoreSrcErrorRef = useRef(false);
+  // Preload cache: keeps up to 3 decoded audio buffers (LRU by insertion) so
+  // that `next` switches tracks without an IPC round-trip.
+  const preloadCacheRef = useRef<Map<string, ArrayBuffer>>(new Map());
+  const preloadInFlightRef = useRef<Set<string>>(new Set());
+
+  function preloadAfter(pos: PlayerPosition) {
+    const proj = projectRef.current;
+    let cursor: PlayerPosition | null = pos;
+    // Walk forward until we find the next audio item (skip pauses).
+    while ((cursor = nextItemPosition(proj, cursor))) {
+      const item = proj.numeros[cursor.numeroIndex].items[cursor.audioIndex];
+      if (item.type !== "audio") continue;
+      const filename = item.filename;
+      if (preloadCacheRef.current.has(filename) || preloadInFlightRef.current.has(filename)) return;
+      preloadInFlightRef.current.add(filename);
+      const filePath = proj.path + "/musiques/" + filename;
+      invoke<ArrayBuffer>("read_audio_file", { path: filePath })
+        .then((buffer) => {
+          while (preloadCacheRef.current.size >= 3) {
+            const firstKey = preloadCacheRef.current.keys().next().value;
+            if (firstKey === undefined) break;
+            preloadCacheRef.current.delete(firstKey);
+          }
+          preloadCacheRef.current.set(filename, buffer);
+        })
+        .catch(() => { /* silently ignore; lookup will hit IPC when actually needed */ })
+        .finally(() => { preloadInFlightRef.current.delete(filename); });
+      return;
+    }
+  }
 
   function cancelFade() {
     if (fadeAnimRef.current !== null) {
@@ -88,7 +118,13 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
 
     const targetVolume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
 
-    invoke<ArrayBuffer>("read_audio_file", { path: filePath })
+    const cached = preloadCacheRef.current.get(item.filename);
+    if (cached) preloadCacheRef.current.delete(item.filename);
+    const bufferPromise = cached
+      ? Promise.resolve(cached)
+      : invoke<ArrayBuffer>("read_audio_file", { path: filePath });
+
+    bufferPromise
       .then((buffer) => {
         if (version !== loadVersionRef.current) return;
         if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
@@ -111,6 +147,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
           isPlaying: true,
           audioError: null,
         }));
+        preloadAfter({ numeroIndex: nIdx, audioIndex: iIdx });
         if (item.type === "audio" && item.fadeIn && item.fadeIn > 0) {
           const duration = item.fadeIn;
           const startTime = performance.now();
@@ -182,6 +219,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       audio.pause();
       audio.src = "";
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+      preloadCacheRef.current.clear();
+      preloadInFlightRef.current.clear();
     };
   }, []);
 
