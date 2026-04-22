@@ -1,8 +1,20 @@
-import { useState, useEffect } from "react";
-import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle, Keyboard, RotateCcw } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Settings } from "../useSettings";
 import { UpdaterState } from "../useUpdater";
+import {
+  KEY_ACTIONS,
+  KeyAction,
+  KeyBinding,
+  DEFAULT_BINDINGS,
+  bindingFromEvent,
+  bindingsEqual,
+  formatBinding,
+  isForbiddenKey,
+  isModifierKey,
+  mergeWithDefaults,
+} from "../keyBindings";
 
 interface AudioDevice {
   deviceId: string;
@@ -22,6 +34,10 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
+  const [listeningAction, setListeningAction] = useState<KeyAction | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+
+  const mergedBindings = mergeWithDefaults(settings.keyBindings);
 
   async function loadDevices() {
     setLoading(true);
@@ -31,7 +47,6 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
         setDevices(fallback);
         return;
       }
-      // getUserMedia unlocks device labels and Bluetooth devices in WebView2
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((t) => t.stop());
@@ -56,6 +71,66 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
       getVersion().then(setVersion);
     }
   }, []);
+
+  function updateBinding(action: KeyAction, binding: KeyBinding) {
+    // Swap: if another action has the same binding, unset it
+    const newOverrides: Partial<Record<KeyAction, KeyBinding>> = { ...(settings.keyBindings ?? {}) };
+    if (binding.key) {
+      for (const def of KEY_ACTIONS) {
+        if (def.id === action) continue;
+        const other = mergedBindings[def.id];
+        if (other.key && bindingsEqual(other, binding)) {
+          newOverrides[def.id] = { key: "" };
+        }
+      }
+    }
+    newOverrides[action] = binding;
+    onUpdate({ keyBindings: newOverrides });
+  }
+
+  const listeningRef = useRef(listeningAction);
+  listeningRef.current = listeningAction;
+
+  useEffect(() => {
+    if (!listeningAction) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (!listeningRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (isModifierKey(e.key)) return; // wait for a non-modifier key
+      if (isForbiddenKey(e.key)) {
+        setCaptureError(`La touche « ${e.key} » ne peut pas être utilisée.`);
+        return;
+      }
+      const binding = bindingFromEvent(e);
+      updateBinding(listeningRef.current, binding);
+      setListeningAction(null);
+      setCaptureError(null);
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listeningAction]);
+
+  function startListen(action: KeyAction) {
+    setCaptureError(null);
+    setListeningAction(action);
+  }
+
+  function cancelListen() {
+    setListeningAction(null);
+    setCaptureError(null);
+  }
+
+  function resetBinding(action: KeyAction) {
+    const overrides = { ...(settings.keyBindings ?? {}) };
+    delete overrides[action];
+    onUpdate({ keyBindings: overrides });
+  }
+
+  function disableBinding(action: KeyAction) {
+    updateBinding(action, { key: "" });
+  }
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
 
@@ -91,6 +166,53 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             <RefreshCw size={13} />
             Actualiser la liste
           </button>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <Keyboard size={15} />
+            Commandes
+          </div>
+
+          <div className="key-binding-list">
+            {KEY_ACTIONS.map((def) => {
+              const current = mergedBindings[def.id];
+              const isDefault = bindingsEqual(current, DEFAULT_BINDINGS[def.id]);
+              const isListening = listeningAction === def.id;
+              return (
+                <div key={def.id} className="key-binding-row">
+                  <span className="key-binding-label">{def.label}</span>
+                  <button
+                    type="button"
+                    className={`key-binding-capture${isListening ? " key-binding-capture--listening" : ""}`}
+                    onClick={isListening ? cancelListen : () => startListen(def.id)}
+                  >
+                    {isListening ? "Appuyez sur une touche…" : formatBinding(current)}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={() => resetBinding(def.id)}
+                    disabled={isDefault}
+                    title="Réinitialiser au défaut"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={() => disableBinding(def.id)}
+                    disabled={current.key === ""}
+                    title="Désactiver le raccourci"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {captureError && <p className="modal-error">{captureError}</p>}
         </div>
 
         <div className="settings-section">

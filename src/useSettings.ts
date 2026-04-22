@@ -1,7 +1,9 @@
 import { useState, useCallback } from "react";
+import type { KeyAction, KeyBinding } from "./keyBindings";
 
 export interface Settings {
   audioOutputDeviceId: string | null;
+  keyBindings?: Partial<Record<KeyAction, KeyBinding>>;
 }
 
 const KEY = "regie-son:settings";

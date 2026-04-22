@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
 import { PreflightIssue, gatherPreflight } from "../preflight";
+import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import {
   DndContext,
   closestCenter,
@@ -98,6 +99,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   const playerStateRef = useRef(playerState);
   playerStateRef.current = playerState;
+  const bindingsRef = useRef(mergeWithDefaults(settings.keyBindings));
+  bindingsRef.current = mergeWithDefaults(settings.keyBindings);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -106,27 +109,19 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
       }
-      switch (e.key) {
-        case " ":
-          e.preventDefault();
-          togglePlay();
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          next();
-          break;
-        case "Escape":
-          e.preventDefault();
-          stop();
-          break;
-        case "ArrowUp": {
-          e.preventDefault();
+      const action = resolveAction(e, bindingsRef.current);
+      if (!action) return;
+      e.preventDefault();
+      switch (action) {
+        case "playPause": togglePlay(); break;
+        case "next": next(); break;
+        case "stop": stop(); break;
+        case "seekForward": {
           const { position: p, duration: d } = playerStateRef.current.progress;
           seek(Math.min(p + 5, d));
           break;
         }
-        case "ArrowDown": {
-          e.preventDefault();
+        case "seekBackward": {
           const { position: p } = playerStateRef.current.progress;
           seek(Math.max(p - 5, 0));
           break;
