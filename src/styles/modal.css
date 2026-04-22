@@ -150,32 +150,34 @@
 }
 
 .waveform-wrapper {
-  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
   margin-bottom: 1.2rem;
   background: #0f1520;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.6rem;
-  min-height: 90px;
+  padding: 0.6rem 0.8rem;
 }
 .waveform-container {
-  width: 100%;
-  min-height: 90px;
+  flex: 1;
+  min-width: 0;
+  min-height: 110px;
 }
 .waveform-play-btn {
-  position: absolute;
-  bottom: 0.6rem;
-  left: 0.6rem;
+  flex-shrink: 0;
   background: var(--primary);
   color: white;
   border: none;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: filter 0.15s, opacity 0.15s;
 }
-.waveform-play-btn:hover { filter: brightness(1.1); }
+.waveform-play-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.waveform-play-btn:disabled { opacity: 0.4; cursor: default; }

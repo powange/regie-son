@@ -77,12 +77,13 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
         regionsRef.current = regions;
         const ws = WaveSurfer.create({
           container,
-          waveColor: "#4a5568",
+          waveColor: "#6b7890",
           progressColor: "#e94560",
           cursorColor: "#ffffff",
-          height: 90,
+          height: 110,
           barWidth: 2,
           barGap: 1,
+          barHeight: 1.4,
           normalize: true,
           url,
           plugins: [regions],
@@ -184,16 +185,16 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
         </div>
 
         <div className="waveform-wrapper">
+          <button
+            type="button"
+            className="waveform-play-btn"
+            onClick={togglePreview}
+            disabled={!waveformReady}
+            title={isPlaying ? "Pause" : "Lire l'aperçu"}
+          >
+            {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+          </button>
           <div className="waveform-container" ref={waveformRef} />
-          {waveformReady && (
-            <button
-              className="waveform-play-btn"
-              onClick={togglePreview}
-              title={isPlaying ? "Pause" : "Lire l'aperçu"}
-            >
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-            </button>
-          )}
         </div>
 
         <div className="audio-settings-grid">
