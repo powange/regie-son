@@ -92,6 +92,47 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
+  const playerStateRef = useRef(playerState);
+  playerStateRef.current = playerState;
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      switch (e.key) {
+        case " ":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          next();
+          break;
+        case "Escape":
+          e.preventDefault();
+          stop();
+          break;
+        case "ArrowUp": {
+          e.preventDefault();
+          const { position: p, duration: d } = playerStateRef.current.progress;
+          seek(Math.min(p + 5, d));
+          break;
+        }
+        case "ArrowDown": {
+          e.preventDefault();
+          const { position: p } = playerStateRef.current.progress;
+          seek(Math.max(p - 5, 0));
+          break;
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [togglePlay, next, stop, seek]);
+
   async function toggleShowMode() {
     const next = !showMode;
     try {
