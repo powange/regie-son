@@ -83,7 +83,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
           height: 110,
           barWidth: 2,
           barGap: 1,
-          barHeight: 1.4,
+          barHeight: 1,
           normalize: true,
           url,
           plugins: [regions],
