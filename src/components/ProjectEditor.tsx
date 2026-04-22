@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
 import { PreflightIssue, gatherPreflight } from "../preflight";
@@ -81,12 +81,15 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
   }
 
-  const missingSet = new Set(verify.missing);
+  const missingSet = useMemo(() => new Set(verify.missing), [verify.missing]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editMode ? 5 : 99999 } }));
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
 
-  function scheduleSave(p: Project) {
+  const onProjectChangeRef = useRef(onProjectChange);
+  onProjectChangeRef.current = onProjectChange;
+
+  const scheduleSave = useCallback((p: Project) => {
     setSaved(false);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -97,38 +100,39 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         console.error("Erreur sauvegarde :", err);
       }
     }, 600);
-  }
+  }, []);
 
-  function update(updated: Project) {
+  const update = useCallback((updated: Project) => {
     undoStackRef.current.push(projectRef.current);
     if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
     redoStackRef.current = [];
-    onProjectChange(updated);
+    onProjectChangeRef.current(updated);
     scheduleSave(updated);
-  }
+  }, [scheduleSave]);
 
-  function undo() {
+  const undo = useCallback(() => {
     const prev = undoStackRef.current.pop();
     if (!prev) return;
     redoStackRef.current.push(projectRef.current);
-    onProjectChange(prev);
+    onProjectChangeRef.current(prev);
     scheduleSave(prev);
-  }
+  }, [scheduleSave]);
 
-  function redo() {
+  const redo = useCallback(() => {
     const nxt = redoStackRef.current.pop();
     if (!nxt) return;
     undoStackRef.current.push(projectRef.current);
-    onProjectChange(nxt);
+    onProjectChangeRef.current(nxt);
     scheduleSave(nxt);
-  }
+  }, [scheduleSave]);
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
   const playerStateRef = useRef(playerState);
   playerStateRef.current = playerState;
-  const bindingsRef = useRef(mergeWithDefaults(settings.keyBindings));
-  bindingsRef.current = mergeWithDefaults(settings.keyBindings);
+  const mergedBindings = useMemo(() => mergeWithDefaults(settings.keyBindings), [settings.keyBindings]);
+  const bindingsRef = useRef(mergedBindings);
+  bindingsRef.current = mergedBindings;
 
   const undoRef = useRef(undo);
   undoRef.current = undo;
@@ -237,27 +241,44 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     onClose();
   }
 
-  function addItem(type: NumeroType) {
-    const count = project.numeros.filter((n) => n.type === type).length + 1;
-    update({ ...project, numeros: [...project.numeros, newNumero(type, count)] });
-  }
+  const addItem = useCallback((type: NumeroType) => {
+    const cur = projectRef.current;
+    const count = cur.numeros.filter((n) => n.type === type).length + 1;
+    update({ ...cur, numeros: [...cur.numeros, newNumero(type, count)] });
+  }, [update]);
 
-  function updateNumero(updated: Numero) {
-    update({ ...project, numeros: project.numeros.map((n) => (n.id === updated.id ? updated : n)) });
-  }
+  const updateNumero = useCallback((updated: Numero) => {
+    const cur = projectRef.current;
+    update({ ...cur, numeros: cur.numeros.map((n) => (n.id === updated.id ? updated : n)) });
+  }, [update]);
 
-  function deleteNumero(id: string) {
-    update({ ...project, numeros: project.numeros.filter((n) => n.id !== id) });
-  }
+  const deleteNumero = useCallback((id: string) => {
+    const cur = projectRef.current;
+    update({ ...cur, numeros: cur.numeros.filter((n) => n.id !== id) });
+  }, [update]);
 
-  function handleDragEnd(event: DragEndEvent) {
+  const deleteNumeroById = useMemo(() => {
+    // Stable closures per-id so NumeroCard's onDelete prop keeps identity across renders.
+    const cache = new Map<string, () => void>();
+    return (id: string) => {
+      let fn = cache.get(id);
+      if (!fn) {
+        fn = () => deleteNumero(id);
+        cache.set(id, fn);
+      }
+      return fn;
+    };
+  }, [deleteNumero]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     if (!editMode) return;
+    const cur = projectRef.current;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIdx = project.numeros.findIndex((n) => n.id === active.id);
-    const newIdx = project.numeros.findIndex((n) => n.id === over.id);
-    update({ ...project, numeros: arrayMove(project.numeros, oldIdx, newIdx) });
-  }
+    const oldIdx = cur.numeros.findIndex((n) => n.id === active.id);
+    const newIdx = cur.numeros.findIndex((n) => n.id === over.id);
+    update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
+  }, [editMode, update]);
 
   return (
     <div className="project-editor">
@@ -367,9 +388,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 isPlaying={playerState.isPlaying}
                 playerFade={playerState.fade}
                 missingFiles={missingSet}
-                onPlayAudio={(aIdx) => playAt(nIdx, aIdx)}
+                playAt={playAt}
                 onChange={updateNumero}
-                onDelete={() => deleteNumero(n.id)}
+                onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
                 showDragHandle={!isSingle}
               />

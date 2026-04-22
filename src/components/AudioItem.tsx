@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
@@ -19,7 +19,7 @@ interface Props {
   onDelete: () => void;
 }
 
-export default function AudioItem({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
+function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(audio.original_name);
@@ -175,3 +175,6 @@ export default function AudioItem({ audio, projectPath, editMode, isActive, isPl
     </div>
   );
 }
+
+
+export default memo(AudioItemInner);

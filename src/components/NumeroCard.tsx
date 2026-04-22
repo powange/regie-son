@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -31,16 +31,16 @@ interface Props {
   isPlaying: boolean;
   playerFade: FadeState | null;
   missingFiles: Set<string>;
-  onPlayAudio: (itemIndex: number) => void;
+  playAt: (numeroIndex: number, audioIndex: number) => void;
   onChange: (updated: Numero) => void;
   onDelete: () => void;
   canDelete?: boolean;
   showDragHandle?: boolean;
 }
 
-export default function NumeroCard({
+function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode,
-  playerPosition, isPlaying, playerFade, missingFiles, onPlayAudio,
+  playerPosition, isPlaying, playerFade, missingFiles, playAt,
   onChange, onDelete,
   canDelete = true,
   showDragHandle = true,
@@ -202,7 +202,7 @@ export default function NumeroCard({
                   pause={item}
                   editMode={editMode}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
-                  onPlay={() => onPlayAudio(iIdx)}
+                  onPlay={() => playAt(numeroIndex, iIdx)}
                   onChange={(updated) => onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) })}
                   onDelete={() => deleteItem(item)}
                 />
@@ -216,7 +216,7 @@ export default function NumeroCard({
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
                   isMissing={missingFiles.has(item.filename)}
                   activeFade={isActiveNumero && playerPosition?.audioIndex === iIdx ? playerFade : null}
-                  onPlay={() => onPlayAudio(iIdx)}
+                  onPlay={() => playAt(numeroIndex, iIdx)}
                   onChange={(updated) => updateAudio(updated, iIdx)}
                   onDelete={() => deleteItem(item)}
                 />
@@ -247,3 +247,6 @@ export default function NumeroCard({
     </div>
   );
 }
+
+
+export default memo(NumeroCardInner);

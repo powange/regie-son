@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { memo, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Info, PauseCircle, Play, Trash2 } from "lucide-react";
@@ -13,7 +13,7 @@ interface Props {
   onDelete: () => void;
 }
 
-export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
+function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -76,3 +76,6 @@ export default function PauseTrack({ pause, editMode, isActive, onPlay, onChange
     </div>
   );
 }
+
+
+export default memo(PauseTrackInner);
