@@ -998,10 +998,85 @@ fn configure_wsl2_audio() {
     std::env::set_var("PULSE_LATENCY_MSEC", "500");
 }
 
+// ===== File association handling =====
+
+fn pending_open_file() -> &'static Mutex<Option<String>> {
+    static PENDING: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    PENDING.get_or_init(|| Mutex::new(None))
+}
+
+fn extract_file_from_args(args: &[String]) -> Option<String> {
+    args.iter().skip(1).find(|a| {
+        let lower = a.to_lowercase();
+        lower.ends_with(".regieson") || lower.ends_with(".regiesonnumero")
+    }).cloned()
+}
+
+#[tauri::command]
+fn take_pending_open_file() -> Option<String> {
+    pending_open_file().lock().unwrap().take()
+}
+
+fn pick_unique_path(base: &Path) -> PathBuf {
+    if !base.exists() { return base.to_path_buf(); }
+    let parent = base.parent().unwrap_or(Path::new("."));
+    let name = base.file_name().unwrap_or_default().to_string_lossy().to_string();
+    for i in 2..1000 {
+        let candidate = parent.join(format!("{}-{}", name, i));
+        if !candidate.exists() { return candidate; }
+    }
+    parent.join(format!("{}-{}", name, std::process::id()))
+}
+
+#[tauri::command]
+fn auto_import_regieson(src_file: String) -> Result<Project, String> {
+    let archive_name = Path::new(&src_file).file_stem()
+        .ok_or("Nom de fichier invalide")?
+        .to_string_lossy().to_string();
+    let base_dir = PathBuf::from(get_default_projects_dir()).join(&archive_name);
+    let dest = pick_unique_path(&base_dir);
+    import_project(src_file, dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn auto_import_regiesonnumero(src_file: String) -> Result<Project, String> {
+    let archive_name = Path::new(&src_file).file_stem()
+        .ok_or("Nom de fichier invalide")?
+        .to_string_lossy().to_string();
+    let base_dir = PathBuf::from(get_default_numeros_dir()).join(&archive_name);
+    let dest = pick_unique_path(&base_dir);
+    import_numero_standalone(src_file, dest.to_string_lossy().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     configure_wsl2_audio();
-    tauri::Builder::default()
+
+    // Cold start: capture the file passed as CLI argument
+    let initial_args: Vec<String> = std::env::args().collect();
+    if let Some(file) = extract_file_from_args(&initial_args) {
+        *pending_open_file().lock().unwrap() = Some(file);
+    }
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+
+    // Hot start: focus existing window + forward file via event
+    #[cfg(desktop)]
+    {
+        use tauri::Manager;
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(file) = extract_file_from_args(&args) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                    let _ = window.emit("open-file", file);
+                }
+            }
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1017,6 +1092,7 @@ pub fn run() {
             pick_regiesonnumero_file, save_regiesonnumero_file,
             export_project, import_project,
             export_numero, import_numero_standalone, import_numero_into_project,
+            auto_import_regieson, auto_import_regiesonnumero, take_pending_open_file,
             read_audio_file, download_audio_from_url, download_youtube_audio,
             set_show_mode,
             cancel_download,

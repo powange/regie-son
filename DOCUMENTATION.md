@@ -166,6 +166,8 @@ Enregistrées dans [`invoke_handler!`](src-tauri/src/lib.rs#L833) :
 | `export_numero` | Zippe un dossier numéro en `.regiesonnumero`. |
 | `import_numero_standalone` | Dézippe un `.regiesonnumero` en dossier éditable, force `singleNumero: true`. |
 | `import_numero_into_project` | Copie les audios d'un `.regiesonnumero` dans `projet/musiques/`, régénère les UUIDs et l'ID du numéro, ajoute à `project.numeros`, sauvegarde. |
+| `auto_import_regieson` / `auto_import_regiesonnumero` | Décompresse une archive vers un dossier auto-calculé (`{defaultDir}/{nom-archive}` avec suffixe `-2`, `-3` si collision) et renvoie le `Project`. Utilisé par l'ouverture via double-clic sur un fichier associé. |
+| `take_pending_open_file` | Consume le chemin du fichier passé en argument CLI au démarrage (si l'app a été lancée via double-clic). Appelée par le front au mount. |
 
 ### 3.3 Téléchargements annulables
 
