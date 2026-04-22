@@ -107,3 +107,44 @@
 .part-option--entracte:hover { border-color: var(--accent2); background: #241545; }
 .part-option--presentation > svg { color: #2a6b4a; }
 .part-option--presentation:hover { border-color: #2a6b4a; background: #132b1f; }
+
+.preflight-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  background: #132b1f;
+  color: #7cc49a;
+  border: 1px solid #2a6b4a;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.preflight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.preflight-issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+.preflight-issue > svg { flex-shrink: 0; margin-top: 0.15rem; }
+.preflight-issue--error {
+  background: #2a1215;
+  border-color: #6b2a2f;
+  color: #f1a6ac;
+}
+.preflight-issue--warning {
+  background: #2a2212;
+  border-color: #6b552a;
+  color: #f1d8a6;
+}

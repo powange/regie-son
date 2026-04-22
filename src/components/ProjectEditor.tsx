@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
+import PreflightModal from "./PreflightModal";
+import { PreflightIssue, gatherPreflight } from "../preflight";
 import {
   DndContext,
   closestCenter,
@@ -14,7 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Download, Settings, Pencil, MonitorPlay, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Download, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -49,6 +51,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [showModeError, setShowModeError] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult>({ missing: [], orphans: [] });
   const [verifyDismissed, setVerifyDismissed] = useState(false);
+  const [preflightIssues, setPreflightIssues] = useState<PreflightIssue[] | null>(null);
+  const [preflightConfirmActivation, setPreflightConfirmActivation] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function runVerify() {
@@ -133,16 +137,33 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [togglePlay, next, stop, seek]);
 
-  async function toggleShowMode() {
-    const next = !showMode;
+  async function applyShowMode(active: boolean) {
     try {
-      await invoke("set_show_mode", { active: next });
-      setShowMode(next);
+      await invoke("set_show_mode", { active });
+      setShowMode(active);
       setShowModeError(null);
     } catch (err) {
-      setShowMode(next);
+      setShowMode(active);
       setShowModeError(String(err));
     }
+  }
+
+  async function openPreflight(beforeActivatingShow: boolean) {
+    const issues = await gatherPreflight(
+      project,
+      new Set(verify.missing),
+      settings.audioOutputDeviceId,
+    );
+    setPreflightIssues(issues);
+    setPreflightConfirmActivation(beforeActivatingShow);
+  }
+
+  async function toggleShowMode() {
+    if (showMode) {
+      await applyShowMode(false);
+      return;
+    }
+    await openPreflight(true);
   }
 
   async function handleExport() {
@@ -218,6 +239,14 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
             <div className="toggle-thumb" />
           </div>
         </label>
+
+        <button
+          className="btn-icon"
+          onClick={() => openPreflight(false)}
+          title="Vérifier le spectacle"
+        >
+          <ShieldCheck size={18} />
+        </button>
 
         <button
           className={`btn-show-mode${showMode ? " btn-show-mode--active" : ""}`}
@@ -332,6 +361,15 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onSelectPresentation={() => addItem("presentation")}
           onSelectImport={handleImportNumero}
           onClose={() => setShowAddPart(false)}
+        />
+      )}
+
+      {preflightIssues !== null && (
+        <PreflightModal
+          issues={preflightIssues}
+          onClose={() => { setPreflightIssues(null); setPreflightConfirmActivation(false); }}
+          onConfirm={preflightConfirmActivation ? () => applyShowMode(true) : undefined}
+          confirmLabel="Activer le mode spectacle"
         />
       )}
     </div>
