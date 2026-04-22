@@ -1,11 +1,12 @@
-mod types;
+mod archive;
 mod download;
+mod file_assoc;
 mod show_mode;
+mod types;
 
 use std::path::{Path, PathBuf, Component};
 use std::process::Command;
 use std::fs;
-use std::sync::{Mutex, OnceLock};
 
 use tauri_plugin_dialog::DialogExt;
 use tauri::Emitter;
@@ -14,7 +15,7 @@ use crate::types::{AudioFile, Numero, PlaylistItem, Project, VerifyResult, migra
 
 // ===== Helpers =====
 
-fn safe_filename(filename: &str) -> Result<(), String> {
+pub(crate) fn safe_filename(filename: &str) -> Result<(), String> {
     let p = Path::new(filename);
     let valid = p.components().all(|c| matches!(c, Component::Normal(_)))
         && p.file_name().map(|n| n == p.as_os_str()).unwrap_or(false);
@@ -51,21 +52,25 @@ fn pick_audio_files_zenity() -> Vec<String> {
     raw.trim().split('|').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect()
 }
 
-#[tauri::command]
-fn get_default_projects_dir() -> String {
+pub(crate) fn default_projects_dir() -> String {
     let base = dirs::document_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
     base.join("Spectacles").to_string_lossy().to_string()
 }
 
-#[tauri::command]
-fn get_default_numeros_dir() -> String {
+pub(crate) fn default_numeros_dir() -> String {
     let base = dirs::document_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
     base.join("Numéros").to_string_lossy().to_string()
 }
+
+#[tauri::command]
+fn get_default_projects_dir() -> String { default_projects_dir() }
+
+#[tauri::command]
+fn get_default_numeros_dir() -> String { default_numeros_dir() }
 
 #[tauri::command]
 fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -108,7 +113,7 @@ fn create_project(name: String, folder_path: String) -> Result<Project, String> 
     Ok(project)
 }
 
-fn open_project_from_file(folder: &Path, filename: &str) -> Result<Project, String> {
+pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> Result<Project, String> {
     let content = fs::read_to_string(folder.join(filename))
         .map_err(|e| format!("Impossible de lire le projet : {}", e))?;
     migrate_project(&content, folder.to_string_lossy().to_string())
@@ -221,190 +226,6 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> Result<
     Ok(deleted)
 }
 
-#[tauri::command]
-fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
-    app.dialog().file()
-        .add_filter("Régie Son", &["regieson"])
-        .blocking_pick_file()
-        .map(|p| p.to_string())
-}
-
-#[tauri::command]
-fn save_regieson_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
-    app.dialog().file()
-        .add_filter("Régie Son", &["regieson"])
-        .set_file_name(&format!("{}.regieson", default_name))
-        .blocking_save_file()
-        .map(|p| p.to_string())
-}
-
-#[tauri::command]
-fn pick_regiesonnumero_file(app: tauri::AppHandle) -> Option<String> {
-    app.dialog().file()
-        .add_filter("Numéro Régie Son", &["regiesonnumero"])
-        .blocking_pick_file()
-        .map(|p| p.to_string())
-}
-
-#[tauri::command]
-fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
-    app.dialog().file()
-        .add_filter("Numéro Régie Son", &["regiesonnumero"])
-        .set_file_name(&format!("{}.regiesonnumero", default_name))
-        .blocking_save_file()
-        .map(|p| p.to_string())
-}
-
-fn export_to_zip(src_path: &Path, dest_file: &str, json_filename: &str) -> Result<(), String> {
-    use std::io::Write;
-    let file = fs::File::create(dest_file)
-        .map_err(|e| format!("Impossible de créer l'archive : {}", e))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<()> = zip::write::FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-
-    let json_path = src_path.join(json_filename);
-    if !json_path.exists() {
-        return Err(format!("Fichier {} introuvable", json_filename));
-    }
-    let content = fs::read(&json_path).map_err(|e| format!("Lecture {} : {}", json_filename, e))?;
-    zip.start_file(json_filename, options).map_err(|e| format!("Zip : {}", e))?;
-    zip.write_all(&content).map_err(|e| format!("Écriture : {}", e))?;
-
-    let musiques_dir = src_path.join("musiques");
-    if musiques_dir.exists() {
-        let entries = fs::read_dir(&musiques_dir).map_err(|e| format!("Lecture dossier : {}", e))?;
-        for entry in entries.filter_map(|e| e.ok()) {
-            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) { continue; }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let content = fs::read(entry.path()).map_err(|e| format!("Lecture {} : {}", name, e))?;
-            zip.start_file(format!("musiques/{}", name), options).map_err(|e| format!("Zip : {}", e))?;
-            zip.write_all(&content).map_err(|e| format!("Écriture : {}", e))?;
-        }
-    }
-
-    zip.finish().map_err(|e| format!("Finalisation de l'archive : {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-fn export_project(project_path: String, dest_file: String) -> Result<(), String> {
-    export_to_zip(Path::new(&project_path), &dest_file, "projet.json")
-}
-
-#[tauri::command]
-fn export_numero(numero_path: String, dest_file: String) -> Result<(), String> {
-    export_to_zip(Path::new(&numero_path), &dest_file, "numero.json")
-}
-
-fn extract_zip_to(src_file: &str, dest_folder: &Path) -> Result<(), String> {
-    fs::create_dir_all(dest_folder).map_err(|e| format!("Création du dossier : {}", e))?;
-
-    let file = fs::File::open(src_file).map_err(|e| format!("Ouverture de l'archive : {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Archive invalide : {}", e))?;
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| format!("Lecture entrée : {}", e))?;
-        let name = entry.name().to_string();
-        if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
-            return Err(format!("Chemin invalide dans l'archive : {}", name));
-        }
-        let out_path = dest_folder.join(&name);
-        if entry.is_dir() {
-            fs::create_dir_all(&out_path).map_err(|e| format!("mkdir : {}", e))?;
-        } else {
-            if let Some(parent) = out_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| format!("mkdir : {}", e))?;
-            }
-            let mut out = fs::File::create(&out_path).map_err(|e| format!("Création : {}", e))?;
-            std::io::copy(&mut entry, &mut out).map_err(|e| format!("Extraction : {}", e))?;
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn import_project(src_file: String, dest_folder: String) -> Result<Project, String> {
-    let dest = PathBuf::from(&dest_folder);
-    extract_zip_to(&src_file, &dest)?;
-    open_project_from_file(&dest, "projet.json")
-        .map_err(|e| format!("Archive invalide : {}", e))
-}
-
-#[tauri::command]
-fn import_numero_standalone(src_file: String, dest_folder: String) -> Result<Project, String> {
-    let dest = PathBuf::from(&dest_folder);
-    extract_zip_to(&src_file, &dest)?;
-    let mut project = open_project_from_file(&dest, "numero.json")
-        .map_err(|e| format!("Archive invalide : {}", e))?;
-    // Ensure flag is preserved even if archive came without it.
-    project.single_numero = Some(true);
-    save_project_to_disk(&project)?;
-    Ok(project)
-}
-
-#[tauri::command]
-fn import_numero_into_project(src_file: String, project_path: String) -> Result<Project, String> {
-    use std::io::Read;
-
-    // 1. Open target project
-    let mut project = open_project_from_file(Path::new(&project_path), "projet.json")
-        .map_err(|e| format!("Projet cible invalide : {}", e))?;
-
-    // 2. Read the archive
-    let file = fs::File::open(&src_file).map_err(|e| format!("Ouverture de l'archive : {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Archive invalide : {}", e))?;
-
-    // 3. Read numero.json from archive
-    let raw_numero_json = {
-        let mut entry = archive.by_name("numero.json")
-            .map_err(|_| "Archive invalide : numero.json manquant".to_string())?;
-        let mut s = String::new();
-        entry.read_to_string(&mut s).map_err(|e| format!("Lecture numero.json : {}", e))?;
-        s
-    };
-
-    // 4. Parse it as a Project (reuse migrate_project to handle item shapes)
-    let src_project = migrate_project(&raw_numero_json, String::new())?;
-    let mut numero = src_project.numeros.into_iter().next()
-        .ok_or("Archive invalide : aucun numéro")?;
-
-    // 5. For each audio item, copy its file to project_path/musiques with a new UUID
-    let dest_musiques = PathBuf::from(&project_path).join("musiques");
-    fs::create_dir_all(&dest_musiques).map_err(|e| format!("mkdir musiques : {}", e))?;
-
-    for item in numero.items.iter_mut() {
-        if let PlaylistItem::Audio(audio) = item {
-            safe_filename(&audio.filename)?;
-            let archive_path = format!("musiques/{}", audio.filename);
-            let mut entry = archive.by_name(&archive_path)
-                .map_err(|_| format!("Fichier manquant dans l'archive : {}", audio.filename))?;
-            let ext = Path::new(&audio.filename).extension()
-                .map(|e| format!(".{}", e.to_string_lossy()))
-                .unwrap_or_default();
-            let new_id = uuid::Uuid::new_v4().to_string();
-            let new_filename = format!("{}{}", new_id, ext);
-            let out_path = dest_musiques.join(&new_filename);
-            let mut out = fs::File::create(&out_path)
-                .map_err(|e| format!("Création {} : {}", new_filename, e))?;
-            std::io::copy(&mut entry, &mut out)
-                .map_err(|e| format!("Extraction {} : {}", new_filename, e))?;
-            audio.id = new_id;
-            audio.filename = new_filename;
-        } else if let PlaylistItem::Pause(pause) = item {
-            pause.id = uuid::Uuid::new_v4().to_string();
-        }
-    }
-
-    // 6. Give numero a fresh id, force type = "numero", append to project
-    numero.id = uuid::Uuid::new_v4().to_string();
-    numero.numero_type = "numero".into();
-    project.numeros.push(numero);
-
-    // 7. Save and return
-    save_project_to_disk(&project)?;
-    Ok(project)
-}
 
 #[tauri::command]
 fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
@@ -436,7 +257,7 @@ fn rotate_backups(dir: &Path, filename: &str) {
     }
 }
 
-fn save_project_to_disk(project: &Project) -> Result<(), String> {
+pub(crate) fn save_project_to_disk(project: &Project) -> Result<(), String> {
     let content = serde_json::to_string_pretty(project)
         .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
     let dir = Path::new(&project.path);
@@ -451,55 +272,6 @@ fn save_project_to_disk(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
-// ===== File association handling =====
-
-fn pending_open_file() -> &'static Mutex<Option<String>> {
-    static PENDING: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-    PENDING.get_or_init(|| Mutex::new(None))
-}
-
-fn extract_file_from_args(args: &[String]) -> Option<String> {
-    args.iter().skip(1).find(|a| {
-        let lower = a.to_lowercase();
-        lower.ends_with(".regieson") || lower.ends_with(".regiesonnumero")
-    }).cloned()
-}
-
-#[tauri::command]
-fn take_pending_open_file() -> Option<String> {
-    pending_open_file().lock().unwrap().take()
-}
-
-fn pick_unique_path(base: &Path) -> PathBuf {
-    if !base.exists() { return base.to_path_buf(); }
-    let parent = base.parent().unwrap_or(Path::new("."));
-    let name = base.file_name().unwrap_or_default().to_string_lossy().to_string();
-    for i in 2..1000 {
-        let candidate = parent.join(format!("{}-{}", name, i));
-        if !candidate.exists() { return candidate; }
-    }
-    parent.join(format!("{}-{}", name, std::process::id()))
-}
-
-#[tauri::command]
-fn auto_import_regieson(src_file: String) -> Result<Project, String> {
-    let archive_name = Path::new(&src_file).file_stem()
-        .ok_or("Nom de fichier invalide")?
-        .to_string_lossy().to_string();
-    let base_dir = PathBuf::from(get_default_projects_dir()).join(&archive_name);
-    let dest = pick_unique_path(&base_dir);
-    import_project(src_file, dest.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-fn auto_import_regiesonnumero(src_file: String) -> Result<Project, String> {
-    let archive_name = Path::new(&src_file).file_stem()
-        .ok_or("Nom de fichier invalide")?
-        .to_string_lossy().to_string();
-    let base_dir = PathBuf::from(get_default_numeros_dir()).join(&archive_name);
-    let dest = pick_unique_path(&base_dir);
-    import_numero_standalone(src_file, dest.to_string_lossy().to_string())
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -507,8 +279,8 @@ pub fn run() {
 
     // Cold start: capture the file passed as CLI argument
     let initial_args: Vec<String> = std::env::args().collect();
-    if let Some(file) = extract_file_from_args(&initial_args) {
-        *pending_open_file().lock().unwrap() = Some(file);
+    if let Some(file) = file_assoc::extract_file_from_args(&initial_args) {
+        file_assoc::set_pending_open_file(file);
     }
 
     #[allow(unused_mut)]
@@ -519,7 +291,7 @@ pub fn run() {
     {
         use tauri::Manager;
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if let Some(file) = extract_file_from_args(&args) {
+            if let Some(file) = file_assoc::extract_file_from_args(&args) {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.unminimize();
                     let _ = window.set_focus();
@@ -541,12 +313,12 @@ pub fn run() {
             create_numero, open_numero, save_numero,
             copy_audio_file, delete_audio_file,
             verify_project, cleanup_orphan_files,
-            pick_regieson_file, save_regieson_file,
-            pick_regiesonnumero_file, save_regiesonnumero_file,
-            export_project, import_project,
-            export_numero, import_numero_standalone, import_numero_into_project,
-            auto_import_regieson, auto_import_regiesonnumero, take_pending_open_file,
             read_audio_file,
+            archive::pick_regieson_file, archive::save_regieson_file,
+            archive::pick_regiesonnumero_file, archive::save_regiesonnumero_file,
+            archive::export_project, archive::import_project,
+            archive::export_numero, archive::import_numero_standalone, archive::import_numero_into_project,
+            file_assoc::auto_import_regieson, file_assoc::auto_import_regiesonnumero, file_assoc::take_pending_open_file,
             download::download_audio_from_url, download::download_youtube_audio, download::cancel_download,
             show_mode::set_show_mode,
         ])
