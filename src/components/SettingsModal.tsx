@@ -308,6 +308,15 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               {ytDlpError}
             </span>
           )}
+
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={settings.autoUpdateYtDlp !== false}
+              onChange={(e) => onUpdate({ autoUpdateYtDlp: e.target.checked })}
+            />
+            <span>Mettre à jour automatiquement au démarrage</span>
+          </label>
         </div>
 
         <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>

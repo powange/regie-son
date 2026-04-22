@@ -4,6 +4,7 @@ import type { KeyAction, KeyBinding } from "./keyBindings";
 export interface Settings {
   audioOutputDeviceId: string | null;
   keyBindings?: Partial<Record<KeyAction, KeyBinding>>;
+  autoUpdateYtDlp?: boolean; // defaults to true when absent
 }
 
 const KEY = "regie-son:settings";

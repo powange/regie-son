@@ -91,6 +91,14 @@ function App() {
     invoke<string | null>("take_pending_open_file").then((path) => {
       if (path) handleOpenFile(path);
     });
+    // Background yt-dlp self-update (silent). Runs once per app launch when
+    // the setting is not explicitly disabled. Failures are swallowed — the
+    // existing bundled sidecar remains usable.
+    if (settings.autoUpdateYtDlp !== false) {
+      invoke("update_yt_dlp").catch((err) => {
+        console.warn("yt-dlp auto-update failed:", err);
+      });
+    }
     return () => { unlisten?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
