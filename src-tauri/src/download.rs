@@ -60,19 +60,35 @@ fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
     cmd
 }
 
-fn find_yt_dlp() -> PathBuf {
+fn yt_dlp_target_name() -> &'static str {
+    #[cfg(target_os = "windows")] { "yt-dlp.exe" }
+    #[cfg(not(target_os = "windows"))] { "yt-dlp" }
+}
+
+fn yt_dlp_asset_name() -> &'static str {
+    #[cfg(target_os = "windows")] { "yt-dlp.exe" }
+    #[cfg(target_os = "macos")] { "yt-dlp_macos" }
+    #[cfg(target_os = "linux")] { "yt-dlp_linux" }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))] { "yt-dlp" }
+}
+
+fn find_yt_dlp_sidecar() -> PathBuf {
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
-            #[cfg(target_os = "windows")]
-            let candidate = exe_dir.join("yt-dlp.exe");
-            #[cfg(not(target_os = "windows"))]
-            let candidate = exe_dir.join("yt-dlp");
-            if candidate.exists() {
-                return candidate;
-            }
+            let candidate = exe_dir.join(yt_dlp_target_name());
+            if candidate.exists() { return candidate; }
         }
     }
     PathBuf::from("yt-dlp")
+}
+
+fn find_yt_dlp_with_app(app: &tauri::AppHandle) -> PathBuf {
+    use tauri::Manager;
+    if let Ok(dir) = app.path().app_data_dir() {
+        let candidate = dir.join(yt_dlp_target_name());
+        if candidate.exists() { return candidate; }
+    }
+    find_yt_dlp_sidecar()
 }
 
 // ===== Cancellation =====
@@ -139,7 +155,7 @@ fn cleanup_partial_files(musiques_dir: &Path, id: &str) {
 #[tauri::command]
 pub async fn download_youtube_audio(url: String, project_path: String, download_id: String, app: tauri::AppHandle) -> Result<AudioFile, String> {
     let guard = DownloadGuard::new(download_id);
-    let yt_dlp = find_yt_dlp();
+    let yt_dlp = find_yt_dlp_with_app(&app);
 
     let check = silent_command(&yt_dlp).arg("--version").output();
     if check.is_err() || !check.unwrap().status.success() {
@@ -332,4 +348,78 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
     }
 
     Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, cue: None })
+}
+
+#[tauri::command]
+pub async fn get_yt_dlp_version(app: tauri::AppHandle) -> Result<String, String> {
+    let yt_dlp = find_yt_dlp_with_app(&app);
+    let out = silent_command(&yt_dlp).arg("--version").output()
+        .map_err(|e| format!("yt-dlp introuvable : {}", e))?;
+    if !out.status.success() {
+        return Err("yt-dlp ne démarre pas correctement.".into());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[tauri::command]
+pub async fn update_yt_dlp(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    use std::io::Write;
+
+    let dir = app.path().app_data_dir()
+        .map_err(|e| format!("Impossible de déterminer le dossier de données : {}", e))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("mkdir : {}", e))?;
+    let target_path = dir.join(yt_dlp_target_name());
+    let tmp_path = target_path.with_extension("download");
+
+    let url = format!(
+        "https://github.com/yt-dlp/yt-dlp/releases/latest/download/{}",
+        yt_dlp_asset_name()
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("Erreur client HTTP : {}", e))?;
+
+    let mut response = client.get(&url).send().await
+        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Erreur HTTP {} lors du téléchargement", response.status().as_u16()));
+    }
+
+    let mut file = fs::File::create(&tmp_path)
+        .map_err(|e| format!("Impossible de créer {} : {}", tmp_path.display(), e))?;
+
+    while let Some(chunk) = response.chunk().await
+        .map_err(|e| format!("Erreur de lecture : {}", e))?
+    {
+        file.write_all(&chunk).map_err(|e| format!("Erreur d'écriture : {}", e))?;
+    }
+    drop(file);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&tmp_path)
+            .map_err(|e| format!("metadata : {}", e))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&tmp_path, perms)
+            .map_err(|e| format!("chmod : {}", e))?;
+    }
+
+    let version_check = silent_command(&tmp_path).arg("--version").output();
+    let ok = version_check.as_ref().map(|o| o.status.success()).unwrap_or(false);
+    if !ok {
+        let _ = fs::remove_file(&tmp_path);
+        return Err("Le binaire téléchargé n'est pas exécutable sur ce système.".into());
+    }
+    let version = String::from_utf8_lossy(&version_check.unwrap().stdout).trim().to_string();
+
+    fs::rename(&tmp_path, &target_path)
+        .map_err(|e| format!("Impossible de remplacer l'ancien binaire : {}", e))?;
+
+    Ok(version)
 }

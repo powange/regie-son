@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle, Keyboard, RotateCcw } from "lucide-react";
+import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle, Keyboard, RotateCcw, FileVideo } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
 import { Settings } from "../useSettings";
 import { UpdaterState } from "../useUpdater";
 import {
@@ -36,6 +37,9 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   const [version, setVersion] = useState("");
   const [listeningAction, setListeningAction] = useState<KeyAction | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [ytDlpVersion, setYtDlpVersion] = useState<string | null>(null);
+  const [ytDlpUpdating, setYtDlpUpdating] = useState(false);
+  const [ytDlpError, setYtDlpError] = useState<string | null>(null);
 
   const mergedBindings = mergeWithDefaults(settings.keyBindings);
 
@@ -63,8 +67,33 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
     }
   }
 
+  async function loadYtDlpVersion() {
+    try {
+      const v = await invoke<string>("get_yt_dlp_version");
+      setYtDlpVersion(v);
+      setYtDlpError(null);
+    } catch (err) {
+      setYtDlpVersion(null);
+      setYtDlpError(String(err));
+    }
+  }
+
+  async function updateYtDlp() {
+    setYtDlpUpdating(true);
+    setYtDlpError(null);
+    try {
+      const v = await invoke<string>("update_yt_dlp");
+      setYtDlpVersion(v);
+    } catch (err) {
+      setYtDlpError(String(err));
+    } finally {
+      setYtDlpUpdating(false);
+    }
+  }
+
   useEffect(() => {
     loadDevices();
+    loadYtDlpVersion();
     if (import.meta.env.DEV) {
       setVersion(__DEV_VERSION__);
     } else {
@@ -253,6 +282,32 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               </span>
             )}
           </div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <FileVideo size={15} />
+            yt-dlp (téléchargement YouTube)
+          </div>
+
+          <div className="settings-update-row">
+            <span className="settings-update-status">
+              {ytDlpVersion ? `Version ${ytDlpVersion}` : "Version inconnue"}
+            </span>
+            <button
+              className="settings-refresh"
+              onClick={updateYtDlp}
+              disabled={ytDlpUpdating}
+            >
+              <RefreshCw size={13} className={ytDlpUpdating ? "spin" : ""} />
+              {ytDlpUpdating ? "Mise à jour…" : "Mettre à jour"}
+            </button>
+          </div>
+          {ytDlpError && (
+            <span className="settings-update-status settings-update-error" title={ytDlpError}>
+              {ytDlpError}
+            </span>
+          )}
         </div>
 
         <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>

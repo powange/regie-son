@@ -320,6 +320,7 @@ pub fn run() {
             archive::export_numero, archive::import_numero_standalone, archive::import_numero_into_project,
             file_assoc::auto_import_regieson, file_assoc::auto_import_regiesonnumero, file_assoc::take_pending_open_file,
             download::download_audio_from_url, download::download_youtube_audio, download::cancel_download,
+            download::get_yt_dlp_version, download::update_yt_dlp,
             show_mode::set_show_mode,
         ])
         .run(tauri::generate_context!())
