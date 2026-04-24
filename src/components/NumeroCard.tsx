@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -51,15 +52,25 @@ function NumeroCardInner({
   const [editName, setEditName] = useState(numero.name);
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [typeMenuPos, setTypeMenuPos] = useState<{ top: number; left: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typeBtnRef = useRef<HTMLButtonElement | null>(null);
   const typeMenuRef = useRef<HTMLDivElement | null>(null);
+
+  function openTypeMenu() {
+    const btn = typeBtnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setTypeMenuPos({ top: rect.bottom + 4, left: rect.left });
+    setShowTypeMenu(true);
+  }
 
   useEffect(() => {
     if (!showTypeMenu) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (typeMenuRef.current && !typeMenuRef.current.contains(e.target as Node)) {
-        setShowTypeMenu(false);
-      }
+      const inBtn = typeBtnRef.current?.contains(e.target as Node);
+      const inMenu = typeMenuRef.current?.contains(e.target as Node);
+      if (!inBtn && !inMenu) setShowTypeMenu(false);
     }
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -178,18 +189,23 @@ function NumeroCardInner({
           </span>
         )}
         {typeCanBeChanged ? (
-          <div className="numero-type-badge-wrapper" ref={typeMenuRef}>
+          <>
             <button
               type="button"
+              ref={typeBtnRef}
               className="numero-type-badge numero-type-badge--clickable"
-              onClick={() => setShowTypeMenu((v) => !v)}
+              onClick={() => (showTypeMenu ? setShowTypeMenu(false) : openTypeMenu())}
               title="Changer le type"
             >
               {typeBadge[numero.type] ?? numero.type}
               <ChevronDown size={12} />
             </button>
-            {showTypeMenu && (
-              <div className="numero-type-menu">
+            {showTypeMenu && typeMenuPos && createPortal(
+              <div
+                className="numero-type-menu"
+                ref={typeMenuRef}
+                style={{ top: typeMenuPos.top, left: typeMenuPos.left }}
+              >
                 {typeOptions.map((opt) => {
                   const Icon = opt.icon;
                   const isCurrent = opt.id === numero.type;
@@ -206,9 +222,10 @@ function NumeroCardInner({
                     </button>
                   );
                 })}
-              </div>
+              </div>,
+              document.body,
             )}
-          </div>
+          </>
         ) : (
           <span className="numero-type-badge">{typeBadge[numero.type] ?? numero.type}</span>
         )}
