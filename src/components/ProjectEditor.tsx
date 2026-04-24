@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
+import ExportModal from "./ExportModal";
+import CloudShareDialog from "./CloudShareDialog";
 import { PreflightIssue, gatherPreflight } from "../preflight";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import {
@@ -54,6 +56,10 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [verifyDismissed, setVerifyDismissed] = useState(false);
   const [preflightIssues, setPreflightIssues] = useState<PreflightIssue[] | null>(null);
   const [preflightConfirmActivation, setPreflightConfirmActivation] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"uploading" | "done" | "error" | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
@@ -203,7 +209,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     await openPreflight(true);
   }
 
-  async function handleExport() {
+  async function handleExportFile() {
     try {
       if (isSingle) {
         const destFile = await invoke<string | null>("save_regiesonnumero_file", { defaultName: project.name });
@@ -216,6 +222,22 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       }
     } catch (err) {
       alert("Erreur lors de l'export : " + err);
+    }
+  }
+
+  async function handleExportCloud() {
+    setShareStatus("uploading");
+    setShareCode(null);
+    setShareError(null);
+    try {
+      const code = isSingle
+        ? await invoke<string>("share_numero_on_cloud", { numeroPath: project.path })
+        : await invoke<string>("share_project_on_cloud", { projectPath: project.path });
+      setShareCode(code);
+      setShareStatus("done");
+    } catch (err) {
+      setShareError(String(err));
+      setShareStatus("error");
     }
   }
 
@@ -313,8 +335,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
         <button
           className="btn-icon"
-          onClick={handleExport}
-          title={isSingle ? "Exporter le numéro (.regiesonnumero)" : "Exporter le projet (.regieson)"}
+          onClick={() => setShowExport(true)}
+          title={isSingle ? "Exporter le numéro" : "Exporter le projet"}
         >
           <Download size={18} />
         </button>
@@ -425,6 +447,24 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClose={() => { setPreflightIssues(null); setPreflightConfirmActivation(false); }}
           onConfirm={preflightConfirmActivation ? () => applyShowMode(true) : undefined}
           confirmLabel="Activer le mode spectacle"
+        />
+      )}
+
+      {showExport && (
+        <ExportModal
+          kind={isSingle ? "numero" : "project"}
+          onSelectFile={handleExportFile}
+          onSelectCloud={handleExportCloud}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {shareStatus !== null && (
+        <CloudShareDialog
+          status={shareStatus}
+          code={shareCode}
+          error={shareError}
+          onClose={() => { setShareStatus(null); setShareCode(null); setShareError(null); }}
         />
       )}
     </div>

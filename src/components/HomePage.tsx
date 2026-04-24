@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings, Upload } from "lucide-react";
+import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings } from "lucide-react";
 import { Project } from "../types";
 import { RecentProject } from "../useRecentProjects";
 import { RecentNumero } from "../useRecentNumeros";
+import OpenProjectModal, { OpenKind } from "./OpenProjectModal";
+import CloudImportDialog from "./CloudImportDialog";
 
 interface Props {
   recents: RecentProject[];
@@ -24,6 +26,8 @@ export default function HomePage({
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateNumero, setShowCreateNumero] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [showOpen, setShowOpen] = useState<OpenKind | null>(null);
+  const [showCloudImport, setShowCloudImport] = useState<OpenKind | null>(null);
 
   async function handleOpenProject() {
     setOpenError(null);
@@ -99,6 +103,17 @@ export default function HomePage({
     }
   }
 
+  async function handleCloudImportSubmit(kind: OpenKind, code: string) {
+    const dirCmd = kind === "project" ? "get_default_projects_dir" : "get_default_numeros_dir";
+    const importCmd = kind === "project" ? "import_project_from_cloud" : "import_numero_from_cloud";
+    const defaultDir = await invoke<string>(dirCmd);
+    const sep = defaultDir.includes("\\") ? "\\" : "/";
+    const destFolder = `${defaultDir}${sep}cloud-${code}`;
+    const project = await invoke<Project>(importCmd, { code, destFolder });
+    setShowCloudImport(null);
+    if (kind === "project") onProjectOpen(project); else onNumeroOpen(project);
+  }
+
   function formatDate(iso: string) {
     const d = new Date(iso);
     return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
@@ -122,13 +137,9 @@ export default function HomePage({
             <Plus size={18} />
             Nouveau spectacle
           </button>
-          <button className="btn-secondary" onClick={handleOpenProject}>
+          <button className="btn-secondary" onClick={() => setShowOpen("project")}>
             <FolderOpen size={18} />
             Ouvrir un spectacle
-          </button>
-          <button className="btn-ghost" onClick={handleImportProject}>
-            <Upload size={18} />
-            Importer un projet (.regieson)
           </button>
         </div>
       </div>
@@ -140,13 +151,9 @@ export default function HomePage({
             <Plus size={18} />
             Nouveau numéro
           </button>
-          <button className="btn-secondary" onClick={handleOpenNumero}>
+          <button className="btn-secondary" onClick={() => setShowOpen("numero")}>
             <FolderOpen size={18} />
             Ouvrir un numéro
-          </button>
-          <button className="btn-ghost" onClick={handleImportNumero}>
-            <Upload size={18} />
-            Importer un numéro (.regiesonnumero)
           </button>
         </div>
       </div>
@@ -222,6 +229,24 @@ export default function HomePage({
         <CreateNumeroModal
           onClose={() => setShowCreateNumero(false)}
           onCreated={onNumeroOpen}
+        />
+      )}
+
+      {showOpen && (
+        <OpenProjectModal
+          kind={showOpen}
+          onSelectFolder={showOpen === "project" ? handleOpenProject : handleOpenNumero}
+          onSelectFile={showOpen === "project" ? handleImportProject : handleImportNumero}
+          onSelectCloud={() => setShowCloudImport(showOpen)}
+          onClose={() => setShowOpen(null)}
+        />
+      )}
+
+      {showCloudImport && (
+        <CloudImportDialog
+          kind={showCloudImport}
+          onSubmit={(code) => handleCloudImportSubmit(showCloudImport, code)}
+          onClose={() => setShowCloudImport(null)}
         />
       )}
     </div>

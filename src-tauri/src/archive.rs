@@ -41,7 +41,7 @@ pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> 
         .map(|p| p.to_string())
 }
 
-fn export_to_zip(src_path: &Path, dest_file: &str, json_filename: &str) -> Result<(), String> {
+pub(crate) fn export_to_zip(src_path: &Path, dest_file: &str, json_filename: &str) -> Result<(), String> {
     let file = fs::File::create(dest_file)
         .map_err(|e| format!("Impossible de créer l'archive : {}", e))?;
     let mut zip = zip::ZipWriter::new(file);
@@ -82,7 +82,7 @@ pub fn export_numero(numero_path: String, dest_file: String) -> Result<(), Strin
     export_to_zip(Path::new(&numero_path), &dest_file, "numero.json")
 }
 
-fn extract_zip_to(src_file: &str, dest_folder: &Path) -> Result<(), String> {
+pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> Result<(), String> {
     fs::create_dir_all(dest_folder).map_err(|e| format!("Création du dossier : {}", e))?;
 
     let file = fs::File::open(src_file).map_err(|e| format!("Ouverture de l'archive : {}", e))?;
