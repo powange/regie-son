@@ -220,7 +220,40 @@
   color: #c0a0f0;
   background: #1a1030;
 }
-.pause-track-label { flex: 1; }
+.pause-track-label { flex: 1; display: flex; align-items: center; gap: 0.5rem; }
+
+.pause-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-style: normal;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: rgba(160, 120, 220, 0.15);
+  color: #c0a0f0;
+}
+
+.pause-duration-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text2);
+  font-style: normal;
+}
+.pause-duration-field input {
+  width: 4.5rem;
+  padding: 0.25rem 0.4rem;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+}
+.pause-duration-field input:focus { border-color: var(--accent2); }
 
 .item-cue-input {
   width: 100%;

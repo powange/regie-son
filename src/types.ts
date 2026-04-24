@@ -15,6 +15,7 @@ export interface PauseItem {
   type: "pause";
   id: string;
   cue?: string;       // top de départ (indication pour le régisseur)
+  duration?: number;  // secondes — si défini, la pause avance automatiquement après ce délai
 }
 
 export type PlaylistItem = AudioFile | PauseItem;

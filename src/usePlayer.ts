@@ -89,10 +89,45 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     setState((s) => (s.fade === null ? s : { ...s, fade: null }));
   }
 
+  // Timed pause: counts down in real time and advances to the next item when done.
+  const pauseTimerRef = useRef<{
+    duration: number;
+    elapsed: number;       // seconds accumulated across pause/resume cycles
+    startedAt: number | null; // performance.now() when currently running, null when paused
+    rafId: number | null;
+  } | null>(null);
+
+  function cancelPauseTimer() {
+    const t = pauseTimerRef.current;
+    if (!t) return;
+    if (t.rafId !== null) cancelAnimationFrame(t.rafId);
+    pauseTimerRef.current = null;
+  }
+
+  function runPauseTimerTick() {
+    const t = pauseTimerRef.current;
+    if (!t || t.startedAt === null) return;
+    const tick = () => {
+      const cur = pauseTimerRef.current;
+      if (!cur || cur.startedAt === null) return;
+      const totalElapsed = cur.elapsed + (performance.now() - cur.startedAt) / 1000;
+      if (totalElapsed >= cur.duration) {
+        cancelPauseTimer();
+        setState((s) => ({ ...s, progress: { position: cur.duration, duration: cur.duration } }));
+        nextRef.current();
+        return;
+      }
+      setState((s) => ({ ...s, progress: { position: totalElapsed, duration: cur.duration } }));
+      cur.rafId = requestAnimationFrame(tick);
+    };
+    t.rafId = requestAnimationFrame(tick);
+  }
+
   const playAt = useCallback((nIdx: number, iIdx: number) => {
     const audio = audioRef.current;
     if (!audio) return;
     cancelFade();
+    cancelPauseTimer();
     const proj = projectRef.current;
     const item = proj.numeros[nIdx]?.items[iIdx];
     if (!item) return;
@@ -102,13 +137,26 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       ignoreSrcErrorRef.current = true;
       audio.src = "";
       posRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
-      setState((s) => ({
-        ...s,
-        position: { numeroIndex: nIdx, audioIndex: iIdx },
-        isPlaying: false,
-        progress: { position: 0, duration: 0 },
-        audioError: null,
-      }));
+      const duration = item.duration && item.duration > 0 ? item.duration : 0;
+      if (duration > 0) {
+        pauseTimerRef.current = { duration, elapsed: 0, startedAt: performance.now(), rafId: null };
+        setState((s) => ({
+          ...s,
+          position: { numeroIndex: nIdx, audioIndex: iIdx },
+          isPlaying: true,
+          progress: { position: 0, duration },
+          audioError: null,
+        }));
+        runPauseTimerTick();
+      } else {
+        setState((s) => ({
+          ...s,
+          position: { numeroIndex: nIdx, audioIndex: iIdx },
+          isPlaying: false,
+          progress: { position: 0, duration: 0 },
+          audioError: null,
+        }));
+      }
       return;
     }
 
@@ -221,6 +269,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
       preloadCacheRef.current.clear();
       preloadInFlightRef.current.clear();
+      cancelPauseTimer();
     };
   }, []);
 
@@ -253,9 +302,29 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     }
 
     const item = projectRef.current.numeros[position.numeroIndex]?.items[position.audioIndex];
-    if (!item || item.type === "pause") {
-      const nxt = nextAudioPosition(projectRef.current, position);
-      if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+    if (!item) return;
+
+    if (item.type === "pause") {
+      const t = pauseTimerRef.current;
+      // Untimed pause: same behaviour as before — jump to the next audio item.
+      if (!t || t.duration <= 0) {
+        const nxt = nextAudioPosition(projectRef.current, position);
+        if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+        return;
+      }
+      // Timed pause: toggle the countdown.
+      if (isPlaying) {
+        if (t.rafId !== null) { cancelAnimationFrame(t.rafId); t.rafId = null; }
+        if (t.startedAt !== null) {
+          t.elapsed += (performance.now() - t.startedAt) / 1000;
+          t.startedAt = null;
+        }
+        setState((s) => ({ ...s, isPlaying: false }));
+      } else {
+        t.startedAt = performance.now();
+        runPauseTimerTick();
+        setState((s) => ({ ...s, isPlaying: true }));
+      }
       return;
     }
 
@@ -336,6 +405,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     };
 
     cancelFade();
+    cancelPauseTimer();
 
     if (!wasPlaying || !audio) {
       finalize();

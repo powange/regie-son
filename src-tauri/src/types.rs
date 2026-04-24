@@ -26,6 +26,8 @@ pub struct PauseItem {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none", alias = "note")]
     pub cue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

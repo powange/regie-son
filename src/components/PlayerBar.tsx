@@ -30,9 +30,12 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
   const currentItem = currentNumero ? currentNumero.items[position!.audioIndex] : null;
   const hasAudio = project.numeros.some((n) => n.items.some((i) => i.type === "audio"));
   const onPause = currentItem?.type === "pause";
+  const pauseDuration = currentItem?.type === "pause" ? (currentItem.duration ?? 0) : 0;
+  const isTimedPause = onPause && pauseDuration > 0;
 
   const { position: pos, duration: dur } = progress;
   const progressPct = dur > 0 ? Math.min((pos / dur) * 100, 100) : 0;
+  const pauseRemaining = isTimedPause ? Math.max(0, pauseDuration - pos) : 0;
 
   function handleSeekClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!position || dur <= 0 || onPause) return;
@@ -49,7 +52,9 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           {onPause ? (
             <span className="player-pause-indicator">
               <PauseCircle size={13} />
-              En attente — appuyez sur Play pour continuer
+              {isTimedPause
+                ? <>Pause — <strong>{pauseRemaining.toFixed(1)} s</strong> restantes</>
+                : "En attente — appuyez sur Play pour continuer"}
             </span>
           ) : (
             <span className="player-current-numero">{currentNumero!.name}</span>
@@ -98,15 +103,25 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
         </div>
       ) : (
         <div className="player-progress-row">
-          <span className="player-time">{onPause ? "--:--" : formatTime(pos)}</span>
+          <span className="player-time">
+            {onPause ? (isTimedPause ? formatTime(pos) : "--:--") : formatTime(pos)}
+          </span>
           <div
             className={`player-progress-bar${position && !onPause ? " player-progress-bar--active" : ""}`}
             onClick={handleSeekClick}
           >
-            <div className="player-progress-fill" style={{ width: onPause ? "0%" : `${progressPct}%` }} />
-            <div className="player-progress-thumb" style={{ left: onPause ? "0%" : `${progressPct}%` }} />
+            <div
+              className="player-progress-fill"
+              style={{ width: onPause && !isTimedPause ? "0%" : `${progressPct}%` }}
+            />
+            <div
+              className="player-progress-thumb"
+              style={{ left: onPause && !isTimedPause ? "0%" : `${progressPct}%` }}
+            />
           </div>
-          <span className="player-time">{dur > 0 && !onPause ? formatTime(dur) : "--:--"}</span>
+          <span className="player-time">
+            {onPause ? (isTimedPause ? formatTime(dur) : "--:--") : dur > 0 ? formatTime(dur) : "--:--"}
+          </span>
         </div>
       )}
     </div>
