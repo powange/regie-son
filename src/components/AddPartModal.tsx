@@ -1,10 +1,11 @@
-import { ListMusic, Coffee, MicVocal, Upload, X } from "lucide-react";
+import { ListMusic, Coffee, MicVocal, Upload, Cloud, X } from "lucide-react";
 
 interface Props {
   onSelectNumero: () => void;
   onSelectEntracte: () => void;
   onSelectPresentation: () => void;
   onSelectImport: () => void;
+  onSelectImportCloud: () => void;
   onClose: () => void;
 }
 
@@ -13,6 +14,7 @@ export default function AddPartModal({
   onSelectEntracte,
   onSelectPresentation,
   onSelectImport,
+  onSelectImportCloud,
   onClose,
 }: Props) {
   function pick(handler: () => void) {
@@ -41,6 +43,13 @@ export default function AddPartModal({
             <div className="part-option-text">
               <strong>Importer un numéro</strong>
               <span>Depuis un fichier .regiesonnumero exporté.</span>
+            </div>
+          </button>
+          <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectImportCloud)}>
+            <Cloud size={22} />
+            <div className="part-option-text">
+              <strong>Importer depuis le cloud</strong>
+              <span>Récupérer un numéro partagé via son code.</span>
             </div>
           </button>
           <button className="source-option part-option part-option--entracte" onClick={() => pick(onSelectEntracte)}>

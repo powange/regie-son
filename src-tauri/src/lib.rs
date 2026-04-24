@@ -322,6 +322,7 @@ pub fn run() {
             file_assoc::auto_import_regieson, file_assoc::auto_import_regiesonnumero, file_assoc::take_pending_open_file,
             cloud::share_project_on_cloud, cloud::share_numero_on_cloud,
             cloud::import_project_from_cloud, cloud::import_numero_from_cloud,
+            cloud::import_numero_from_cloud_into_project,
             download::download_audio_from_url, download::download_youtube_audio, download::cancel_download,
             download::get_yt_dlp_version, download::update_yt_dlp,
             show_mode::set_show_mode,

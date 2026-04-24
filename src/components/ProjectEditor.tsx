@@ -3,6 +3,7 @@ import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
 import ExportModal from "./ExportModal";
 import CloudShareDialog from "./CloudShareDialog";
+import CloudImportDialog from "./CloudImportDialog";
 import { PreflightIssue, gatherPreflight } from "../preflight";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import {
@@ -60,6 +61,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [shareStatus, setShareStatus] = useState<"uploading" | "done" | "error" | null>(null);
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [showImportNumeroCloud, setShowImportNumeroCloud] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
@@ -256,6 +258,16 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
   }
 
+  async function handleImportNumeroCloudSubmit(code: string) {
+    const updated = await invoke<Project>("import_numero_from_cloud_into_project", {
+      code, projectPath: project.path,
+    });
+    onProjectChange(updated);
+    setSaved(true);
+    runVerify();
+    setShowImportNumeroCloud(false);
+  }
+
   async function handleClose() {
     if (showMode) {
       try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
@@ -437,7 +449,16 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onSelectEntracte={() => addItem("entracte")}
           onSelectPresentation={() => addItem("presentation")}
           onSelectImport={handleImportNumero}
+          onSelectImportCloud={() => setShowImportNumeroCloud(true)}
           onClose={() => setShowAddPart(false)}
+        />
+      )}
+
+      {showImportNumeroCloud && (
+        <CloudImportDialog
+          kind="numero"
+          onSubmit={handleImportNumeroCloudSubmit}
+          onClose={() => setShowImportNumeroCloud(false)}
         />
       )}
 

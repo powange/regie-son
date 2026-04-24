@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::archive::{export_to_zip, extract_zip_to};
+use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
 use crate::types::Project;
 use crate::{open_project_from_file, save_project_to_disk};
 
@@ -137,6 +137,18 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> Res
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
         open_project_from_file(&dest, "projet.json")
             .map_err(|e| format!("Archive invalide : {}", e))
+    }
+    .await;
+    let _ = fs::remove_file(&tmp);
+    outcome
+}
+
+#[tauri::command]
+pub async fn import_numero_from_cloud_into_project(code: String, project_path: String) -> Result<Project, String> {
+    let tmp = temp_archive_path("regiesonnumero");
+    let outcome = async {
+        download_file(&code, &tmp).await?;
+        import_numero_into_project(tmp.to_string_lossy().to_string(), project_path)
     }
     .await;
     let _ = fs::remove_file(&tmp);
