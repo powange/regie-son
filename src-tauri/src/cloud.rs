@@ -1,19 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
-
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
 use crate::types::Project;
 use crate::{open_project_from_file, save_project_to_disk};
 
-const UPLOAD_URL: &str = "https://pixeldrain.com/api/file";
-const MAX_CLOUD_FILE_SIZE: u64 = 2 * 1024 * 1024 * 1024; // 2 GB (PixelDrain free tier limit per file)
-
-#[derive(Deserialize)]
-struct UploadResponse {
-    id: String,
-}
+// Litterbox (sister of catbox.moe) — anonymous uploads, no account required,
+// files expire after the chosen retention. We use 72h, the maximum.
+const UPLOAD_URL: &str = "https://litterbox.catbox.moe/resources/internals/api.php";
+const DOWNLOAD_BASE: &str = "https://litter.catbox.moe";
+const RETENTION: &str = "72h";
+const MAX_CLOUD_FILE_SIZE: u64 = 1024 * 1024 * 1024; // 1 GB (Litterbox limit per file)
 
 fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
@@ -22,6 +19,7 @@ fn http_client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("Erreur client HTTP : {}", e))
 }
 
+// Returns the short code (filename stem) extracted from the Litterbox URL.
 async fn upload_file(path: &Path) -> Result<String, String> {
     let metadata = fs::metadata(path).map_err(|e| format!("Lecture métadonnées : {}", e))?;
     if metadata.len() > MAX_CLOUD_FILE_SIZE {
@@ -40,7 +38,10 @@ async fn upload_file(path: &Path) -> Result<String, String> {
         .to_string();
 
     let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
-    let form = reqwest::multipart::Form::new().part("file", part);
+    let form = reqwest::multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .text("time", RETENTION)
+        .part("fileToUpload", part);
 
     let client = http_client()?;
     let resp = client
@@ -57,13 +58,28 @@ async fn upload_file(path: &Path) -> Result<String, String> {
         ));
     }
 
-    let body: UploadResponse = resp
-        .json()
+    let body = resp
+        .text()
         .await
-        .map_err(|e| format!("Réponse inattendue du service : {}", e))?;
-    Ok(body.id)
+        .map_err(|e| format!("Réponse inattendue du service : {}", e))?
+        .trim()
+        .to_string();
+    if !body.starts_with("https://") {
+        return Err(format!("Réponse inattendue du service : {}", body));
+    }
+    // Body is the full URL e.g. "https://litter.catbox.moe/abc123.zip".
+    // Strip the path and the file extension to keep just the short code.
+    let stem = body
+        .rsplit('/')
+        .next()
+        .and_then(|seg| seg.split('.').next())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("URL inattendue : {}", body))?;
+    Ok(stem.to_string())
 }
 
+// Always downloads <code>.zip — share_*_on_cloud uploads as .zip so the
+// extension on Litterbox is always known.
 async fn download_file(code: &str, dest: &Path) -> Result<(), String> {
     let trimmed = code.trim();
     if trimmed.is_empty() || !trimmed.chars().all(|c| c.is_ascii_alphanumeric()) {
@@ -71,7 +87,7 @@ async fn download_file(code: &str, dest: &Path) -> Result<(), String> {
     }
 
     let client = http_client()?;
-    let url = format!("https://pixeldrain.com/api/file/{}", trimmed);
+    let url = format!("{}/{}.zip", DOWNLOAD_BASE, trimmed);
     let resp = client
         .get(&url)
         .send()
@@ -112,7 +128,7 @@ fn temp_archive_path(ext: &str) -> PathBuf {
 
 #[tauri::command]
 pub async fn share_project_on_cloud(project_path: String) -> Result<String, String> {
-    let tmp = temp_archive_path("regieson");
+    let tmp = temp_archive_path("zip");
     export_to_zip(Path::new(&project_path), &tmp.to_string_lossy(), "projet.json")?;
     let result = upload_file(&tmp).await;
     let _ = fs::remove_file(&tmp);
@@ -121,7 +137,7 @@ pub async fn share_project_on_cloud(project_path: String) -> Result<String, Stri
 
 #[tauri::command]
 pub async fn share_numero_on_cloud(numero_path: String) -> Result<String, String> {
-    let tmp = temp_archive_path("regiesonnumero");
+    let tmp = temp_archive_path("zip");
     export_to_zip(Path::new(&numero_path), &tmp.to_string_lossy(), "numero.json")?;
     let result = upload_file(&tmp).await;
     let _ = fs::remove_file(&tmp);
@@ -130,7 +146,7 @@ pub async fn share_numero_on_cloud(numero_path: String) -> Result<String, String
 
 #[tauri::command]
 pub async fn import_project_from_cloud(code: String, dest_folder: String) -> Result<Project, String> {
-    let tmp = temp_archive_path("regieson");
+    let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
         let dest = PathBuf::from(&dest_folder);
@@ -145,7 +161,7 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> Res
 
 #[tauri::command]
 pub async fn import_numero_from_cloud_into_project(code: String, project_path: String) -> Result<Project, String> {
-    let tmp = temp_archive_path("regiesonnumero");
+    let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
         import_numero_into_project(tmp.to_string_lossy().to_string(), project_path)
@@ -157,7 +173,7 @@ pub async fn import_numero_from_cloud_into_project(code: String, project_path: S
 
 #[tauri::command]
 pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> Result<Project, String> {
-    let tmp = temp_archive_path("regiesonnumero");
+    let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
         let dest = PathBuf::from(&dest_folder);

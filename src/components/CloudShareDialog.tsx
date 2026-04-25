@@ -51,7 +51,7 @@ export default function CloudShareDialog({ status, code, error, onClose }: Props
               </button>
             </div>
             <p className="cloud-code-hint">
-              Hébergé sur PixelDrain — le fichier reste accessible tant qu'il est consulté régulièrement.
+              Hébergé sur Litterbox — le fichier expire automatiquement au bout de 72 heures.
             </p>
           </>
         )}
