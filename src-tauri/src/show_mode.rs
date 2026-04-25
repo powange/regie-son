@@ -8,7 +8,54 @@ pub fn set_show_mode(active: bool) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-fn set_show_mode_impl(active: bool) -> Result<(), String> {
+fn build_silent_wav() -> Vec<u8> {
+    // 100 ms of 16-bit mono silence at 22050 Hz, used to materialise the
+    // SystemSounds session without any audible output.
+    let sample_rate: u32 = 22050;
+    let num_samples: u32 = sample_rate / 10;
+    let data_size: u32 = num_samples * 2;
+    let total_size: u32 = 36 + data_size;
+    let mut wav = Vec::with_capacity(44 + data_size as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&total_size.to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes());        // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes());        // mono
+    wav.extend_from_slice(&sample_rate.to_le_bytes());
+    wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_size.to_le_bytes());
+    wav.extend(std::iter::repeat(0u8).take(data_size as usize));
+    wav
+}
+
+#[cfg(target_os = "windows")]
+fn nudge_system_sounds() {
+    use std::sync::OnceLock;
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
+    use windows::core::PCWSTR;
+
+    static SILENT_WAV: OnceLock<Vec<u8>> = OnceLock::new();
+    let wav = SILENT_WAV.get_or_init(build_silent_wav);
+
+    unsafe {
+        // With SND_MEMORY the first parameter is interpreted as a pointer to
+        // the WAVE bytes (not as a wide-char string).
+        let _ = PlaySoundW(
+            PCWSTR(wav.as_ptr() as *const u16),
+            None,
+            SND_ASYNC | SND_MEMORY | SND_NODEFAULT,
+        );
+    }
+    std::thread::sleep(std::time::Duration::from_millis(150));
+}
+
+#[cfg(target_os = "windows")]
+fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
         IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
@@ -22,7 +69,7 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let should_uninit = hr.is_ok();
 
-        let result = (|| -> Result<(), String> {
+        let result = (|| -> Result<bool, String> {
             let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
                 .map_err(|e| format!("CoCreateInstance : {}", e))?;
 
@@ -59,11 +106,7 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
                     muted_any = true;
                 }
             }
-
-            if !muted_any {
-                return Err("Session SystemSounds introuvable. Produisez un son système (ex : notification) puis réessayez.".into());
-            }
-            Ok(())
+            Ok(muted_any)
         })();
 
         if should_uninit {
@@ -72,6 +115,20 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
 
         result
     }
+}
+
+#[cfg(target_os = "windows")]
+fn set_show_mode_impl(active: bool) -> Result<(), String> {
+    if try_mute_system_sounds(active)? {
+        return Ok(());
+    }
+    // Session not yet materialised — play a 100 ms silent WAV via the
+    // SystemSounds channel so Windows creates it, then retry once.
+    nudge_system_sounds();
+    if try_mute_system_sounds(active)? {
+        return Ok(());
+    }
+    Err("Session SystemSounds introuvable. Produisez un son système (ex : notification Windows) puis réessayez.".into())
 }
 
 #[cfg(target_os = "macos")]
