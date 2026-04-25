@@ -128,19 +128,40 @@ fn temp_archive_path(ext: &str) -> PathBuf {
 
 // Validate a downloaded archive before we commit to extracting it. Catches
 // codes that point to unrelated files / wrong-kind archives so we don't
-// pollute the target folder.
+// pollute the target folder, and guides the user when the code is for the
+// other Régie Son share kind.
 fn validate_zip_archive(zip_path: &Path, expected_json: &str, kind_label: &str) -> Result<(), String> {
     use std::io::Read;
     let file = fs::File::open(zip_path)
         .map_err(|e| format!("Lecture du fichier téléchargé : {}", e))?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|_| "Le fichier reçu n'est pas une archive valide.".to_string())?;
-    let mut entry = archive.by_name(expected_json).map_err(|_| {
-        format!(
-            "Ce code ne correspond pas à un {} Régie Son ({} introuvable dans l'archive).",
-            kind_label, expected_json
-        )
-    })?;
+
+    let (other_json, other_kind) = if expected_json == "projet.json" {
+        ("numero.json", "numéro")
+    } else {
+        ("projet.json", "spectacle")
+    };
+
+    let names: Vec<String> = archive.file_names().map(String::from).collect();
+    let has_expected = names.iter().any(|n| n == expected_json);
+    let has_other = names.iter().any(|n| n == other_json);
+
+    if !has_expected {
+        if has_other {
+            return Err(format!(
+                "Ce code partage un {} Régie Son et non un {}. Utilisez l'option « Importer un {} » à la place.",
+                other_kind, kind_label, other_kind
+            ));
+        }
+        return Err(format!(
+            "Ce code ne correspond pas à un {} Régie Son.",
+            kind_label
+        ));
+    }
+
+    let mut entry = archive.by_name(expected_json)
+        .map_err(|_| format!("Archive corrompue : {} illisible.", expected_json))?;
     let mut content = String::new();
     entry
         .read_to_string(&mut content)
