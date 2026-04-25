@@ -15,7 +15,7 @@ interface Props {
   isMissing?: boolean;
   activeFade?: FadeState | null;
   onPlay: () => void;
-  onChange: (updated: AudioFile) => void;
+  onChange: (updated: AudioFile, tag?: string) => void;
   onDelete: () => void;
 }
 
@@ -127,7 +127,7 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
               max={100}
               value={volume}
               className="audio-volume-slider"
-              onChange={(e) => onChange({ ...audio, volume: Number(e.target.value) })}
+              onChange={(e) => onChange({ ...audio, volume: Number(e.target.value) }, "audio-volume:" + audio.id)}
               title={`Volume : ${volume}%`}
             />
             <span className="audio-volume-value">{volume}%</span>
@@ -153,7 +153,7 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
           type="text"
           placeholder="Top de départ…"
           value={audio.cue ?? ""}
-          onChange={(e) => onChange({ ...audio, cue: e.target.value || undefined })}
+          onChange={(e) => onChange({ ...audio, cue: e.target.value || undefined }, "audio-cue:" + audio.id)}
         />
       ) : (
         audio.cue && (

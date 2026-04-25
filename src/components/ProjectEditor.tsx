@@ -66,6 +66,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
   const UNDO_LIMIT = 50;
+  const COALESCE_WINDOW_MS = 1500;
+  const lastUpdateTagRef = useRef<string | null>(null);
+  const lastUpdateAtRef = useRef(0);
   const projectRef = useRef(project);
   projectRef.current = project;
 
@@ -110,10 +113,21 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }, 600);
   }, []);
 
-  const update = useCallback((updated: Project) => {
-    undoStackRef.current.push(projectRef.current);
-    if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
-    redoStackRef.current = [];
+  // `tag` lets callers coalesce successive pushes from the same field/control
+  // (e.g. typing in a cue input) into a single undo entry, as long as they
+  // arrive within COALESCE_WINDOW_MS.
+  const update = useCallback((updated: Project, tag?: string) => {
+    const now = performance.now();
+    const sameSession = !!tag
+      && tag === lastUpdateTagRef.current
+      && now - lastUpdateAtRef.current < COALESCE_WINDOW_MS;
+    if (!sameSession) {
+      undoStackRef.current.push(projectRef.current);
+      if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
+      redoStackRef.current = [];
+    }
+    lastUpdateTagRef.current = tag ?? null;
+    lastUpdateAtRef.current = now;
     onProjectChangeRef.current(updated);
     scheduleSave(updated);
   }, [scheduleSave]);
@@ -121,6 +135,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const undo = useCallback(() => {
     const prev = undoStackRef.current.pop();
     if (!prev) return;
+    lastUpdateTagRef.current = null;
     redoStackRef.current.push(projectRef.current);
     onProjectChangeRef.current(prev);
     scheduleSave(prev);
@@ -129,6 +144,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const redo = useCallback(() => {
     const nxt = redoStackRef.current.pop();
     if (!nxt) return;
+    lastUpdateTagRef.current = null;
     undoStackRef.current.push(projectRef.current);
     onProjectChangeRef.current(nxt);
     scheduleSave(nxt);
@@ -281,9 +297,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     update({ ...cur, numeros: [...cur.numeros, newNumero(type, count)] });
   }, [update]);
 
-  const updateNumero = useCallback((updated: Numero) => {
+  const updateNumero = useCallback((updated: Numero, tag?: string) => {
     const cur = projectRef.current;
-    update({ ...cur, numeros: cur.numeros.map((n) => (n.id === updated.id ? updated : n)) });
+    update({ ...cur, numeros: cur.numeros.map((n) => (n.id === updated.id ? updated : n)) }, tag);
   }, [update]);
 
   const deleteNumero = useCallback((id: string) => {

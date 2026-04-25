@@ -33,7 +33,7 @@ interface Props {
   playerFade: FadeState | null;
   missingFiles: Set<string>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
-  onChange: (updated: Numero) => void;
+  onChange: (updated: Numero, tag?: string) => void;
   onDelete: () => void;
   canDelete?: boolean;
   canChangeType?: boolean;
@@ -130,8 +130,12 @@ function NumeroCardInner({
     onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
   }
 
-  function updateAudio(updated: AudioFile, iIdx: number) {
-    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) });
+  function updateAudio(updated: AudioFile, iIdx: number, tag?: string) {
+    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
+  }
+
+  function updatePause(updated: PauseItem, iIdx: number, tag?: string) {
+    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
   }
 
   function addPause() {
@@ -282,7 +286,7 @@ function NumeroCardInner({
                   editMode={editMode}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
                   onPlay={() => playAt(numeroIndex, iIdx)}
-                  onChange={(updated) => onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) })}
+                  onChange={(updated, tag) => updatePause(updated, iIdx, tag)}
                   onDelete={() => deleteItem(item)}
                 />
               ) : (
@@ -296,7 +300,7 @@ function NumeroCardInner({
                   isMissing={missingFiles.has(item.filename)}
                   activeFade={isActiveNumero && playerPosition?.audioIndex === iIdx ? playerFade : null}
                   onPlay={() => playAt(numeroIndex, iIdx)}
-                  onChange={(updated) => updateAudio(updated, iIdx)}
+                  onChange={(updated, tag) => updateAudio(updated, iIdx, tag)}
                   onDelete={() => deleteItem(item)}
                 />
               )

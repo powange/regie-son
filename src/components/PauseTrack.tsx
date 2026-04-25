@@ -9,7 +9,7 @@ interface Props {
   editMode: boolean;
   isActive: boolean;
   onPlay: () => void;
-  onChange: (updated: PauseItem) => void;
+  onChange: (updated: PauseItem, tag?: string) => void;
   onDelete: () => void;
 }
 
@@ -70,7 +70,7 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
               onChange={(e) => {
                 const v = e.target.value;
                 const num = v === "" ? undefined : Number(v);
-                onChange({ ...pause, duration: num !== undefined && num >= 0 && !Number.isNaN(num) ? num : undefined });
+                onChange({ ...pause, duration: num !== undefined && num >= 0 && !Number.isNaN(num) ? num : undefined }, "pause-duration:" + pause.id);
               }}
             />
             <span>s</span>
@@ -89,7 +89,7 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
           type="text"
           placeholder="Top de départ…"
           value={pause.cue ?? ""}
-          onChange={(e) => onChange({ ...pause, cue: e.target.value || undefined })}
+          onChange={(e) => onChange({ ...pause, cue: e.target.value || undefined }, "pause-cue:" + pause.id)}
         />
       ) : (
         pause.cue && (
