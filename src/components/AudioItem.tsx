@@ -1,7 +1,7 @@
 import { memo, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
+import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
@@ -14,12 +14,13 @@ interface Props {
   isPlaying: boolean;
   isMissing?: boolean;
   activeFade?: FadeState | null;
+  fileDuration?: number;
   onPlay: () => void;
   onChange: (updated: AudioFile, tag?: string) => void;
   onDelete: () => void;
 }
 
-function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, onPlay, onChange, onDelete }: Props) {
+function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, fileDuration, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(audio.original_name);
@@ -100,6 +101,21 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
             {audio.original_name}
           </span>
         )}
+
+        {!editMode && (() => {
+          const startT = audio.startTime;
+          const endT = audio.endTime;
+          const effective = (typeof startT === "number" && typeof endT === "number" && endT > startT)
+            ? endT - startT
+            : fileDuration;
+          if (effective == null || !isFinite(effective) || effective <= 0) return null;
+          return (
+            <span className="audio-duration-badge" title="Durée">
+              <Clock size={11} />
+              {fmt(effective)}
+            </span>
+          );
+        })()}
 
         {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
           <span className="audio-badges">

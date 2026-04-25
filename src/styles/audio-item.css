@@ -234,6 +234,18 @@
   color: #c0a0f0;
 }
 
+.audio-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
 .pause-duration-field {
   display: inline-flex;
   align-items: center;

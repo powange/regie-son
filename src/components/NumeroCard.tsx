@@ -32,6 +32,7 @@ interface Props {
   isPlaying: boolean;
   playerFade: FadeState | null;
   missingFiles: Set<string>;
+  audioDurations: Map<string, number>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
   onChange: (updated: Numero, tag?: string) => void;
   onDelete: () => void;
@@ -42,7 +43,7 @@ interface Props {
 
 function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode,
-  playerPosition, isPlaying, playerFade, missingFiles, playAt,
+  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt,
   onChange, onDelete,
   canDelete = true,
   canChangeType = true,
@@ -295,6 +296,7 @@ function NumeroCardInner({
                   audio={item}
                   projectPath={projectPath}
                   editMode={editMode}
+                  fileDuration={audioDurations.get(item.filename)}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
                   isMissing={missingFiles.has(item.filename)}

@@ -6,6 +6,7 @@ import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
 import { PreflightIssue, gatherPreflight } from "../preflight";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
+import { useAudioDurations } from "../useAudioDurations";
 import {
   DndContext,
   closestCenter,
@@ -96,6 +97,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editMode ? 5 : 99999 } }));
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
+  const audioDurations = useAudioDurations(project);
 
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
@@ -438,6 +440,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 isPlaying={playerState.isPlaying}
                 playerFade={playerState.fade}
                 missingFiles={missingSet}
+                audioDurations={audioDurations}
                 playAt={playAt}
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
