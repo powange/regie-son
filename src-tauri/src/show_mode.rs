@@ -36,26 +36,36 @@ fn build_silent_wav() -> Vec<u8> {
 #[cfg(target_os = "windows")]
 fn nudge_system_sounds() {
     use std::sync::OnceLock;
-    use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
     use windows::core::PCWSTR;
 
     static SILENT_WAV: OnceLock<Vec<u8>> = OnceLock::new();
     let wav = SILENT_WAV.get_or_init(build_silent_wav);
 
     unsafe {
-        // With SND_MEMORY the first parameter is interpreted as a pointer to
-        // the WAVE bytes (not as a wide-char string).
+        // SND_MEMORY: the first parameter is a pointer to the WAVE bytes.
+        // SND_SYNC blocks until playback finishes (~100 ms) so the session
+        // is materialised before we re-enumerate.
         let _ = PlaySoundW(
             PCWSTR(wav.as_ptr() as *const u16),
             None,
-            SND_ASYNC | SND_MEMORY | SND_NODEFAULT,
+            SND_SYNC | SND_MEMORY | SND_NODEFAULT,
         );
     }
-    std::thread::sleep(std::time::Duration::from_millis(150));
+    // Extra margin in case Windows registers the session asynchronously.
+    std::thread::sleep(std::time::Duration::from_millis(400));
+}
+
+// Result of a single mute attempt. `count` is the total sessions seen,
+// useful to surface in the user-facing error if we never find SystemSounds.
+#[cfg(target_os = "windows")]
+struct MuteOutcome {
+    muted: bool,
+    session_count: u32,
 }
 
 #[cfg(target_os = "windows")]
-fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
+fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
         IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
@@ -69,7 +79,7 @@ fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let should_uninit = hr.is_ok();
 
-        let result = (|| -> Result<bool, String> {
+        let result = (|| -> Result<MuteOutcome, String> {
             let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
                 .map_err(|e| format!("CoCreateInstance : {}", e))?;
 
@@ -83,10 +93,10 @@ fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
                 .map_err(|e| format!("GetSessionEnumerator : {}", e))?;
 
             let count = session_enum.GetCount()
-                .map_err(|e| format!("GetCount : {}", e))?;
+                .map_err(|e| format!("GetCount : {}", e))? as u32;
 
             let mut muted_any = false;
-            for i in 0..count {
+            for i in 0..(count as i32) {
                 let ctrl = match session_enum.GetSession(i) {
                     Ok(c) => c,
                     Err(_) => continue,
@@ -95,8 +105,12 @@ fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                let pid = ctrl2.GetProcessId().unwrap_or(u32::MAX);
-                if pid == 0 {
+                // IsSystemSoundsSession() is the documented way to identify
+                // the SystemSounds session. It returns S_OK when true.
+                // Falls back to PID == 0 in case the API surface changes.
+                let is_system = ctrl2.IsSystemSoundsSession().is_ok()
+                    || ctrl2.GetProcessId().map(|p| p == 0).unwrap_or(false);
+                if is_system {
                     let vol: ISimpleAudioVolume = match ctrl2.cast() {
                         Ok(v) => v,
                         Err(_) => continue,
@@ -106,7 +120,7 @@ fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
                     muted_any = true;
                 }
             }
-            Ok(muted_any)
+            Ok(MuteOutcome { muted: muted_any, session_count: count })
         })();
 
         if should_uninit {
@@ -119,16 +133,22 @@ fn try_mute_system_sounds(active: bool) -> Result<bool, String> {
 
 #[cfg(target_os = "windows")]
 fn set_show_mode_impl(active: bool) -> Result<(), String> {
-    if try_mute_system_sounds(active)? {
+    let first = try_mute_system_sounds(active)?;
+    if first.muted {
         return Ok(());
     }
-    // Session not yet materialised — play a 100 ms silent WAV via the
+    // Session not yet materialised — play 100 ms of silent WAV through the
     // SystemSounds channel so Windows creates it, then retry once.
     nudge_system_sounds();
-    if try_mute_system_sounds(active)? {
+    let second = try_mute_system_sounds(active)?;
+    if second.muted {
         return Ok(());
     }
-    Err("Session SystemSounds introuvable. Produisez un son système (ex : notification Windows) puis réessayez.".into())
+    Err(format!(
+        "Session SystemSounds introuvable après réveil ({} sessions audio vues). \
+         Essayez de jouer un son Windows (notification, ding) puis recliquez.",
+        second.session_count
+    ))
 }
 
 #[cfg(target_os = "macos")]
