@@ -79,6 +79,21 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
           {isMissing ? <AlertTriangle size={13} /> : isPlaying ? <Pause size={13} /> : isActive ? <Play size={13} /> : <Music size={13} />}
         </button>
 
+        {(() => {
+          const startT = audio.startTime;
+          const endT = audio.endTime;
+          const effective = (typeof startT === "number" && typeof endT === "number" && endT > startT)
+            ? endT - startT
+            : fileDuration;
+          if (effective == null || !isFinite(effective) || effective <= 0) return null;
+          return (
+            <span className="audio-duration-badge" title="Durée">
+              <Clock size={11} />
+              {fmt(effective)}
+            </span>
+          );
+        })()}
+
         {editMode && editingName ? (
           <input
             ref={nameInputRef}
@@ -101,21 +116,6 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
             {audio.original_name}
           </span>
         )}
-
-        {!editMode && (() => {
-          const startT = audio.startTime;
-          const endT = audio.endTime;
-          const effective = (typeof startT === "number" && typeof endT === "number" && endT > startT)
-            ? endT - startT
-            : fileDuration;
-          if (effective == null || !isFinite(effective) || effective <= 0) return null;
-          return (
-            <span className="audio-duration-badge" title="Durée">
-              <Clock size={11} />
-              {fmt(effective)}
-            </span>
-          );
-        })()}
 
         {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
           <span className="audio-badges">

@@ -49,15 +49,13 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
         <button className="audio-play-btn" onClick={onPlay} title="Se positionner sur cette étape">
           {isActive ? <Play size={13} /> : <PauseCircle size={13} />}
         </button>
-        <span className="pause-track-label">
-          Pause
-          {!editMode && pause.duration != null && pause.duration > 0 && (
-            <span className="pause-duration-badge" title="Durée avant enchaînement automatique">
-              <Clock size={11} />
-              {pause.duration}s
-            </span>
-          )}
-        </span>
+        {pause.duration != null && pause.duration > 0 && (
+          <span className="pause-duration-badge" title="Durée avant enchaînement automatique">
+            <Clock size={11} />
+            {pause.duration}s
+          </span>
+        )}
+        <span className="pause-track-label">Pause</span>
         {editMode && (
           <div className="pause-duration-field" title="Durée en secondes (vide = attente manuelle)">
             <Clock size={13} />
