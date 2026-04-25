@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
-use crate::types::Project;
+use crate::types::{migrate_project, Project};
 use crate::{open_project_from_file, save_project_to_disk};
 
 // Litterbox (sister of catbox.moe) — anonymous uploads, no account required,
@@ -126,6 +126,30 @@ fn temp_archive_path(ext: &str) -> PathBuf {
     std::env::temp_dir().join(format!("regieson-{}.{}", id, ext))
 }
 
+// Validate a downloaded archive before we commit to extracting it. Catches
+// codes that point to unrelated files / wrong-kind archives so we don't
+// pollute the target folder.
+fn validate_zip_archive(zip_path: &Path, expected_json: &str, kind_label: &str) -> Result<(), String> {
+    use std::io::Read;
+    let file = fs::File::open(zip_path)
+        .map_err(|e| format!("Lecture du fichier téléchargé : {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|_| "Le fichier reçu n'est pas une archive valide.".to_string())?;
+    let mut entry = archive.by_name(expected_json).map_err(|_| {
+        format!(
+            "Ce code ne correspond pas à un {} Régie Son ({} introuvable dans l'archive).",
+            kind_label, expected_json
+        )
+    })?;
+    let mut content = String::new();
+    entry
+        .read_to_string(&mut content)
+        .map_err(|_| format!("Archive corrompue : {} illisible.", expected_json))?;
+    migrate_project(&content, String::new())
+        .map_err(|e| format!("Archive invalide : {}", e))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn share_project_on_cloud(project_path: String) -> Result<String, String> {
     let tmp = temp_archive_path("zip");
@@ -149,6 +173,7 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> Res
     let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
+        validate_zip_archive(&tmp, "projet.json", "spectacle")?;
         let dest = PathBuf::from(&dest_folder);
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
         open_project_from_file(&dest, "projet.json")
@@ -164,6 +189,7 @@ pub async fn import_numero_from_cloud_into_project(code: String, project_path: S
     let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
+        validate_zip_archive(&tmp, "numero.json", "numéro")?;
         import_numero_into_project(tmp.to_string_lossy().to_string(), project_path)
     }
     .await;
@@ -176,6 +202,7 @@ pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> Resu
     let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
+        validate_zip_archive(&tmp, "numero.json", "numéro")?;
         let dest = PathBuf::from(&dest_folder);
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
         let mut project = open_project_from_file(&dest, "numero.json")
