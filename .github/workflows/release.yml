@@ -14,6 +14,9 @@ env:
 jobs:
   release:
     strategy:
+      # One platform failing must not cancel the others: a broken Linux
+      # runner should still let the Windows and macOS artifacts ship.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
@@ -46,12 +49,22 @@ jobs:
           workspaces: src-tauri
           key: ${{ matrix.target }}
 
-      - name: Cache apt packages
+      # Installed directly rather than through cache-apt-pkgs-action: that
+      # action was pinned to @latest, silently stopped installing anything
+      # after an upstream update, and still reported success — which made the
+      # build fail much later on a missing gdk-3.0.pc.
+      - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-22.04'
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-          version: 1.0
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
 
       - name: Set version from tag
         shell: bash
