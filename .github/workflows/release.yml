@@ -12,7 +12,43 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # The release is created once, up front, as a draft. Letting each matrix job
+  # create it races: they all check for the release at the same moment, all
+  # find nothing, and every loser of that race fails on "already exists".
+  #
+  # Keeping it a draft until the very end also means /releases/latest keeps
+  # pointing at the previous good version for the whole build, instead of
+  # flipping to a half-uploaded one.
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+    steps:
+      - name: Create the draft release
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Idempotent, so re-running a failed workflow reuses its draft.
+          id=$(gh api "repos/$REPO/releases" --paginate \
+                 --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)
+          if [ -z "$id" ]; then
+            id=$(gh api "repos/$REPO/releases" \
+                   -f tag_name="$TAG" \
+                   -f name="Régie Son $TAG" \
+                   -f body="Voir les changements dans cette version." \
+                   -F draft=true -F prerelease=false --jq '.id')
+            echo "Brouillon créé : $id"
+          else
+            echo "Brouillon existant réutilisé : $id"
+          fi
+          echo "release_id=$id" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: create-release
     strategy:
       # One platform failing must not cancel the others: a broken Linux
       # runner should still let the Windows and macOS artifacts ship.
@@ -118,31 +154,32 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Régie Son ${{ github.ref_name }}"
-          releaseBody: "Voir les changements dans cette version."
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
 
-  # Strip the version from every release asset, so the README can carry
-  # permanent links: https://.../releases/latest/download/<name>
-  # Runs once after the whole matrix, so nothing races on latest.json.
+  # Renames the assets, then publishes. Runs only when every platform
+  # succeeded (the default `success()` condition): a partial build leaves the
+  # release as a draft, so /releases/latest keeps serving the last good
+  # version instead of a half-populated one.
+  #
+  # Works through the API by release id, not by tag: the by-tag endpoint does
+  # not return drafts.
   finalize:
-    needs: release
+    needs: [create-release, release]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
     steps:
       - name: Drop the version from asset names
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
           escaped="${version//./\\.}"
 
-          # "Regie.Son_0.3.41_x64-setup.exe" -> "Regie.Son_x64-setup.exe".
+          # "Regie.Son_0.3.43_x64-setup.exe" -> "Regie.Son_x64-setup.exe".
           # The tag inside a download URL is preceded by "v", never by _ or -,
           # so the [_-] guard leaves it untouched.
           while read -r id name; do
@@ -151,13 +188,39 @@ jobs:
               echo "$name -> $new"
               gh api --method PATCH "repos/$REPO/releases/assets/$id" -f name="$new" --silent
             fi
-          done < <(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[] | "\(.id) \(.name)"')
+          done < <(gh api "repos/$REPO/releases/$RELEASE_ID/assets" --paginate \
+                     --jq '.[] | "\(.id) \(.name)"')
 
-          # latest.json still points at the old URLs; rewrite them the same way.
-          mkdir -p orig patched
-          gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir orig --clobber
-          sed -E "/\"url\"/ s/[_-]${escaped}//" orig/latest.json > patched/latest.json
-          if cmp -s orig/latest.json patched/latest.json; then
-            echo "latest.json inchange" && exit 0
+      - name: Point latest.json at the renamed assets
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          escaped="${version//./\\.}"
+
+          asset_id=$(gh api "repos/$REPO/releases/$RELEASE_ID/assets" --paginate \
+                       --jq '.[] | select(.name == "latest.json") | .id')
+          if [ -z "$asset_id" ]; then
+            echo "latest.json absent de la release" >&2
+            exit 1
           fi
-          gh release upload "$TAG" patched/latest.json --repo "$REPO" --clobber
+
+          mkdir -p orig patched
+          gh api "repos/$REPO/releases/assets/$asset_id" \
+            -H "Accept: application/octet-stream" > orig/latest.json
+          sed -E "/\"url\"/ s/[_-]${escaped}//" orig/latest.json > patched/latest.json
+          python3 -c "import json,sys; json.load(open('patched/latest.json'))"
+
+          if cmp -s orig/latest.json patched/latest.json; then
+            echo "latest.json inchangé"
+            exit 0
+          fi
+          gh api --method DELETE "repos/$REPO/releases/assets/$asset_id" --silent
+          gh api --method POST \
+            "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=latest.json" \
+            -H "Content-Type: application/json" --input patched/latest.json --silent
+
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          gh api --method PATCH "repos/$REPO/releases/$RELEASE_ID" -F draft=false --silent
+          echo "Release publiée : $TAG"
