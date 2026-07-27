@@ -1,4 +1,5 @@
 mod archive;
+mod audio_session;
 mod cloud;
 mod download;
 mod file_assoc;
@@ -277,6 +278,7 @@ pub(crate) fn save_project_to_disk(project: &Project) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     show_mode::configure_wsl2_audio();
+    audio_session::start_session_namer();
 
     // Cold start: capture the file passed as CLI argument
     let initial_args: Vec<String> = std::env::args().collect();
