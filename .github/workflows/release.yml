@@ -124,3 +124,40 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
+
+  # Strip the version from every release asset, so the README can carry
+  # permanent links: https://.../releases/latest/download/<name>
+  # Runs once after the whole matrix, so nothing races on latest.json.
+  finalize:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drop the version from asset names
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          escaped="${version//./\\.}"
+
+          # "Regie.Son_0.3.41_x64-setup.exe" -> "Regie.Son_x64-setup.exe".
+          # The tag inside a download URL is preceded by "v", never by _ or -,
+          # so the [_-] guard leaves it untouched.
+          while read -r id name; do
+            new=$(printf '%s' "$name" | sed -E "s/[_-]${escaped}//")
+            if [ "$new" != "$name" ]; then
+              echo "$name -> $new"
+              gh api --method PATCH "repos/$REPO/releases/assets/$id" -f name="$new" --silent
+            fi
+          done < <(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[] | "\(.id) \(.name)"')
+
+          # latest.json still points at the old URLs; rewrite them the same way.
+          mkdir -p orig patched
+          gh release download "$TAG" --repo "$REPO" --pattern latest.json --dir orig --clobber
+          sed -E "/\"url\"/ s/[_-]${escaped}//" orig/latest.json > patched/latest.json
+          if cmp -s orig/latest.json patched/latest.json; then
+            echo "latest.json inchange" && exit 0
+          fi
+          gh release upload "$TAG" patched/latest.json --repo "$REPO" --clobber
