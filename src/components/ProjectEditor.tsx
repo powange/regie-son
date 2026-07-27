@@ -21,7 +21,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Download, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -368,7 +368,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClick={() => setShowExport(true)}
           title={isSingle ? "Exporter le numéro" : "Exporter le projet"}
         >
-          <Download size={18} />
+          <Share2 size={18} />
         </button>
         <button className="btn-icon" onClick={onOpenSettings} title="Paramètres">
           <Settings size={18} />

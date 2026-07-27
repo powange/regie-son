@@ -1,4 +1,4 @@
-import { Download, Cloud, X } from "lucide-react";
+import { FileOutput, Cloud, X } from "lucide-react";
 
 export type ExportKind = "project" | "numero";
 
@@ -29,7 +29,7 @@ export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose
 
         <div className="source-list">
           <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
-            <Download size={22} />
+            <FileOutput size={22} />
             <div className="part-option-text">
               <strong>Exporter en fichier {extLabel}</strong>
               <span>Enregistrer une archive sur le disque pour la partager manuellement.</span>

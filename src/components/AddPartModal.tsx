@@ -1,4 +1,4 @@
-import { ListMusic, Coffee, MicVocal, Upload, Cloud, X } from "lucide-react";
+import { ListMusic, Coffee, MicVocal, FileInput, Cloud, X } from "lucide-react";
 
 interface Props {
   onSelectNumero: () => void;
@@ -39,7 +39,7 @@ export default function AddPartModal({
             </div>
           </button>
           <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectImport)}>
-            <Upload size={22} />
+            <FileInput size={22} />
             <div className="part-option-text">
               <strong>Importer un numéro</strong>
               <span>Depuis un fichier .regiesonnumero exporté.</span>

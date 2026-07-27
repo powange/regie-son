@@ -1,4 +1,4 @@
-import { FolderOpen, Upload, Cloud, X } from "lucide-react";
+import { FolderOpen, FileInput, Cloud, X } from "lucide-react";
 
 export type OpenKind = "project" | "numero";
 
@@ -42,7 +42,7 @@ export default function OpenProjectModal({ kind, onSelectFolder, onSelectFile, o
             </div>
           </button>
           <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
-            <Upload size={22} />
+            <FileInput size={22} />
             <div className="part-option-text">
               <strong>Un fichier {extLabel}</strong>
               <span>{fileDesc}</span>
