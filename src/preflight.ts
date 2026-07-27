@@ -1,4 +1,6 @@
 import { Project } from "./types";
+import { BatteryStatus, LOW_BATTERY_PERCENT } from "./useBattery";
+import { formatLongDuration } from "./duration";
 
 export type PreflightSeverity = "error" | "warning";
 
@@ -9,10 +11,49 @@ export interface PreflightIssue {
   itemIndex?: number;
 }
 
+export interface ShowDuration {
+  seconds: number;
+  // False when some steps could not be measured: pauses left without a
+  // duration wait for the operator, and a file whose metadata has not been
+  // read yet contributes nothing. The real run is then longer than `seconds`.
+  complete: boolean;
+}
+
+// Playing time of the whole show. This is a floor, never an upper bound: it
+// counts no time between numeros and no untimed pause.
+export function estimateShowDuration(
+  project: Project,
+  durations: Map<string, number>,
+): ShowDuration {
+  let seconds = 0;
+  let complete = true;
+
+  for (const numero of project.numeros) {
+    for (const item of numero.items) {
+      if (item.type === "pause") {
+        if (typeof item.duration === "number") seconds += item.duration;
+        else complete = false;
+        continue;
+      }
+      const full = durations.get(item.filename);
+      const end = item.endTime ?? full;
+      if (end === undefined) {
+        complete = false;
+        continue;
+      }
+      seconds += Math.max(0, end - (item.startTime ?? 0));
+    }
+  }
+
+  return { seconds, complete };
+}
+
 interface PreflightContext {
   missingFiles: Set<string>;
   availableDeviceIds: Set<string>;
   selectedDeviceId: string | null;
+  battery: BatteryStatus | null;
+  showDuration: ShowDuration;
 }
 
 export function runPreflight(project: Project, ctx: PreflightContext): PreflightIssue[] {
@@ -23,6 +64,36 @@ export function runPreflight(project: Project, ctx: PreflightContext): Preflight
       severity: "error",
       message: "Sortie audio sélectionnée introuvable. Vérifiez vos périphériques dans les paramètres.",
     });
+  }
+
+  // Running out of battery mid-show is unrecoverable, so this is worth
+  // checking. Kept a warning rather than an error: the autonomy figure is an
+  // OS estimate, unstable and sometimes plain wrong, and an error would block
+  // the operator from starting the show at all.
+  if (ctx.battery?.state === "discharging") {
+    const left = ctx.battery.secondsRemaining;
+    if (left === null) {
+      // No autonomy estimate from the OS. Fall back on the charge level, so
+      // that "no warning" cannot quietly mean "never checked".
+      if (ctx.battery.percent < LOW_BATTERY_PERCENT) {
+        issues.push({
+          severity: "warning",
+          message:
+            `Batterie à ${Math.round(ctx.battery.percent)} %, et le système n'estime pas ` +
+            `l'autonomie restante. Branchez l'ordinateur sur le secteur.`,
+        });
+      }
+    } else if (ctx.showDuration.seconds > 0 && left < ctx.showDuration.seconds) {
+      const what = project.singleNumero ? "du numéro" : "du spectacle";
+      const atLeast = ctx.showDuration.complete ? "" : "au moins ";
+      issues.push({
+        severity: "warning",
+        message:
+          `Autonomie restante ${formatLongDuration(left)}, inférieure à la durée ${what} ` +
+          `(${atLeast}${formatLongDuration(ctx.showDuration.seconds)}). ` +
+          `Branchez l'ordinateur sur le secteur.`,
+      });
+    }
   }
 
   project.numeros.forEach((numero, nIdx) => {
@@ -80,6 +151,8 @@ export async function gatherPreflight(
   project: Project,
   missingFiles: Set<string>,
   selectedDeviceId: string | null,
+  battery: BatteryStatus | null,
+  showDuration: ShowDuration,
 ): Promise<PreflightIssue[]> {
   const availableDeviceIds = new Set<string>();
   try {
@@ -92,5 +165,11 @@ export async function gatherPreflight(
   } catch {
     /* ignore; absence of enumerateDevices is not a failure */
   }
-  return runPreflight(project, { missingFiles, availableDeviceIds, selectedDeviceId });
+  return runPreflight(project, {
+    missingFiles,
+    availableDeviceIds,
+    selectedDeviceId,
+    battery,
+    showDuration,
+  });
 }

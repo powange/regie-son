@@ -4,7 +4,9 @@ import PreflightModal from "./PreflightModal";
 import ExportModal from "./ExportModal";
 import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
-import { PreflightIssue, gatherPreflight } from "../preflight";
+import { PreflightIssue, gatherPreflight, estimateShowDuration } from "../preflight";
+import { useBattery, LOW_BATTERY_PERCENT } from "../useBattery";
+import { formatLongDuration } from "../duration";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
 import {
@@ -21,7 +23,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -98,6 +100,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
   const audioDurations = useAudioDurations(project);
+  const battery = useBattery();
 
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
@@ -216,6 +219,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       project,
       new Set(verify.missing),
       settings.audioOutputDeviceId,
+      battery,
+      estimateShowDuration(project, audioDurations),
     );
     setPreflightIssues(issues);
     setPreflightConfirmActivation(beforeActivatingShow);
@@ -332,6 +337,24 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
   }, [editMode, update]);
 
+  // Header battery readout. The autonomy is only shown when the OS provides
+  // one; a missing estimate is normal and better left blank than faked.
+  const batteryPercent = battery ? Math.round(battery.percent) : 0;
+  const batteryCharging = battery?.state === "charging";
+  const batteryTime =
+    battery && battery.secondsRemaining !== null
+      ? formatLongDuration(battery.secondsRemaining)
+      : null;
+  const BatteryIcon = batteryCharging
+    ? BatteryCharging
+    : batteryPercent <= 10
+      ? BatteryWarning
+      : batteryPercent <= 30
+        ? BatteryLow
+        : batteryPercent <= 70
+          ? BatteryMedium
+          : BatteryFull;
+
   return (
     <div className="project-editor">
       <div className="editor-header">
@@ -345,6 +368,23 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
             <div className="toggle-thumb" />
           </div>
         </label>
+
+        {battery && (
+          <div
+            className={`battery-indicator${!batteryCharging && batteryPercent < LOW_BATTERY_PERCENT ? " battery-indicator--low" : ""}`}
+            title={
+              batteryCharging
+                ? "En charge"
+                : batteryTime
+                  ? `Autonomie restante : ${batteryTime}`
+                  : "Sur batterie — autonomie non estimée par le système"
+            }
+          >
+            <BatteryIcon size={15} />
+            <span>{batteryPercent} %</span>
+            {batteryTime && <span className="battery-time">{batteryTime}</span>}
+          </div>
+        )}
 
         <button
           className="btn-icon"

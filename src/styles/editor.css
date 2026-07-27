@@ -95,3 +95,30 @@
   flex-direction: column;
   gap: 0.8rem;
 }
+
+/* Battery readout in the header. Hidden entirely on machines without a
+   battery, so a desktop tower shows nothing rather than an empty gauge. */
+.battery-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text2);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.battery-indicator .battery-time {
+  padding-left: 0.35rem;
+  border-left: 1px solid var(--border);
+}
+
+.battery-indicator--low {
+  color: #f1a6ac;
+  border-color: #6b2a2f;
+  background: #2a1215;
+}
+
+.battery-indicator--low .battery-time { border-left-color: #6b2a2f; }

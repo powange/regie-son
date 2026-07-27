@@ -1,5 +1,6 @@
 mod archive;
 mod audio_session;
+mod battery;
 mod cloud;
 mod download;
 mod file_assoc;
@@ -328,6 +329,7 @@ pub fn run() {
             download::download_audio_from_url, download::download_youtube_audio, download::cancel_download,
             download::get_yt_dlp_version, download::update_yt_dlp,
             show_mode::set_show_mode,
+            battery::get_battery_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
