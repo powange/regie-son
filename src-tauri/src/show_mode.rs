@@ -70,6 +70,7 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
         IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
     };
+    use windows::Win32::Foundation::S_OK;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
     };
@@ -96,6 +97,7 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
                 .map_err(|e| format!("GetCount : {}", e))? as u32;
 
             let mut muted_any = false;
+            let mut tree: Option<crate::audio_session::ProcessTree> = None;
             for i in 0..(count as i32) {
                 let ctrl = match session_enum.GetSession(i) {
                     Ok(c) => c,
@@ -105,11 +107,29 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                // IsSystemSoundsSession() is the documented way to identify
-                // the SystemSounds session. It returns S_OK when true.
-                // Falls back to PID == 0 in case the API surface changes.
-                let is_system = ctrl2.IsSystemSoundsSession().is_ok()
-                    || ctrl2.GetProcessId().map(|p| p == 0).unwrap_or(false);
+                let pid = ctrl2.GetProcessId().ok();
+
+                // Safety net, independent of the detection below: our own
+                // playback runs through the WebView2 child process, and muting
+                // it would silence the show itself.
+                if let Some(p) = pid {
+                    if p != 0
+                        && tree
+                            .get_or_insert_with(crate::audio_session::ProcessTree::snapshot)
+                            .is_ours(p)
+                    {
+                        continue;
+                    }
+                }
+
+                // IsSystemSoundsSession() returns S_OK for the system session
+                // and S_FALSE for every other one. Both are success codes, so
+                // windows-rs projects them to Ok(()) alike — testing .is_ok()
+                // matches every session on the endpoint and mutes the whole
+                // machine. Compare the raw HRESULT instead.
+                let hr =
+                    (Interface::vtable(&ctrl2).IsSystemSoundsSession)(Interface::as_raw(&ctrl2));
+                let is_system = hr == S_OK || pid == Some(0);
                 if is_system {
                     let vol: ISimpleAudioVolume = match ctrl2.cast() {
                         Ok(v) => v,

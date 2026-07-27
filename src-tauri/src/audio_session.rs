@@ -127,14 +127,14 @@ fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String
 // (our process -> WebView2 browser process -> audio utility process), so a
 // direct parent check is not enough.
 #[cfg(target_os = "windows")]
-struct ProcessTree {
+pub(crate) struct ProcessTree {
     parents: std::collections::HashMap<u32, u32>,
     own_pid: u32,
 }
 
 #[cfg(target_os = "windows")]
 impl ProcessTree {
-    fn snapshot() -> Self {
+    pub(crate) fn snapshot() -> Self {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::Diagnostics::ToolHelp::{
             CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -170,7 +170,7 @@ impl ProcessTree {
     // Walk up the parent chain to our own PID. Bounded: PID reuse can leave
     // the snapshot with a cycle, and a dead parent's PID may have been handed
     // to an unrelated process.
-    fn is_ours(&self, pid: u32) -> bool {
+    pub(crate) fn is_ours(&self, pid: u32) -> bool {
         let mut current = pid;
         for _ in 0..16 {
             if current == self.own_pid {
