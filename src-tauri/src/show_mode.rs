@@ -2,9 +2,28 @@ use std::fs;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
 
-#[tauri::command]
+// `async` sans fonction async : les commandes non-async tournent sur le thread
+// principal, et les deux volets bloquent — réveil de la session SystemSounds
+// sous Windows (~500 ms), poignée de main avec systemd-inhibit sous Linux.
+// Sans cet attribut, l'interface se fige à chaque bascule du mode spectacle.
+#[tauri::command(async)]
 pub fn set_show_mode(active: bool) -> Result<(), String> {
-    set_show_mode_impl(active)
+    // Les deux volets sont toujours tentés, même si l'autre échoue : un
+    // spectacle qui se joue avec les notifications encore audibles n'est pas
+    // le même problème qu'un spectacle joué sur une machine qui peut encore
+    // s'endormir, et l'opérateur doit savoir lequel des deux a renoncé.
+    let notifications = set_notifications_muted(active);
+    let sleep = crate::sleep_guard::set_sleep_inhibited(active);
+
+    let errors: Vec<String> = [notifications.err(), sleep.err()]
+        .into_iter()
+        .flatten()
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join(" · "))
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -152,7 +171,7 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn set_show_mode_impl(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> Result<(), String> {
     let first = try_mute_system_sounds(active)?;
     if first.muted {
         return Ok(());
@@ -172,7 +191,7 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn set_show_mode_impl(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> Result<(), String> {
     // Essayer AppleScript (macOS ≤ 12)
     let value = if active { "true" } else { "false" };
     let script = format!("tell application \"System Events\" to set Do Not Disturb to {}", value);
@@ -194,7 +213,7 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn set_show_mode_impl(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> Result<(), String> {
     // GNOME : inverser show-banners (false = muet)
     let value = if active { "false" } else { "true" };
     let out = Command::new("gsettings")
@@ -207,7 +226,7 @@ fn set_show_mode_impl(active: bool) -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn set_show_mode_impl(_active: bool) -> Result<(), String> {
+fn set_notifications_muted(_active: bool) -> Result<(), String> {
     Err("Mode spectacle non supporté sur cet OS.".into())
 }
 

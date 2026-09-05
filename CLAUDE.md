@@ -94,6 +94,10 @@ La clé publique est dans [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json)
 
 - `PresentationSettings.exe` existe sur Windows 11 mais est un no-op. Le mode spectacle Windows utilise maintenant WASAPI pour muter la session SystemSounds (PID 0). Nécessite crate `windows` (target-specific).
 - La session SystemSounds n'existe parfois pas au premier lancement — l'utilisateur peut avoir à produire un son système d'abord.
+- Le mode spectacle a deux volets indépendants, toujours tentés tous les deux : couper les notifications ([show_mode.rs](src-tauri/src/show_mode.rs)) et bloquer la mise en veille ([sleep_guard.rs](src-tauri/src/sleep_guard.rs)). Leurs erreurs sont concaténées par ` · ` dans un seul bandeau.
+- Le blocage de veille est conçu pour **se relâcher tout seul si le processus meurt** : thread parqué sous Windows (`ES_CONTINUOUS` est lié au thread), `caffeinate -w <pid>` sous macOS, EOF du tube `systemd-inhibit … cat` sous Linux. Ne pas remplacer par un mécanisme process-wide (`PowerCreateRequest`, D-Bus sans fd) sans conserver cette propriété.
+- La coupure des notifications, elle, n'a **pas** cette propriété : un crash ou un kill laisse les notifications muettes définitivement (dconf sous GNOME, DND macOS, session SystemSounds Windows). Connu, non corrigé.
+- `set_show_mode` est un `#[tauri::command(async)]` : les commandes non-async tournent sur le thread principal, et ses deux volets bloquent plusieurs centaines de ms. Retirer l'attribut fige l'UI.
 - `setSinkId` n'est dispo qu'en Chrome/Edge (WebView2 sur Windows). Silent fail sur les autres.
 - `response.bytes().await` buffer tout en mémoire — utiliser `chunk()` en boucle pour stream.
 - Les projets existants avec l'ancien schéma (`audio_files[]` au lieu de `items[]`) sont migrés automatiquement via `migrate_project`.

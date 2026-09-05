@@ -397,7 +397,11 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         <button
           className={`btn-show-mode${showMode ? " btn-show-mode--active" : ""}`}
           onClick={toggleShowMode}
-          title={showMode ? "Mode spectacle actif — cliquer pour désactiver" : "Activer le mode spectacle"}
+          title={
+            showMode
+              ? "Mode spectacle actif : notifications coupées, veille bloquée — cliquer pour désactiver"
+              : "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
+          }
         >
           <MonitorPlay size={15} />
           {showMode ? "Mode spectacle actif" : "Mode spectacle"}

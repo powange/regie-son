@@ -44,16 +44,21 @@
 
 .show-mode-warning {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   padding: 0.45rem 1.2rem;
   background: #2a1f0a;
   border-bottom: 1px solid #a0700040;
   font-size: 0.82rem;
+  line-height: 1.4;
   color: #d4a04a;
   flex-shrink: 0;
 }
+/* Le message peut cumuler l'échec des notifications et celui de la veille :
+   il doit pouvoir passer à la ligne sans écraser le bouton de fermeture. */
+.show-mode-warning > span { flex: 1; }
+.show-mode-warning > .btn-icon { flex-shrink: 0; }
 
 .edit-mode-toggle {
   display: flex;

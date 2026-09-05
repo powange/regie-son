@@ -5,6 +5,7 @@ mod cloud;
 mod download;
 mod file_assoc;
 mod show_mode;
+mod sleep_guard;
 mod types;
 
 use std::path::{Path, PathBuf, Component};
