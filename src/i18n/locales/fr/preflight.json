@@ -1,0 +1,14 @@
+{
+  "title": "Vérification du spectacle",
+  "allGood": "Tout est bon, aucune anomalie détectée.",
+  "audioDeviceMissing": "Sortie audio sélectionnée introuvable. Vérifiez vos périphériques dans les paramètres.",
+  "batteryLowNoEstimate": "Batterie à {{percent}} %, et le système n'estime pas l'autonomie restante. Branchez l'ordinateur sur le secteur.",
+  "batteryShorterThanShow": "Autonomie restante {{left}}, inférieure à la durée du spectacle ({{total}}). Branchez l'ordinateur sur le secteur.",
+  "batteryShorterThanShowAtLeast": "Autonomie restante {{left}}, inférieure à la durée du spectacle (au moins {{total}}). Branchez l'ordinateur sur le secteur.",
+  "batteryShorterThanAct": "Autonomie restante {{left}}, inférieure à la durée du numéro ({{total}}). Branchez l'ordinateur sur le secteur.",
+  "batteryShorterThanActAtLeast": "Autonomie restante {{left}}, inférieure à la durée du numéro (au moins {{total}}). Branchez l'ordinateur sur le secteur.",
+  "trackFileMissing": "Fichier manquant sur {{label}}",
+  "trackStartAfterEnd": "Début ≥ fin sur {{label}}",
+  "trackFadesTooLong": "Fade in + fade out plus long que la durée de lecture sur {{label}}",
+  "trackVolumeZero": "Volume à 0 sur {{label}}"
+}

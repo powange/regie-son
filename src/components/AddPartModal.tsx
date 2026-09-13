@@ -1,4 +1,5 @@
 import { ListMusic, Coffee, MicVocal, FileInput, Cloud, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   onSelectNumero: () => void;
@@ -17,6 +18,8 @@ export default function AddPartModal({
   onSelectImportCloud,
   onClose,
 }: Props) {
+  const { t } = useTranslation(["parts", "editor"]);
+
   function pick(handler: () => void) {
     onClose();
     handler();
@@ -26,7 +29,7 @@ export default function AddPartModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title-row">
-          <h2>Ajouter une partie</h2>
+          <h2>{t("editor:addPart")}</h2>
           <button className="btn-icon" onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -34,36 +37,36 @@ export default function AddPartModal({
           <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectNumero)}>
             <ListMusic size={22} />
             <div className="part-option-text">
-              <strong>Numéro</strong>
-              <span>Un passage avec ses musiques et ses pauses.</span>
+              <strong>{t("parts:act.label")}</strong>
+              <span>{t("parts:act.hint")}</span>
             </div>
           </button>
           <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectImport)}>
             <FileInput size={22} />
             <div className="part-option-text">
-              <strong>Importer un numéro</strong>
-              <span>Depuis un fichier .regiesonnumero exporté.</span>
+              <strong>{t("parts:importAct.label")}</strong>
+              <span>{t("parts:importAct.hint")}</span>
             </div>
           </button>
           <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectImportCloud)}>
             <Cloud size={22} />
             <div className="part-option-text">
-              <strong>Importer depuis le cloud</strong>
-              <span>Récupérer un numéro partagé via son code.</span>
+              <strong>{t("parts:importCloud.label")}</strong>
+              <span>{t("parts:importCloud.hint")}</span>
             </div>
           </button>
           <button className="source-option part-option part-option--entracte" onClick={() => pick(onSelectEntracte)}>
             <Coffee size={22} />
             <div className="part-option-text">
-              <strong>Entracte</strong>
-              <span>Une pause entre deux moments du spectacle.</span>
+              <strong>{t("parts:intermission.label")}</strong>
+              <span>{t("parts:intermission.hint")}</span>
             </div>
           </button>
           <button className="source-option part-option part-option--presentation" onClick={() => pick(onSelectPresentation)}>
             <MicVocal size={22} />
             <div className="part-option-text">
-              <strong>Présentation</strong>
-              <span>Un moment d'annonce ou de transition.</span>
+              <strong>{t("parts:hostSegment.label")}</strong>
+              <span>{t("parts:hostSegment.hint")}</span>
             </div>
           </button>
         </div>

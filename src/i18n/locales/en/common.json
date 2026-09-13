@@ -1,0 +1,21 @@
+{
+  "actions": {
+    "back": "Back",
+    "browse": "Browse",
+    "cancel": "Cancel",
+    "close": "Close",
+    "continue": "Continue",
+    "create": "Create",
+    "creating": "Creating...",
+    "delete": "Delete",
+    "rename": "Rename",
+    "save": "Save"
+  },
+  "duration": {
+    "minutes": "{{m}} min",
+    "hours": "{{h}}h",
+    "hoursMinutes": "{{h}}h {{m}}m"
+  },
+  "trackInAct": "\"{{track}}\" ({{act}})",
+  "settings": "Settings"
+}

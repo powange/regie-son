@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { estimateShowDuration, runPreflight, ShowDuration } from "./preflight";
+import { estimateShowDuration, runPreflight, PreflightIssueCode, ShowDuration } from "./preflight";
 import { Project, AudioFile, PauseItem } from "./types";
 import { BatteryStatus } from "./useBattery";
 
@@ -73,12 +73,12 @@ describe("battery preflight rule", () => {
   const twoHours: ShowDuration = { seconds: 7200, complete: true };
   const project = makeProject([audio("a")]);
 
-  // Both battery messages end on the same advice; matching that is more
-  // robust than matching a wording that differs between the two.
-  const isBatteryIssue = (message: string) => message.includes("sur le secteur");
+  // Issues carry codes, so the rules can be asserted without touching the
+  // wording — which is what makes these tests survive translation.
+  const isBatteryIssue = (code: PreflightIssueCode) => code.startsWith("battery");
 
   function batteryIssues(ctx: Partial<typeof baseCtx>) {
-    return runPreflight(project, { ...baseCtx, ...ctx }).filter((i) => isBatteryIssue(i.message));
+    return runPreflight(project, { ...baseCtx, ...ctx }).filter((i) => isBatteryIssue(i.code));
   }
 
   it("warns when the autonomy is shorter than the show", () => {
@@ -87,9 +87,12 @@ describe("battery preflight rule", () => {
       showDuration: twoHours,
     });
     expect(issues).toHaveLength(1);
-    expect(issues[0].severity).toBe("warning");
-    expect(issues[0].message).toContain("1 h");
-    expect(issues[0].message).toContain("2 h");
+    expect(issues[0]).toMatchObject({
+      severity: "warning",
+      code: "batteryShorterThanShow",
+      left: 3600,
+      total: 7200,
+    });
   });
 
   it("stays silent when the autonomy covers the show", () => {
@@ -123,8 +126,11 @@ describe("battery preflight rule", () => {
       showDuration: twoHours,
     });
     expect(issues).toHaveLength(1);
-    expect(issues[0].severity).toBe("warning");
-    expect(issues[0].message).toContain("12 %");
+    expect(issues[0]).toMatchObject({
+      severity: "warning",
+      code: "batteryLowNoEstimate",
+      percent: 12,
+    });
   });
 
   it("stays silent with no estimate but a comfortable charge", () => {
@@ -172,7 +178,7 @@ describe("battery preflight rule", () => {
       battery: battery({ secondsRemaining: 600 }),
       showDuration: { seconds: 3600, complete: false },
     });
-    expect(issues[0].message).toContain("au moins");
+    expect(issues[0].code).toBe("batteryShorterThanShowAtLeast");
   });
 
   it("names a standalone numero as such", () => {
@@ -180,7 +186,7 @@ describe("battery preflight rule", () => {
       ...baseCtx,
       battery: battery({ secondsRemaining: 600 }),
       showDuration: twoHours,
-    }).filter((i) => i.message.includes("sur le secteur"));
-    expect(issues[0].message).toContain("du numéro");
+    }).filter((i) => isBatteryIssue(i.code));
+    expect(issues[0].code).toBe("batteryShorterThanAct");
   });
 });

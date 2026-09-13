@@ -1,0 +1,12 @@
+{
+  "replace": {
+    "title": "Remplacer ?",
+    "closeActForShow": "Un numéro est ouvert. Le fermer pour ouvrir le spectacle importé ?",
+    "replaceShow": "Un spectacle est déjà ouvert. Le remplacer par celui importé ?",
+    "replaceAct": "Un numéro est déjà ouvert. Le remplacer par celui importé ?"
+  },
+  "errors": {
+    "import": "Erreur lors de l'import : {{detail}}",
+    "open": "Erreur à l'ouverture : {{detail}}"
+  }
+}

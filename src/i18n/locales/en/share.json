@@ -1,0 +1,39 @@
+{
+  "open": {
+    "showTitle": "Open a show",
+    "actTitle": "Open an act",
+    "folder": "A folder on this computer",
+    "folderShowHint": "Pick the folder of an existing show.",
+    "folderActHint": "Pick the folder of an existing act.",
+    "file": "A {{ext}} file",
+    "fileHint": "Unpack a {{ext}} archive into a folder on the disk.",
+    "cloud": "From the cloud",
+    "cloudHint": "Enter a code to fetch an archive shared online."
+  },
+  "export": {
+    "showTitle": "Export the show",
+    "actTitle": "Export the act",
+    "file": "Export as a {{ext}} file",
+    "fileHint": "Save an archive to the disk to share it yourself.",
+    "cloud": "Share to the cloud",
+    "cloudHint": "Upload the archive and get a code to pass on."
+  },
+  "import": {
+    "showTitle": "Fetch a show",
+    "actTitle": "Fetch an act",
+    "codeLabel": "Share code",
+    "codePlaceholder": "e.g. AbCdEf12",
+    "codeRequired": "Please enter a code.",
+    "inProgress": "Downloading and unpacking…",
+    "submit": "Fetch"
+  },
+  "cloudShare": {
+    "title": "Cloud share",
+    "uploading": "Uploading…",
+    "caption": "Pass this code on so the other person can fetch the archive:",
+    "clickToCopy": "Click to copy",
+    "copy": "Copy",
+    "expiry": "Hosted on Litterbox — the file expires automatically after 72 hours.",
+    "unknownError": "Unknown error"
+  }
+}

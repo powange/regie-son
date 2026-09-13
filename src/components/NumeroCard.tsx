@@ -22,6 +22,8 @@ import { PlayerPosition, FadeState } from "../usePlayer";
 import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
 import PauseTrack from "./PauseTrack";
+import { useTranslation } from "react-i18next";
+
 
 interface Props {
   numero: Numero;
@@ -49,6 +51,7 @@ function NumeroCardInner({
   canChangeType = true,
   showDragHandle = true,
 }: Props) {
+  const { t } = useTranslation(["parts", "audio", "common"]);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(numero.name);
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -164,16 +167,16 @@ function NumeroCardInner({
   }
 
   const typeBadge: Record<string, string> = {
-    numero: "Numéro",
-    entracte: "Entracte",
-    presentation: "Présentation",
+    numero: t("parts:act.label"),
+    entracte: t("parts:intermission.label"),
+    presentation: t("parts:hostSegment.label"),
   };
 
   const typeCanBeChanged = editMode && canChangeType;
   const typeOptions: { id: NumeroType; label: string; icon: typeof ListMusic }[] = [
-    { id: "numero", label: "Numéro", icon: ListMusic },
-    { id: "entracte", label: "Entracte", icon: Coffee },
-    { id: "presentation", label: "Présentation", icon: MicVocal },
+    { id: "numero", label: t("parts:act.label"), icon: ListMusic },
+    { id: "entracte", label: t("parts:intermission.label"), icon: Coffee },
+    { id: "presentation", label: t("parts:hostSegment.label"), icon: MicVocal },
   ];
 
   return (
@@ -200,7 +203,7 @@ function NumeroCardInner({
               ref={typeBtnRef}
               className="numero-type-badge numero-type-badge--clickable"
               onClick={() => (showTypeMenu ? setShowTypeMenu(false) : openTypeMenu())}
-              title="Changer le type"
+              title={t("parts:changeType")}
             >
               {typeBadge[numero.type] ?? numero.type}
               <ChevronDown size={12} />
@@ -256,12 +259,12 @@ function NumeroCardInner({
             <button
               className="btn-icon"
               onClick={() => { setEditName(numero.name); setEditing(true); }}
-              title="Renommer"
+              title={t("common:actions.rename")}
             >
               <Pencil size={14} />
             </button>
             {canDelete && (
-              <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
+              <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
                 <Trash2 size={14} />
               </button>
             )}
@@ -271,7 +274,7 @@ function NumeroCardInner({
 
       <div className="numero-body">
         {numero.items.length === 0 && (
-          <p className="numero-body-empty">Aucun élément — ajoutez une musique ou une pause.</p>
+          <p className="numero-body-empty">{t("parts:emptyAct")}</p>
         )}
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleItemDragEnd}>
@@ -314,7 +317,7 @@ function NumeroCardInner({
           <div className="add-item-bar">
             <button className="add-audio-btn" onClick={() => setShowSourceModal(true)}>
               <Plus size={14} />
-              Ajouter une étape
+              {t("audio:addStep")}
             </button>
           </div>
         )}

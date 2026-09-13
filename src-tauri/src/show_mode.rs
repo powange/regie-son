@@ -1,4 +1,6 @@
 use std::fs;
+
+use crate::error::{AppError, AppResult};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
 
@@ -7,7 +9,7 @@ use std::process::Command;
 // sous Windows (~500 ms), poignée de main avec systemd-inhibit sous Linux.
 // Sans cet attribut, l'interface se fige à chaque bascule du mode spectacle.
 #[tauri::command(async)]
-pub fn set_show_mode(active: bool) -> Result<(), String> {
+pub fn set_show_mode(active: bool) -> Result<(), Vec<AppError>> {
     // Les deux volets sont toujours tentés, même si l'autre échoue : un
     // spectacle qui se joue avec les notifications encore audibles n'est pas
     // le même problème qu'un spectacle joué sur une machine qui peut encore
@@ -15,15 +17,11 @@ pub fn set_show_mode(active: bool) -> Result<(), String> {
     let notifications = set_notifications_muted(active);
     let sleep = crate::sleep_guard::set_sleep_inhibited(active);
 
-    let errors: Vec<String> = [notifications.err(), sleep.err()]
+    let errors: Vec<AppError> = [notifications.err(), sleep.err()]
         .into_iter()
         .flatten()
         .collect();
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors.join(" · "))
-    }
+    if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
 
 #[cfg(target_os = "windows")]
@@ -84,7 +82,7 @@ struct MuteOutcome {
 }
 
 #[cfg(target_os = "windows")]
-fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
+fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
         IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
@@ -99,21 +97,21 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let should_uninit = hr.is_ok();
 
-        let result = (|| -> Result<MuteOutcome, String> {
+        let result = (|| -> AppResult<MuteOutcome> {
             let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-                .map_err(|e| format!("CoCreateInstance : {}", e))?;
+                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "CoCreateInstance").detail(e))?;
 
             let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)
-                .map_err(|e| format!("GetDefaultAudioEndpoint : {}", e))?;
+                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetDefaultAudioEndpoint").detail(e))?;
 
             let session_mgr: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)
-                .map_err(|e| format!("Activate IAudioSessionManager2 : {}", e))?;
+                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "Activate IAudioSessionManager2").detail(e))?;
 
             let session_enum = session_mgr.GetSessionEnumerator()
-                .map_err(|e| format!("GetSessionEnumerator : {}", e))?;
+                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetSessionEnumerator").detail(e))?;
 
             let count = session_enum.GetCount()
-                .map_err(|e| format!("GetCount : {}", e))? as u32;
+                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetCount").detail(e))? as u32;
 
             let mut muted_any = false;
             let mut tree: Option<crate::audio_session::ProcessTree> = None;
@@ -155,7 +153,7 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
                         Err(_) => continue,
                     };
                     vol.SetMute(active, std::ptr::null())
-                        .map_err(|e| format!("SetMute : {}", e))?;
+                        .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "SetMute").detail(e))?;
                     muted_any = true;
                 }
             }
@@ -171,7 +169,7 @@ fn try_mute_system_sounds(active: bool) -> Result<MuteOutcome, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn set_notifications_muted(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> AppResult<()> {
     let first = try_mute_system_sounds(active)?;
     if first.muted {
         return Ok(());
@@ -183,15 +181,11 @@ fn set_notifications_muted(active: bool) -> Result<(), String> {
     if second.muted {
         return Ok(());
     }
-    Err(format!(
-        "Session SystemSounds introuvable après réveil ({} sessions audio vues). \
-         Essayez de jouer un son Windows (notification, ding) puis recliquez.",
-        second.session_count
-    ))
+    Err(AppError::new("showMode.systemSoundsNotFound").with("count", second.session_count))
 }
 
 #[cfg(target_os = "macos")]
-fn set_notifications_muted(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> AppResult<()> {
     // Essayer AppleScript (macOS ≤ 12)
     let value = if active { "true" } else { "false" };
     let script = format!("tell application \"System Events\" to set Do Not Disturb to {}", value);
@@ -203,31 +197,31 @@ fn set_notifications_muted(active: bool) -> Result<(), String> {
     let out = Command::new("defaults")
         .args(["-currentHost", "write", "com.apple.notificationcenterui", "doNotDisturb", "-boolean", bool_val])
         .output()
-        .map_err(|e| format!("Erreur : {}", e))?;
+        .map_err(|e| AppError::new("showMode.appleScriptFailed").detail(e))?;
     if out.status.success() {
         let _ = Command::new("killall").arg("NotificationCenter").output();
         Ok(())
     } else {
-        Err("Activez manuellement le mode Ne pas déranger dans Réglages Système > Notifications.".into())
+        Err(AppError::new("showMode.macosManual"))
     }
 }
 
 #[cfg(target_os = "linux")]
-fn set_notifications_muted(active: bool) -> Result<(), String> {
+fn set_notifications_muted(active: bool) -> AppResult<()> {
     // GNOME : inverser show-banners (false = muet)
     let value = if active { "false" } else { "true" };
     let out = Command::new("gsettings")
         .args(["set", "org.gnome.desktop.notifications", "show-banners", value])
         .output()
-        .map_err(|_| "gsettings non disponible. Activez manuellement le mode Ne pas déranger.".to_string())?;
+        .map_err(|_| AppError::new("showMode.gsettingsMissing"))?;
     if out.status.success() { Ok(()) } else {
-        Err("Impossible de modifier les notifications GNOME. Activez manuellement le mode Ne pas déranger.".into())
+        Err(AppError::new("showMode.gnomeFailed"))
     }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn set_notifications_muted(_active: bool) -> Result<(), String> {
-    Err("Mode spectacle non supporté sur cet OS.".into())
+fn set_notifications_muted(_active: bool) -> AppResult<()> {
+    Err(AppError::new("showMode.unsupportedOs"))
 }
 
 pub fn configure_wsl2_audio() {

@@ -1,4 +1,6 @@
 import { FolderOpen, FileInput, Cloud, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
 
 export type OpenKind = "project" | "numero";
 
@@ -11,14 +13,15 @@ interface Props {
 }
 
 export default function OpenProjectModal({ kind, onSelectFolder, onSelectFile, onSelectCloud, onClose }: Props) {
+  const { t } = useTranslation(["share"]);
   const isProject = kind === "project";
-  const title = isProject ? "Ouvrir un spectacle" : "Ouvrir un numéro";
+  const title = isProject ? t("share:open.showTitle") : t("share:open.actTitle");
   const extLabel = isProject ? ".regieson" : ".regiesonnumero";
   const folderDesc = isProject
-    ? "Choisir le dossier d'un spectacle existant."
-    : "Choisir le dossier d'un numéro existant.";
-  const fileDesc = `Décompresser une archive ${extLabel} dans un dossier du disque.`;
-  const cloudDesc = "Saisir un code pour récupérer une archive partagée en ligne.";
+    ? t("share:open.folderShowHint")
+    : t("share:open.folderActHint");
+  const fileDesc = t("share:open.fileHint", { ext: extLabel });
+  const cloudDesc = t("share:open.cloudHint");
 
   function pick(handler: () => void) {
     onClose();
@@ -37,21 +40,21 @@ export default function OpenProjectModal({ kind, onSelectFolder, onSelectFile, o
           <button className="source-option part-option" onClick={() => pick(onSelectFolder)}>
             <FolderOpen size={22} />
             <div className="part-option-text">
-              <strong>Un dossier sur l'ordinateur</strong>
+              <strong>{t("share:open.folder")}</strong>
               <span>{folderDesc}</span>
             </div>
           </button>
           <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
             <FileInput size={22} />
             <div className="part-option-text">
-              <strong>Un fichier {extLabel}</strong>
+              <strong>{t("share:open.file", { ext: extLabel })}</strong>
               <span>{fileDesc}</span>
             </div>
           </button>
           <button className="source-option part-option" onClick={() => pick(onSelectCloud)}>
             <Cloud size={22} />
             <div className="part-option-text">
-              <strong>Sur le cloud</strong>
+              <strong>{t("share:open.cloud")}</strong>
               <span>{cloudDesc}</span>
             </div>
           </button>

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::error::{AppError, AppResult, fail};
+
 pub fn default_volume() -> f64 { 100.0 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -84,13 +86,13 @@ struct LegacyProject {
     single_numero: Option<bool>,
 }
 
-pub fn migrate_project(raw: &str, path: String) -> Result<Project, String> {
+pub fn migrate_project(raw: &str, path: String) -> AppResult<Project> {
     let legacy: LegacyProject = serde_json::from_str(raw)
-        .map_err(|e| format!("Fichier projet invalide : {}", e))?;
-    let numeros: Result<Vec<Numero>, String> = legacy.numeros.into_iter().map(|n| {
+        .map_err(fail("project.invalidFile"))?;
+    let numeros: AppResult<Vec<Numero>> = legacy.numeros.into_iter().map(|n| {
         let items: Vec<PlaylistItem> = if !n.items.is_empty() {
             serde_json::from_value(serde_json::Value::Array(n.items))
-                .map_err(|e| format!("Items invalides pour « {} » : {}", n.name, e))?
+                .map_err(|e| AppError::new("project.invalidItems").with("name", &n.name).detail(e))?
         } else {
             n.audio_files.into_iter().map(|af| PlaylistItem::Audio(AudioFile {
                 id: af.id,

@@ -6,12 +6,15 @@
 // processus fils dont la durée de vie est arrimée à la nôtre. Un plantage ne
 // peut donc pas laisser la machine éveillée indéfiniment.
 
-pub fn set_sleep_inhibited(active: bool) -> Result<(), String> {
+use crate::error::AppResult;
+
+pub fn set_sleep_inhibited(active: bool) -> AppResult<()> {
     imp::set(active)
 }
 
 #[cfg(target_os = "windows")]
 mod imp {
+    use crate::error::{AppError, AppResult};
     use std::sync::mpsc::{self, Sender};
     use std::sync::Mutex;
     use std::thread;
@@ -21,7 +24,7 @@ mod imp {
     // rendre la main.
     static GUARD: Mutex<Option<Sender<()>>> = Mutex::new(None);
 
-    pub fn set(active: bool) -> Result<(), String> {
+    pub fn set(active: bool) -> AppResult<()> {
         let mut guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
         if !active {
@@ -33,7 +36,7 @@ mod imp {
         }
 
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
-        let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
+        let (ready_tx, ready_rx) = mpsc::channel::<AppResult<()>>();
 
         thread::spawn(move || {
             use windows::Win32::System::Power::{
@@ -51,10 +54,7 @@ mod imp {
             };
             // 0 est la seule valeur d'échec documentée.
             if previous == EXECUTION_STATE::default() {
-                let _ = ready_tx.send(Err(
-                    "Impossible d'empêcher la mise en veille (SetThreadExecutionState a échoué)."
-                        .into(),
-                ));
+                let _ = ready_tx.send(Err(AppError::new("sleep.windowsFailed")));
                 return;
             }
             let _ = ready_tx.send(Ok(()));
@@ -71,19 +71,20 @@ mod imp {
                 Ok(())
             }
             Ok(Err(e)) => Err(e),
-            Err(_) => Err("Impossible d'empêcher la mise en veille (thread interrompu).".into()),
+            Err(_) => Err(AppError::new("sleep.threadInterrupted")),
         }
     }
 }
 
 #[cfg(target_os = "macos")]
 mod imp {
+    use crate::error::{fail, AppResult};
     use std::process::{Child, Command, Stdio};
     use std::sync::Mutex;
 
     static GUARD: Mutex<Option<Child>> = Mutex::new(None);
 
-    pub fn set(active: bool) -> Result<(), String> {
+    pub fn set(active: bool) -> AppResult<()> {
         let mut guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(mut child) = guard.take() {
@@ -103,13 +104,7 @@ mod imp {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|e| {
-                format!(
-                    "Impossible d'empêcher la mise en veille (caffeinate : {}). \
-                     Désactivez la veille manuellement dans Réglages Système > Batterie.",
-                    e
-                )
-            })?;
+            .map_err(fail("sleep.caffeinateFailed"))?;
 
         *guard = Some(child);
         Ok(())
@@ -118,6 +113,7 @@ mod imp {
 
 #[cfg(target_os = "linux")]
 mod imp {
+    use crate::error::{AppError, AppResult};
     use std::io::Read;
     use std::process::{Child, Command, Stdio};
     use std::sync::mpsc;
@@ -131,7 +127,7 @@ mod imp {
 
     static GUARD: Mutex<Option<Child>> = Mutex::new(None);
 
-    pub fn set(active: bool) -> Result<(), String> {
+    pub fn set(active: bool) -> AppResult<()> {
         let mut guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(mut child) = guard.take() {
@@ -171,18 +167,14 @@ mod imp {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|_| {
-                "Impossible d'empêcher la mise en veille : systemd-inhibit est introuvable. \
-                 Désactivez la veille manuellement."
-                    .to_string()
-            })?;
+            .map_err(|_| AppError::new("sleep.systemdInhibitMissing"))?;
 
         // La lecture est déportée sur un thread : c'est le seul moyen de lui
         // imposer un délai maximal, un tube n'ayant pas de lecture bornée dans
         // le temps en std.
         let mut stdout = match child.stdout.take() {
             Some(s) => s,
-            None => return Err("Impossible d'empêcher la mise en veille (tube absent).".into()),
+            None => return Err(AppError::new("sleep.pipeMissing")),
         };
         let (tx, rx) = mpsc::channel::<bool>();
         thread::spawn(move || {
@@ -204,21 +196,18 @@ mod imp {
             .wait_with_output()
             .map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string())
             .unwrap_or_default();
-        Err(format!(
-            "Impossible d'empêcher la mise en veille : systemd-inhibit n'a pas pris le \
-             verrou{}. Désactivez la veille manuellement.",
-            if detail.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", detail)
-            }
-        ))
+        Err(if detail.is_empty() {
+            AppError::new("sleep.systemdInhibitNoLock")
+        } else {
+            AppError::new("sleep.systemdInhibitNoLockDetail").detail(detail)
+        })
     }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 mod imp {
-    pub fn set(_active: bool) -> Result<(), String> {
-        Err("Blocage de la mise en veille non supporté sur cet OS.".into())
+    use crate::error::{AppError, AppResult};
+    pub fn set(_active: bool) -> AppResult<()> {
+        Err(AppError::new("sleep.unsupportedOs"))
     }
 }

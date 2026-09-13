@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
+import { translateError } from "../errorMessage";
 import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings } from "lucide-react";
 import { Project } from "../types";
 import { RecentProject } from "../useRecentProjects";
@@ -23,6 +25,7 @@ export default function HomePage({
   onRemoveRecent, onRemoveNumeroRecent,
   onOpenSettings,
 }: Props) {
+  const { t, i18n } = useTranslation(["home", "common"]);
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateNumero, setShowCreateNumero] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export default function HomePage({
       const project = await invoke<Project>("open_project", { projectPath: folderPath });
       onProjectOpen(project);
     } catch (err) {
-      setOpenError("Impossible d'ouvrir ce projet : " + err);
+      setOpenError(t("home:errors.openProject", { detail: translateError(err) }));
     }
   }
 
@@ -51,7 +54,7 @@ export default function HomePage({
       const project = await invoke<Project>("import_project", { srcFile, destFolder });
       onProjectOpen(project);
     } catch (err) {
-      setOpenError("Impossible d'importer : " + err);
+      setOpenError(t("home:errors.import", { detail: translateError(err) }));
     }
   }
 
@@ -61,7 +64,7 @@ export default function HomePage({
       const project = await invoke<Project>("open_project", { projectPath: recent.path });
       onProjectOpen(project);
     } catch {
-      setOpenError(`Projet introuvable : "${recent.name}". Il a peut-être été déplacé ou supprimé.`);
+      setOpenError(t("home:errors.projectNotFound", { name: recent.name }));
       onRemoveRecent(recent.path);
     }
   }
@@ -74,7 +77,7 @@ export default function HomePage({
       const project = await invoke<Project>("open_numero", { numeroPath: folderPath });
       onNumeroOpen(project);
     } catch (err) {
-      setOpenError("Impossible d'ouvrir ce numéro : " + err);
+      setOpenError(t("home:errors.openAct", { detail: translateError(err) }));
     }
   }
 
@@ -88,7 +91,7 @@ export default function HomePage({
       const project = await invoke<Project>("import_numero_standalone", { srcFile, destFolder });
       onNumeroOpen(project);
     } catch (err) {
-      setOpenError("Impossible d'importer : " + err);
+      setOpenError(t("home:errors.import", { detail: translateError(err) }));
     }
   }
 
@@ -98,7 +101,7 @@ export default function HomePage({
       const project = await invoke<Project>("open_numero", { numeroPath: recent.path });
       onNumeroOpen(project);
     } catch {
-      setOpenError(`Numéro introuvable : "${recent.name}". Il a peut-être été déplacé ou supprimé.`);
+      setOpenError(t("home:errors.actNotFound", { name: recent.name }));
       onRemoveNumeroRecent(recent.path);
     }
   }
@@ -116,44 +119,45 @@ export default function HomePage({
 
   function formatDate(iso: string) {
     const d = new Date(iso);
-    return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    return d.toLocaleDateString(i18n.language, { day: "numeric", month: "short", year: "numeric" });
   }
 
   return (
     <div className="home-page">
-      <button className="home-settings-btn" onClick={onOpenSettings} title="Paramètres">
+      <button className="home-settings-btn" onClick={onOpenSettings} title={t("common:settings")}>
         <Settings size={20} />
       </button>
       <div className="home-logo">
         <Music2 size={56} color="#e94560" strokeWidth={1.5} />
+        {/* i18next-instrument-ignore-next-line — marque, jamais traduite */}
         <h1>Régie Son</h1>
-        <p>Gestion audio pour spectacles cabaret</p>
+        <p>{t("home:tagline")}</p>
       </div>
 
       <div className="home-actions-group">
-        <h3 className="home-actions-title">Spectacle</h3>
+        <h3 className="home-actions-title">{t("home:show.sectionTitle")}</h3>
         <div className="home-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
             <Plus size={18} />
-            Nouveau spectacle
+            {t("home:show.create")}
           </button>
           <button className="btn-secondary" onClick={() => setShowOpen("project")}>
             <FolderOpen size={18} />
-            Ouvrir un spectacle
+            {t("home:show.open")}
           </button>
         </div>
       </div>
 
       <div className="home-actions-group">
-        <h3 className="home-actions-title">Numéro</h3>
+        <h3 className="home-actions-title">{t("home:act.sectionTitle")}</h3>
         <div className="home-actions">
           <button className="btn-primary" onClick={() => setShowCreateNumero(true)}>
             <Plus size={18} />
-            Nouveau numéro
+            {t("home:act.create")}
           </button>
           <button className="btn-secondary" onClick={() => setShowOpen("numero")}>
             <FolderOpen size={18} />
-            Ouvrir un numéro
+            {t("home:act.open")}
           </button>
         </div>
       </div>
@@ -169,7 +173,7 @@ export default function HomePage({
         <div className="recents">
           <div className="recents-header">
             <Clock size={14} />
-            Spectacles récents
+            {t("home:show.recents")}
           </div>
           <div className="recents-list">
             {recents.map((r) => (
@@ -181,7 +185,7 @@ export default function HomePage({
                 <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
                 <button
                   className="recent-item-remove"
-                  title="Retirer de la liste"
+                  title={t("home:removeFromList")}
                   onClick={(e) => { e.stopPropagation(); onRemoveRecent(r.path); }}
                 >
                   <X size={13} />
@@ -196,7 +200,7 @@ export default function HomePage({
         <div className="recents">
           <div className="recents-header">
             <Clock size={14} />
-            Numéros récents
+            {t("home:act.recents")}
           </div>
           <div className="recents-list">
             {numeroRecents.map((r) => (
@@ -208,7 +212,7 @@ export default function HomePage({
                 <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
                 <button
                   className="recent-item-remove"
-                  title="Retirer de la liste"
+                  title={t("home:removeFromList")}
                   onClick={(e) => { e.stopPropagation(); onRemoveNumeroRecent(r.path); }}
                 >
                   <X size={13} />
@@ -268,6 +272,7 @@ function slugify(name: string) {
 }
 
 function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
+  const { t } = useTranslation(["home", "common"]);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -298,13 +303,13 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
         setFolderPath(slug ? path + sep + slug : path);
       }
     } catch (err) {
-      setError("Impossible d'ouvrir le sélecteur : " + err);
+      setError(t("home:errors.folderPicker", { detail: translateError(err) }));
     }
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError("Veuillez saisir un nom de spectacle."); return; }
-    if (!folderPath) { setError("Veuillez choisir un dossier."); return; }
+    if (!name.trim()) { setError(t("home:createShow.nameRequired")); return; }
+    if (!folderPath) { setError(t("home:folderRequired")); return; }
     setLoading(true);
     setError("");
     try {
@@ -314,7 +319,7 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
       });
       onCreated(project);
     } catch (err) {
-      setError(String(err));
+      setError(translateError(err));
     } finally {
       setLoading(false);
     }
@@ -323,42 +328,42 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h2>Nouveau spectacle</h2>
+        <h2>{t("home:createShow.title")}</h2>
 
         <div className="modal-field">
-          <label>Nom du spectacle</label>
+          <label>{t("home:createShow.nameLabel")}</label>
           <input
             type="text"
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Ex : Cabaret de printemps 2025"
+            placeholder={t("home:createShow.namePlaceholder")}
             autoFocus
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
         </div>
 
         <div className="modal-field">
-          <label>Dossier du projet</label>
+          <label>{t("home:createShow.folderLabel")}</label>
           <div className="folder-pick">
             <input
               type="text"
               value={folderPath}
               onChange={(e) => setFolderPath(e.target.value)}
-              placeholder="Chemin du dossier..."
+              placeholder={t("home:folderPlaceholder")}
             />
-            <button className="btn-secondary" onClick={pickFolder}>Parcourir</button>
+            <button className="btn-secondary" onClick={pickFolder}>{t("common:actions.browse")}</button>
           </div>
           <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
-            Le dossier sera créé s'il n'existe pas.
+            {t("home:folderWillBeCreated")}
           </span>
         </div>
 
         {error && <p className="modal-error">{error}</p>}
 
         <div className="modal-actions">
-          <button className="btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn-ghost" onClick={onClose}>{t("common:actions.cancel")}</button>
           <button className="btn-primary" onClick={handleCreate} disabled={loading}>
-            {loading ? "Création..." : "Créer"}
+            {loading ? t("common:actions.creating") : t("common:actions.create")}
           </button>
         </div>
       </div>
@@ -367,6 +372,7 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
 }
 
 function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
+  const { t } = useTranslation(["home", "common"]);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -397,13 +403,13 @@ function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
         setFolderPath(slug ? path + sep + slug : path);
       }
     } catch (err) {
-      setError("Impossible d'ouvrir le sélecteur : " + err);
+      setError(t("home:errors.folderPicker", { detail: translateError(err) }));
     }
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError("Veuillez saisir un nom de numéro."); return; }
-    if (!folderPath) { setError("Veuillez choisir un dossier."); return; }
+    if (!name.trim()) { setError(t("home:createAct.nameRequired")); return; }
+    if (!folderPath) { setError(t("home:folderRequired")); return; }
     setLoading(true);
     setError("");
     try {
@@ -413,7 +419,7 @@ function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
       });
       onCreated(project);
     } catch (err) {
-      setError(String(err));
+      setError(translateError(err));
     } finally {
       setLoading(false);
     }
@@ -422,42 +428,42 @@ function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <h2>Nouveau numéro</h2>
+        <h2>{t("home:createAct.title")}</h2>
 
         <div className="modal-field">
-          <label>Nom du numéro</label>
+          <label>{t("home:createAct.nameLabel")}</label>
           <input
             type="text"
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Ex : Tango de la rose"
+            placeholder={t("home:createAct.namePlaceholder")}
             autoFocus
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
         </div>
 
         <div className="modal-field">
-          <label>Dossier du numéro</label>
+          <label>{t("home:createAct.folderLabel")}</label>
           <div className="folder-pick">
             <input
               type="text"
               value={folderPath}
               onChange={(e) => setFolderPath(e.target.value)}
-              placeholder="Chemin du dossier..."
+              placeholder={t("home:folderPlaceholder")}
             />
-            <button className="btn-secondary" onClick={pickFolder}>Parcourir</button>
+            <button className="btn-secondary" onClick={pickFolder}>{t("common:actions.browse")}</button>
           </div>
           <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
-            Le dossier sera créé s'il n'existe pas.
+            {t("home:folderWillBeCreated")}
           </span>
         </div>
 
         {error && <p className="modal-error">{error}</p>}
 
         <div className="modal-actions">
-          <button className="btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn-ghost" onClick={onClose}>{t("common:actions.cancel")}</button>
           <button className="btn-primary" onClick={handleCreate} disabled={loading}>
-            {loading ? "Création..." : "Créer"}
+            {loading ? t("common:actions.creating") : t("common:actions.create")}
           </button>
         </div>
       </div>

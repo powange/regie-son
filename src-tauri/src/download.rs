@@ -9,6 +9,7 @@ use serde::Serialize;
 use tauri::Emitter;
 use tokio::sync::Notify;
 
+use crate::error::{AppError, AppResult, fail, missing};
 use crate::types::AudioFile;
 
 pub const MAX_AUDIO_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
@@ -47,7 +48,11 @@ pub fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
 }
 
 #[derive(Serialize, Clone)]
-struct YtDlpProgress { step: String }
+struct YtDlpProgress {
+    step: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+}
 
 fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
     #[allow(unused_mut)]
@@ -153,16 +158,16 @@ fn cleanup_partial_files(musiques_dir: &Path, id: &str) {
 }
 
 #[tauri::command]
-pub async fn download_youtube_audio(url: String, project_path: String, download_id: String, app: tauri::AppHandle) -> Result<AudioFile, String> {
+pub async fn download_youtube_audio(url: String, project_path: String, download_id: String, app: tauri::AppHandle) -> AppResult<AudioFile> {
     let guard = DownloadGuard::new(download_id);
     let yt_dlp = find_yt_dlp_with_app(&app);
 
     let check = silent_command(&yt_dlp).arg("--version").output();
     if check.is_err() || !check.unwrap().status.success() {
-        return Err("yt-dlp est introuvable dans cette installation.".into());
+        return Err(AppError::new("download.ytDlpMissing"));
     }
 
-    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: "Récupération des informations de la vidéo…".into() });
+    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: "fetchingInfo", title: None });
 
     let title_out = silent_command(&yt_dlp)
         .args([
@@ -173,7 +178,7 @@ pub async fn download_youtube_audio(url: String, project_path: String, download_
             &url,
         ])
         .output()
-        .map_err(|e| format!("Erreur yt-dlp : {}", e))?;
+        .map_err(fail("download.ytDlpFailed"))?;
 
     let title = if title_out.status.success() {
         String::from_utf8_lossy(&title_out.stdout)
@@ -188,7 +193,10 @@ pub async fn download_youtube_audio(url: String, project_path: String, download_
     };
     let title_display = if title.is_empty() { "YouTube audio".to_string() } else { title.clone() };
 
-    let _ = app.emit("yt-dlp-progress", YtDlpProgress { step: format!("Téléchargement de « {} »…", title_display) });
+    let _ = app.emit(
+        "yt-dlp-progress",
+        YtDlpProgress { step: "downloading", title: Some(title_display.clone()) },
+    );
 
     let id = uuid::Uuid::new_v4().to_string();
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
@@ -211,24 +219,24 @@ pub async fn download_youtube_audio(url: String, project_path: String, download_
         r = cmd.output() => r,
         _ = guard.token.wait() => {
             cleanup_partial_files(&musiques_dir, &id);
-            return Err("Téléchargement annulé.".into());
+            return Err(AppError::new("download.cancelled"));
         }
     };
 
-    let download = download_result.map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+    let download = download_result.map_err(fail("download.failed"))?;
 
     if !download.status.success() {
         let stderr = String::from_utf8_lossy(&download.stderr).to_string();
         cleanup_partial_files(&musiques_dir, &id);
-        return Err(format!("Erreur yt-dlp : {}", stderr.lines().last().unwrap_or(&stderr)));
+        return Err(AppError::new("download.ytDlpFailed").detail(stderr.lines().last().unwrap_or(&stderr)));
     }
 
     // Trouver le fichier créé (l'extension peut varier si ffmpeg est absent)
     let entry = fs::read_dir(&musiques_dir)
-        .map_err(|e| format!("Erreur : {}", e))?
+        .map_err(fail("download.unexpected"))?
         .filter_map(|e| e.ok())
         .find(|e| e.file_name().to_string_lossy().starts_with(&id))
-        .ok_or("Fichier introuvable après téléchargement")?;
+        .ok_or_else(missing("download.fileNotFoundAfter"))?;
 
     let filename = entry.file_name().to_string_lossy().to_string();
     let ext = Path::new(&filename).extension().unwrap_or_default().to_string_lossy();
@@ -239,7 +247,7 @@ pub async fn download_youtube_audio(url: String, project_path: String, download_
 }
 
 #[tauri::command]
-pub async fn download_audio_from_url(url: String, project_path: String, download_id: String) -> Result<AudioFile, String> {
+pub async fn download_audio_from_url(url: String, project_path: String, download_id: String) -> AppResult<AudioFile> {
     use std::io::Write;
 
     let guard = DownloadGuard::new(download_id);
@@ -247,24 +255,24 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()
-        .map_err(|e| format!("Erreur client HTTP : {}", e))?;
+        .map_err(fail("cloud.httpClientFailed"))?;
 
     let mut response = tokio::select! {
-        r = client.get(&url).send() => r.map_err(|e| format!("Erreur de téléchargement : {}", e))?,
-        _ = guard.token.wait() => return Err("Téléchargement annulé.".into()),
+        r = client.get(&url).send() => r.map_err(fail("download.failed"))?,
+        _ = guard.token.wait() => return Err(AppError::new("download.cancelled")),
     };
 
     if !response.status().is_success() {
-        return Err(format!("Erreur HTTP {} : {}", response.status().as_u16(), url));
+        return Err(AppError::new("download.httpStatus")
+            .with("status", response.status().as_u16())
+            .with("url", &url));
     }
 
     if let Some(len) = response.content_length() {
         if len > MAX_AUDIO_FILE_SIZE {
-            return Err(format!(
-                "Fichier trop volumineux ({} Mo). Limite : {} Mo.",
-                len / (1024 * 1024),
-                MAX_AUDIO_FILE_SIZE / (1024 * 1024)
-            ));
+            return Err(AppError::new("download.fileTooLarge")
+                .with("size", len / (1024 * 1024))
+                .with("limit", MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
         }
     }
 
@@ -311,7 +319,7 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
 
     let mut file = fs::File::create(&dest)
-        .map_err(|e| format!("Impossible de créer le fichier : {}", e))?;
+        .map_err(fail("download.createFileFailed"))?;
     let mut total: u64 = 0;
     loop {
         let chunk_result = tokio::select! {
@@ -319,7 +327,7 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
             _ = guard.token.wait() => {
                 drop(file);
                 let _ = fs::remove_file(&dest);
-                return Err("Téléchargement annulé.".into());
+                return Err(AppError::new("download.cancelled"));
             }
         };
         let chunk = match chunk_result {
@@ -328,22 +336,20 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
             Err(e) => {
                 drop(file);
                 let _ = fs::remove_file(&dest);
-                return Err(format!("Erreur de lecture : {}", e));
+                return Err(AppError::new("io.readFailed").detail(e));
             }
         };
         total += chunk.len() as u64;
         if total > MAX_AUDIO_FILE_SIZE {
             drop(file);
             let _ = fs::remove_file(&dest);
-            return Err(format!(
-                "Fichier trop volumineux (limite : {} Mo).",
-                MAX_AUDIO_FILE_SIZE / (1024 * 1024)
-            ));
+            return Err(AppError::new("download.fileTooLargeLimit")
+                .with("limit", MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
         }
         if let Err(e) = file.write_all(&chunk) {
             drop(file);
             let _ = fs::remove_file(&dest);
-            return Err(format!("Erreur d'écriture : {}", e));
+            return Err(AppError::new("io.writeFailed").detail(e));
         }
     }
 
@@ -351,24 +357,24 @@ pub async fn download_audio_from_url(url: String, project_path: String, download
 }
 
 #[tauri::command]
-pub async fn get_yt_dlp_version(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn get_yt_dlp_version(app: tauri::AppHandle) -> AppResult<String> {
     let yt_dlp = find_yt_dlp_with_app(&app);
     let out = silent_command(&yt_dlp).arg("--version").output()
-        .map_err(|e| format!("yt-dlp introuvable : {}", e))?;
+        .map_err(fail("download.ytDlpNotFound"))?;
     if !out.status.success() {
-        return Err("yt-dlp ne démarre pas correctement.".into());
+        return Err(AppError::new("download.ytDlpBroken"));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 #[tauri::command]
-pub async fn update_yt_dlp(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
     use tauri::Manager;
     use std::io::Write;
 
     let dir = app.path().app_data_dir()
-        .map_err(|e| format!("Impossible de déterminer le dossier de données : {}", e))?;
-    fs::create_dir_all(&dir).map_err(|e| format!("mkdir : {}", e))?;
+        .map_err(fail("download.dataDirUnknown"))?;
+    fs::create_dir_all(&dir).map_err(fail("io.createDirFailed"))?;
     let target_path = dir.join(yt_dlp_target_name());
     let tmp_path = target_path.with_extension("download");
 
@@ -380,22 +386,22 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()
-        .map_err(|e| format!("Erreur client HTTP : {}", e))?;
+        .map_err(fail("cloud.httpClientFailed"))?;
 
     let mut response = client.get(&url).send().await
-        .map_err(|e| format!("Erreur de téléchargement : {}", e))?;
+        .map_err(fail("download.failed"))?;
 
     if !response.status().is_success() {
-        return Err(format!("Erreur HTTP {} lors du téléchargement", response.status().as_u16()));
+        return Err(AppError::new("download.httpStatusUpdate").with("status", response.status().as_u16()));
     }
 
     let mut file = fs::File::create(&tmp_path)
-        .map_err(|e| format!("Impossible de créer {} : {}", tmp_path.display(), e))?;
+        .map_err(|e| AppError::new("download.createPathFailed").with("path", tmp_path.display()).detail(e))?;
 
     while let Some(chunk) = response.chunk().await
-        .map_err(|e| format!("Erreur de lecture : {}", e))?
+        .map_err(fail("io.readFailed"))?
     {
-        file.write_all(&chunk).map_err(|e| format!("Erreur d'écriture : {}", e))?;
+        file.write_all(&chunk).map_err(fail("io.writeFailed"))?;
     }
     drop(file);
 
@@ -403,23 +409,23 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> Result<String, String> {
     {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(&tmp_path)
-            .map_err(|e| format!("metadata : {}", e))?
+            .map_err(fail("download.metadataFailed"))?
             .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&tmp_path, perms)
-            .map_err(|e| format!("chmod : {}", e))?;
+            .map_err(fail("download.chmodFailed"))?;
     }
 
     let version_check = silent_command(&tmp_path).arg("--version").output();
     let ok = version_check.as_ref().map(|o| o.status.success()).unwrap_or(false);
     if !ok {
         let _ = fs::remove_file(&tmp_path);
-        return Err("Le binaire téléchargé n'est pas exécutable sur ce système.".into());
+        return Err(AppError::new("download.notExecutable"));
     }
     let version = String::from_utf8_lossy(&version_check.unwrap().stdout).trim().to_string();
 
     fs::rename(&tmp_path, &target_path)
-        .map_err(|e| format!("Impossible de remplacer l'ancien binaire : {}", e))?;
+        .map_err(fail("download.replaceBinaryFailed"))?;
 
     Ok(version)
 }

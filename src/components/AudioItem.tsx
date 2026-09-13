@@ -5,6 +5,8 @@ import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings,
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
+import { useTranslation } from "react-i18next";
+
 
 interface Props {
   audio: AudioFile;
@@ -26,6 +28,7 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
   const [nameDraft, setNameDraft] = useState(audio.original_name);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
+  const { t } = useTranslation(["audio", "common"]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: audio.id });
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -87,7 +90,7 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
             : fileDuration;
           if (effective == null || !isFinite(effective) || effective <= 0) return null;
           return (
-            <span className="audio-duration-badge" title="Durée">
+            <span className="audio-duration-badge" title={t("audio:item.duration")}>
               <Clock size={11} />
               {fmt(effective)}
             </span>
@@ -144,20 +147,20 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
               value={volume}
               className="audio-volume-slider"
               onChange={(e) => onChange({ ...audio, volume: Number(e.target.value) }, "audio-volume:" + audio.id)}
-              title={`Volume : ${volume}%`}
+              title={t("audio:item.volume", { percent: volume })}
             />
             <span className="audio-volume-value">{volume}%</span>
           </div>
         )}
 
         {editMode && (
-          <button className="btn-icon" onClick={() => setShowSettings(true)} title="Paramètres">
+          <button className="btn-icon" onClick={() => setShowSettings(true)} title={t("common:settings")}>
             <Settings size={14} />
           </button>
         )}
 
         {editMode && (
-          <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
+          <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
             <Trash2 size={14} />
           </button>
         )}
@@ -167,13 +170,13 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
         <input
           className="item-cue-input"
           type="text"
-          placeholder="Top de départ…"
+          placeholder={t("audio:item.cuePlaceholder")}
           value={audio.cue ?? ""}
           onChange={(e) => onChange({ ...audio, cue: e.target.value || undefined }, "audio-cue:" + audio.id)}
         />
       ) : (
         audio.cue && (
-          <p className="item-cue-display" title="Top de départ">
+          <p className="item-cue-display" title={t("audio:item.cue")}>
             <Info size={12} />
             <span>{audio.cue}</span>
           </p>

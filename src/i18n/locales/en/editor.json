@@ -1,0 +1,44 @@
+{
+  "saved": "✓ Saved",
+  "checkShow": "Check the show",
+  "exportShow": "Export the project",
+  "exportAct": "Export the act",
+  "emptyState": "Nothing here yet — start by adding an act, an intermission or a host segment.",
+  "addPart": "Add a part",
+  "editMode": {
+    "label": "Edit",
+    "on": "Edit mode on",
+    "off": "Edit mode off"
+  },
+  "battery": {
+    "charging": "Charging",
+    "remaining": "Battery runtime: {{time}}",
+    "noEstimate": "On battery — the system gives no runtime estimate"
+  },
+  "showMode": {
+    "active": "Show mode on",
+    "inactive": "Show mode",
+    "activeTitle": "Show mode on: notifications muted, sleep blocked — click to turn off",
+    "inactiveTitle": "Turn on show mode: mute notifications and block sleep",
+    "activate": "Turn on show mode"
+  },
+  "verify": {
+    "missingFiles_one": "{{count}} missing file",
+    "missingFiles_other": "{{count}} missing files",
+    "orphanFiles_one": "{{count}} orphan file in the folder",
+    "orphanFiles_other": "{{count}} orphan files in the folder",
+    "cleanupTitle": "Delete the orphan files",
+    "cleanup": "Clean up",
+    "dismiss": "Hide"
+  },
+  "defaultName": {
+    "act": "Act {{index}}",
+    "intermission": "Intermission {{index}}",
+    "hostSegment": "Host segment {{index}}"
+  },
+  "errors": {
+    "cleanup": "Clean-up failed: {{detail}}",
+    "export": "Export failed: {{detail}}",
+    "import": "Import failed: {{detail}}"
+  }
+}

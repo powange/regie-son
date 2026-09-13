@@ -1,4 +1,6 @@
 import { Download, X, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
 import { UpdaterState } from "../useUpdater";
 
 interface Props {
@@ -8,6 +10,7 @@ interface Props {
 }
 
 export default function UpdateBanner({ state, onInstall, onDismiss }: Props) {
+  const { t } = useTranslation(["updater"]);
   if (!state.update && !state.installing) return null;
 
   return (
@@ -17,7 +20,9 @@ export default function UpdateBanner({ state, onInstall, onDismiss }: Props) {
           <>
             <RefreshCw size={15} className="update-banner-spin" />
             <span>
-              Installation{state.progress !== null ? ` ${state.progress}%` : "…"}
+              {state.progress !== null
+                ? t("updater:installingPercent", { percent: state.progress })
+                : t("updater:installing")}
             </span>
             {state.progress !== null && (
               <div className="update-banner-progress">
@@ -29,13 +34,13 @@ export default function UpdateBanner({ state, onInstall, onDismiss }: Props) {
           <>
             <Download size={15} />
             <span>
-              Mise à jour disponible — version {state.update?.version}
+              {t("updater:available", { version: state.update?.version ?? "" })}
             </span>
             {state.error && <span className="update-banner-error">{state.error}</span>}
             <button className="update-banner-btn" onClick={onInstall}>
-              Installer
+              {t("updater:install")}
             </button>
-            <button className="btn-icon update-banner-close" onClick={onDismiss} title="Ignorer">
+            <button className="btn-icon update-banner-close" onClick={onDismiss} title={t("updater:dismiss")}>
               <X size={14} />
             </button>
           </>

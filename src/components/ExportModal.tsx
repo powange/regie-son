@@ -1,4 +1,6 @@
 import { FileOutput, Cloud, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
 
 export type ExportKind = "project" | "numero";
 
@@ -10,8 +12,9 @@ interface Props {
 }
 
 export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose }: Props) {
+  const { t } = useTranslation(["share"]);
   const isProject = kind === "project";
-  const title = isProject ? "Exporter le spectacle" : "Exporter le numéro";
+  const title = isProject ? t("share:export.showTitle") : t("share:export.actTitle");
   const extLabel = isProject ? ".regieson" : ".regiesonnumero";
 
   function pick(handler: () => void) {
@@ -31,15 +34,15 @@ export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose
           <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
             <FileOutput size={22} />
             <div className="part-option-text">
-              <strong>Exporter en fichier {extLabel}</strong>
-              <span>Enregistrer une archive sur le disque pour la partager manuellement.</span>
+              <strong>{t("share:export.file", { ext: extLabel })}</strong>
+              <span>{t("share:export.fileHint")}</span>
             </div>
           </button>
           <button className="source-option part-option" onClick={() => pick(onSelectCloud)}>
             <Cloud size={22} />
             <div className="part-option-text">
-              <strong>Partager sur le cloud</strong>
-              <span>Téléverser l'archive et obtenir un code à transmettre.</span>
+              <strong>{t("share:export.cloud")}</strong>
+              <span>{t("share:export.cloudHint")}</span>
             </div>
           </button>
         </div>

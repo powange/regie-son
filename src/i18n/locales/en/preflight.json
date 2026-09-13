@@ -1,0 +1,14 @@
+{
+  "title": "Show check",
+  "allGood": "All good, nothing to report.",
+  "audioDeviceMissing": "The selected audio output was not found. Check your devices in the settings.",
+  "batteryLowNoEstimate": "Battery at {{percent}}%, and the system gives no estimate of the remaining runtime. Plug the computer into mains power.",
+  "batteryShorterThanShow": "Battery runtime {{left}}, shorter than the show ({{total}}). Plug the computer into mains power.",
+  "batteryShorterThanShowAtLeast": "Battery runtime {{left}}, shorter than the show (at least {{total}}). Plug the computer into mains power.",
+  "batteryShorterThanAct": "Battery runtime {{left}}, shorter than the act ({{total}}). Plug the computer into mains power.",
+  "batteryShorterThanActAtLeast": "Battery runtime {{left}}, shorter than the act (at least {{total}}). Plug the computer into mains power.",
+  "trackFileMissing": "Missing file on {{label}}",
+  "trackStartAfterEnd": "Start ≥ end on {{label}}",
+  "trackFadesTooLong": "Fade in + fade out longer than the playback span on {{label}}",
+  "trackVolumeZero": "Volume at 0 on {{label}}"
+}

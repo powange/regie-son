@@ -1,4 +1,5 @@
 mod archive;
+mod error;
 mod audio_session;
 mod battery;
 mod cloud;
@@ -15,15 +16,16 @@ use std::fs;
 use tauri_plugin_dialog::DialogExt;
 use tauri::Emitter;
 
+use crate::error::{AppError, AppResult, fail, missing};
 use crate::types::{AudioFile, Numero, PlaylistItem, Project, VerifyResult, migrate_project};
 
 // ===== Helpers =====
 
-pub(crate) fn safe_filename(filename: &str) -> Result<(), String> {
+pub(crate) fn safe_filename(filename: &str) -> AppResult<()> {
     let p = Path::new(filename);
     let valid = p.components().all(|c| matches!(c, Component::Normal(_)))
         && p.file_name().map(|n| n == p.as_os_str()).unwrap_or(false);
-    if valid { Ok(()) } else { Err("Nom de fichier invalide".into()) }
+    if valid { Ok(()) } else { Err(AppError::new("io.invalidFilename")) }
 }
 
 // ===== File system helpers =====
@@ -77,7 +79,7 @@ fn get_default_projects_dir() -> String { default_projects_dir() }
 fn get_default_numeros_dir() -> String { default_numeros_dir() }
 
 #[tauri::command]
-fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     if Command::new("which").arg("zenity").output().map(|o| o.status.success()).unwrap_or(false) {
         return Ok(pick_folder_zenity());
     }
@@ -103,10 +105,10 @@ fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
 // ===== Project commands =====
 
 #[tauri::command]
-fn create_project(name: String, folder_path: String) -> Result<Project, String> {
+fn create_project(name: String, folder_path: String) -> AppResult<Project> {
     let project_dir = PathBuf::from(&folder_path);
     fs::create_dir_all(project_dir.join("musiques"))
-        .map_err(|e| format!("Impossible de créer le dossier : {}", e))?;
+        .map_err(fail("io.createDirFailed"))?;
     let project = Project {
         name,
         path: project_dir.to_string_lossy().to_string(),
@@ -117,27 +119,27 @@ fn create_project(name: String, folder_path: String) -> Result<Project, String> 
     Ok(project)
 }
 
-pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> Result<Project, String> {
+pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
     let content = fs::read_to_string(folder.join(filename))
-        .map_err(|e| format!("Impossible de lire le projet : {}", e))?;
+        .map_err(fail("io.readProjectFailed"))?;
     migrate_project(&content, folder.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-fn open_project(project_path: String) -> Result<Project, String> {
+fn open_project(project_path: String) -> AppResult<Project> {
     open_project_from_file(Path::new(&project_path), "projet.json")
 }
 
 #[tauri::command]
-fn save_project(project: Project) -> Result<(), String> {
+fn save_project(project: Project) -> AppResult<()> {
     save_project_to_disk(&project)
 }
 
 #[tauri::command]
-fn create_numero(name: String, folder_path: String) -> Result<Project, String> {
+fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
     let numero_dir = PathBuf::from(&folder_path);
     fs::create_dir_all(numero_dir.join("musiques"))
-        .map_err(|e| format!("Impossible de créer le dossier : {}", e))?;
+        .map_err(fail("io.createDirFailed"))?;
     let numero = Numero {
         id: uuid::Uuid::new_v4().to_string(),
         numero_type: "numero".into(),
@@ -155,19 +157,19 @@ fn create_numero(name: String, folder_path: String) -> Result<Project, String> {
 }
 
 #[tauri::command]
-fn open_numero(numero_path: String) -> Result<Project, String> {
+fn open_numero(numero_path: String) -> AppResult<Project> {
     open_project_from_file(Path::new(&numero_path), "numero.json")
 }
 
 #[tauri::command]
-fn save_numero(project: Project) -> Result<(), String> {
+fn save_numero(project: Project) -> AppResult<()> {
     save_project_to_disk(&project)
 }
 
 #[tauri::command]
-fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, String> {
+fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFile> {
     let src = Path::new(&src_path);
-    let original_name = src.file_name().ok_or("Nom de fichier invalide")?
+    let original_name = src.file_name().ok_or_else(missing("io.invalidFilename"))?
         .to_string_lossy().to_string();
     let ext = src.extension()
         .map(|e| format!(".{}", e.to_string_lossy()))
@@ -176,22 +178,22 @@ fn copy_audio_file(src_path: String, project_path: String) -> Result<AudioFile, 
     let new_filename = format!("{}{}", id, ext);
     let dest = PathBuf::from(&project_path).join("musiques").join(&new_filename);
     fs::copy(src, &dest)
-        .map_err(|e| format!("Impossible de copier le fichier : {}", e))?;
+        .map_err(fail("io.copyFailed"))?;
     Ok(AudioFile { id, filename: new_filename, original_name, volume: 100.0, start_time: None, end_time: None, fade_in: None, fade_out: None, cue: None })
 }
 
 #[tauri::command]
-fn delete_audio_file(project_path: String, filename: String) -> Result<(), String> {
+fn delete_audio_file(project_path: String, filename: String) -> AppResult<()> {
     safe_filename(&filename)?;
     let path = PathBuf::from(&project_path).join("musiques").join(&filename);
     if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Impossible de supprimer : {}", e))?;
+        fs::remove_file(&path).map_err(fail("io.deleteFailed"))?;
     }
     Ok(())
 }
 
 #[tauri::command]
-fn verify_project(project: Project) -> Result<VerifyResult, String> {
+fn verify_project(project: Project) -> AppResult<VerifyResult> {
     let musiques_dir = PathBuf::from(&project.path).join("musiques");
     let mut referenced: std::collections::HashSet<String> = std::collections::HashSet::new();
     for n in &project.numeros {
@@ -219,7 +221,7 @@ fn verify_project(project: Project) -> Result<VerifyResult, String> {
 }
 
 #[tauri::command]
-fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> Result<u32, String> {
+fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResult<u32> {
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let mut deleted = 0u32;
     for name in filenames {
@@ -232,17 +234,15 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> Result<
 
 
 #[tauri::command]
-fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
+fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
     let metadata = fs::metadata(&path)
-        .map_err(|e| format!("Impossible de lire le fichier : {}", e))?;
+        .map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
-        return Err(format!(
-            "Fichier trop volumineux ({} Mo). Limite : {} Mo.",
-            metadata.len() / (1024 * 1024),
-            download::MAX_AUDIO_FILE_SIZE / (1024 * 1024)
-        ));
+        return Err(AppError::new("download.fileTooLarge")
+            .with("size", metadata.len() / (1024 * 1024))
+            .with("limit", download::MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
     }
-    let bytes = fs::read(&path).map_err(|e| format!("Impossible de lire le fichier : {}", e))?;
+    let bytes = fs::read(&path).map_err(fail("io.readFileFailed"))?;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
@@ -261,18 +261,18 @@ fn rotate_backups(dir: &Path, filename: &str) {
     }
 }
 
-pub(crate) fn save_project_to_disk(project: &Project) -> Result<(), String> {
+pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
     let content = serde_json::to_string_pretty(project)
-        .map_err(|e| format!("Erreur de sérialisation : {}", e))?;
+        .map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);
     let filename = project_json_filename(project);
     let target = dir.join(filename);
     let tmp = dir.join(format!("{}.tmp", filename));
     fs::write(&tmp, &content)
-        .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+        .map_err(fail("io.saveFailed"))?;
     rotate_backups(dir, filename);
     fs::rename(&tmp, &target)
-        .map_err(|e| format!("Impossible de sauvegarder : {}", e))?;
+        .map_err(fail("io.saveFailed"))?;
     Ok(())
 }
 

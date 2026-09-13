@@ -2,9 +2,27 @@ import { useState, useEffect } from "react";
 import { Monitor, Link, FileVideo, PauseCircle, X, Download, XCircle } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { friendlyError } from "../friendlyError";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { translateError } from "../errorMessage";
 
 type View = "list" | "url" | "youtube";
+
+// Étape émise par Rust pendant un téléchargement yt-dlp : un nom d'étape, pas
+// une phrase. Les clés sont écrites en clair pour rester extractibles et typées.
+interface YtDlpStep {
+  step: "fetchingInfo" | "downloading";
+  title?: string;
+}
+
+function stepLabel(t: TFunction<["audio", "common"]>, s: YtDlpStep): string {
+  switch (s.step) {
+    case "fetchingInfo":
+      return t("audio:download.fetchingInfo");
+    case "downloading":
+      return t("audio:download.downloadingTitle", { title: s.title ?? "" });
+  }
+}
 
 interface DownloadFormProps {
   label: string;
@@ -16,16 +34,17 @@ interface DownloadFormProps {
 }
 
 function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack }: DownloadFormProps) {
+  const { t } = useTranslation(["audio", "common"]);
   const [url, setUrl] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<string | null>(null);
+  const [step, setStep] = useState<YtDlpStep | null>(null);
   const [downloadId, setDownloadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!downloading || !withProgress) return;
     let unlisten: (() => void) | undefined;
-    listen<{ step: string }>("yt-dlp-progress", (e) => setStep(e.payload.step))
+    listen<YtDlpStep>("yt-dlp-progress", (e) => setStep(e.payload))
       .then((fn) => { unlisten = fn; });
     return () => { unlisten?.(); };
   }, [downloading, withProgress]);
@@ -41,7 +60,7 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
     try {
       await onSubmit(trimmed, id);
     } catch (err) {
-      setError(friendlyError(err));
+      setError(translateError(err));
       setDownloading(false);
       setStep(null);
       setDownloadId(null);
@@ -72,7 +91,13 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
       {downloading && (
         <div className="download-progress">
           <div className="download-spinner" />
-          <span>{step ?? (withProgress ? "Initialisation…" : "Téléchargement en cours…")}</span>
+          <span>
+            {step
+              ? stepLabel(t, step)
+              : withProgress
+                ? t("audio:download.initializing")
+                : t("audio:download.inProgress")}
+          </span>
         </div>
       )}
 
@@ -80,12 +105,12 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
 
       <div className="modal-actions">
         {!downloading && (
-          <button className="btn btn-secondary" onClick={onBack}>Retour</button>
+          <button className="btn btn-secondary" onClick={onBack}>{t("common:actions.back")}</button>
         )}
         {downloading ? (
           <button className="btn btn-ghost" onClick={handleCancel}>
             <XCircle size={14} />
-            Annuler
+            {t("common:actions.cancel")}
           </button>
         ) : (
           <button
@@ -94,7 +119,7 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
             disabled={!url.trim()}
           >
             <Download size={14} />
-            Télécharger
+            {t("audio:download.submit")}
           </button>
         )}
       </div>
@@ -111,6 +136,7 @@ interface Props {
 }
 
 export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSelectYoutube, onSelectPause, onClose }: Props) {
+  const { t } = useTranslation(["audio", "common"]);
   const [view, setView] = useState<View>("list");
 
   function back() { setView("list"); }
@@ -119,38 +145,38 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
     <div className="modal-overlay" onClick={view === "list" ? onClose : undefined}>
       <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title-row">
-          <h2>Ajouter une étape</h2>
+          <h2>{t("audio:addStep")}</h2>
           {view === "list" && <button className="btn-icon" onClick={onClose}><X size={16} /></button>}
         </div>
 
         {view === "list" && (
           <div className="source-list">
-            <div className="source-category-title">Musique</div>
+            <div className="source-category-title">{t("audio:categoryMusic")}</div>
             <button className="source-option" onClick={() => { onClose(); onSelectLocal(); }}>
               <Monitor size={20} />
-              <span>Cet ordinateur</span>
+              <span>{t("audio:thisComputer")}</span>
             </button>
             <button className="source-option" onClick={() => setView("url")}>
               <Link size={20} />
-              <span>Depuis une URL</span>
+              <span>{t("audio:fromUrl")}</span>
             </button>
             <button className="source-option" onClick={() => setView("youtube")}>
               <FileVideo size={20} />
-              <span>YouTube</span>
+              <span>{t("audio:youtube")}</span>
             </button>
 
-            <div className="source-category-title">Pause</div>
+            <div className="source-category-title">{t("audio:categoryPause")}</div>
             <button className="source-option" onClick={() => { onClose(); onSelectPause(); }}>
               <PauseCircle size={20} />
-              <span>Ajouter une pause</span>
+              <span>{t("audio:addPause")}</span>
             </button>
           </div>
         )}
 
         {view === "url" && (
           <DownloadForm
-            label="URL du fichier audio"
-            placeholder="https://exemple.com/musique.mp3"
+            label={t("audio:download.urlLabel")}
+            placeholder={t("audio:download.urlPlaceholder")}
             onSubmit={async (url, id) => { await onSelectUrl(url, id); onClose(); }}
             onBack={back}
           />
@@ -158,9 +184,9 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
 
         {view === "youtube" && (
           <DownloadForm
-            label="Lien de la vidéo YouTube"
-            placeholder="https://www.youtube.com/watch?v=..."
-            hint="Télécharge l'audio depuis YouTube (inclus dans l'application)"
+            label={t("audio:download.youtubeLabel")}
+            placeholder={t("audio:download.youtubePlaceholder")}
+            hint={t("audio:download.youtubeHint")}
             withProgress
             onSubmit={async (url, id) => { await onSelectYoutube(url, id); onClose(); }}
             onBack={back}

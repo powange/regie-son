@@ -5,6 +5,8 @@
 
 use serde::Serialize;
 
+use crate::error::{AppError, AppResult, fail};
+
 #[derive(Serialize)]
 pub struct BatteryStatus {
     // 0-100.
@@ -20,18 +22,18 @@ pub struct BatteryStatus {
 
 // Ok(None) on a machine without a battery: desktop tower, most VMs.
 #[tauri::command]
-pub fn get_battery_status() -> Result<Option<BatteryStatus>, String> {
+pub fn get_battery_status() -> AppResult<Option<BatteryStatus>> {
     use starship_battery::units::{ratio::percent, time::second};
     use starship_battery::{Manager, State};
 
-    let manager = Manager::new().map_err(|e| format!("Accès à la batterie : {}", e))?;
+    let manager = Manager::new().map_err(fail("battery.accessFailed"))?;
     let mut batteries = manager
         .batteries()
-        .map_err(|e| format!("Énumération des batteries : {}", e))?;
+        .map_err(fail("battery.enumerateFailed"))?;
 
     let battery = match batteries.next() {
         Some(Ok(b)) => b,
-        Some(Err(e)) => return Err(format!("Lecture de la batterie : {}", e)),
+        Some(Err(e)) => return Err(AppError::new("battery.readFailed").detail(e)),
         None => return Ok(None),
     };
 

@@ -1,3 +1,5 @@
+import i18next from "i18next";
+
 export type KeyAction = "playPause" | "next" | "stop" | "seekForward" | "seekBackward";
 
 export interface KeyBinding {
@@ -10,16 +12,16 @@ export interface KeyBinding {
 
 export interface KeyActionDef {
   id: KeyAction;
-  label: string;
+  labelKey: string;
 }
 
-export const KEY_ACTIONS: KeyActionDef[] = [
-  { id: "playPause", label: "Lecture / Pause" },
-  { id: "next", label: "Piste suivante" },
-  { id: "stop", label: "Stop" },
-  { id: "seekForward", label: "Avancer de 5 s" },
-  { id: "seekBackward", label: "Reculer de 5 s" },
-];
+export const KEY_ACTIONS = [
+  { id: "playPause", labelKey: "settings:keyBindings.playPause" },
+  { id: "next", labelKey: "settings:keyBindings.next" },
+  { id: "stop", labelKey: "settings:keyBindings.stop" },
+  { id: "seekForward", labelKey: "settings:keyBindings.seekForward" },
+  { id: "seekBackward", labelKey: "settings:keyBindings.seekBackward" },
+] as const satisfies readonly KeyActionDef[];
 
 export const DEFAULT_BINDINGS: Record<KeyAction, KeyBinding> = {
   playPause: { key: " " },
@@ -90,20 +92,20 @@ export function resolveAction(
 
 function displayKey(key: string): string {
   switch (key) {
-    case " ": return "Espace";
+    case " ": return i18next.t("settings:keyBindings.keys.space");
     case "ArrowUp": return "↑";
     case "ArrowDown": return "↓";
     case "ArrowLeft": return "←";
     case "ArrowRight": return "→";
-    case "Escape": return "Échap";
-    case "Backspace": return "Retour";
-    case "Delete": return "Suppr";
+    case "Escape": return i18next.t("settings:keyBindings.keys.escape");
+    case "Backspace": return i18next.t("settings:keyBindings.keys.backspace");
+    case "Delete": return i18next.t("settings:keyBindings.keys.delete");
     default: return key.length === 1 ? key.toUpperCase() : key;
   }
 }
 
 export function formatBinding(b: KeyBinding | null | undefined): string {
-  if (!b || !b.key) return "Aucune touche";
+  if (!b || !b.key) return i18next.t("settings:keyBindings.none");
   const parts: string[] = [];
   if (b.ctrl) parts.push("Ctrl");
   if (b.shift) parts.push("Shift");

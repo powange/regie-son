@@ -1,0 +1,44 @@
+{
+  "saved": "✓ Sauvegardé",
+  "checkShow": "Vérifier le spectacle",
+  "exportShow": "Exporter le projet",
+  "exportAct": "Exporter le numéro",
+  "emptyState": "Aucun élément — commencez par ajouter un numéro, un entracte ou une présentation.",
+  "addPart": "Ajouter une partie",
+  "editMode": {
+    "label": "Édition",
+    "on": "Mode édition actif",
+    "off": "Mode édition inactif"
+  },
+  "battery": {
+    "charging": "En charge",
+    "remaining": "Autonomie restante : {{time}}",
+    "noEstimate": "Sur batterie — autonomie non estimée par le système"
+  },
+  "showMode": {
+    "active": "Mode spectacle actif",
+    "inactive": "Mode spectacle",
+    "activeTitle": "Mode spectacle actif : notifications coupées, veille bloquée — cliquer pour désactiver",
+    "inactiveTitle": "Activer le mode spectacle : couper les notifications et bloquer la mise en veille",
+    "activate": "Activer le mode spectacle"
+  },
+  "verify": {
+    "missingFiles_one": "{{count}} fichier manquant",
+    "missingFiles_other": "{{count}} fichiers manquants",
+    "orphanFiles_one": "{{count}} fichier orphelin dans le dossier",
+    "orphanFiles_other": "{{count}} fichiers orphelins dans le dossier",
+    "cleanupTitle": "Supprimer les fichiers orphelins",
+    "cleanup": "Nettoyer",
+    "dismiss": "Masquer"
+  },
+  "defaultName": {
+    "act": "Numéro {{index}}",
+    "intermission": "Entracte {{index}}",
+    "hostSegment": "Présentation {{index}}"
+  },
+  "errors": {
+    "cleanup": "Erreur lors du nettoyage : {{detail}}",
+    "export": "Erreur lors de l'export : {{detail}}",
+    "import": "Erreur lors de l'import : {{detail}}"
+  }
+}

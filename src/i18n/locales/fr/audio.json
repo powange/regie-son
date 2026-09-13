@@ -1,0 +1,60 @@
+{
+  "addStep": "Ajouter une étape",
+  "categoryMusic": "Musique",
+  "categoryPause": "Pause",
+  "thisComputer": "Cet ordinateur",
+  "fromUrl": "Depuis une URL",
+  "youtube": "YouTube",
+  "addPause": "Ajouter une pause",
+  "download": {
+    "downloadingTitle": "Téléchargement de « {{title}} »…",
+    "fetchingInfo": "Récupération des informations de la vidéo…",
+    "inProgress": "Téléchargement en cours…",
+    "initializing": "Initialisation…",
+    "submit": "Télécharger",
+    "urlLabel": "URL du fichier audio",
+    "urlPlaceholder": "https://exemple.com/musique.mp3",
+    "youtubeHint": "Télécharge l'audio depuis YouTube (inclus dans l'application)",
+    "youtubeLabel": "Lien de la vidéo YouTube",
+    "youtubePlaceholder": "https://www.youtube.com/watch?v=..."
+  },
+  "settings": {
+    "title": "Paramètres — {{name}}",
+    "waveformError": "Impossible de charger la forme d'onde.",
+    "playPreview": "Lire l'aperçu",
+    "startLabel": "Début (optionnel)",
+    "startPlaceholder": "ex : 0:30 ou 30",
+    "endLabel": "Fin (optionnel)",
+    "endPlaceholder": "ex : 2:45 ou 165",
+    "fadeInLabel": "Fade in — durée en secondes",
+    "fadeOutLabel": "Fade out — durée en secondes",
+    "secondsPlaceholder": "ex : 3",
+    "invalidStart": "Heure de début invalide (format : mm:ss ou secondes)",
+    "invalidEnd": "Heure de fin invalide (format : mm:ss ou secondes)",
+    "endBeforeStart": "L'heure de fin doit être supérieure à l'heure de début",
+    "invalidFadeIn": "Durée de fade in invalide (en secondes, ex : 3)",
+    "invalidFadeOut": "Durée de fade out invalide (en secondes, ex : 3)"
+  },
+  "item": {
+    "duration": "Durée",
+    "cue": "Top de départ",
+    "cuePlaceholder": "Top de départ…",
+    "volume": "Volume : {{percent}} %"
+  },
+  "pause": {
+    "label": "Pause",
+    "seekHere": "Se positionner sur cette étape",
+    "autoAdvance": "Durée avant enchaînement automatique",
+    "durationField": "Durée en secondes (vide = attente manuelle)"
+  },
+  "player": {
+    "stop": "Stop",
+    "play": "Lecture",
+    "pause": "Pause",
+    "next": "Piste suivante",
+    "waiting": "En attente — appuyez sur Play pour continuer",
+    "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> restantes",
+    "fadeIn": "Fade in",
+    "fadeOut": "Fade out"
+  }
+}

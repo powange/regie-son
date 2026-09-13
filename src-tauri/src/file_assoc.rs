@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use crate::archive::{import_numero_standalone, import_project};
+use crate::error::{AppResult, missing};
 use crate::types::Project;
 use crate::{default_numeros_dir, default_projects_dir};
 
@@ -38,9 +39,9 @@ fn pick_unique_path(base: &Path) -> PathBuf {
 }
 
 #[tauri::command]
-pub fn auto_import_regieson(src_file: String) -> Result<Project, String> {
+pub fn auto_import_regieson(src_file: String) -> AppResult<Project> {
     let archive_name = Path::new(&src_file).file_stem()
-        .ok_or("Nom de fichier invalide")?
+        .ok_or_else(missing("io.invalidFilename"))?
         .to_string_lossy().to_string();
     let base_dir = PathBuf::from(default_projects_dir()).join(&archive_name);
     let dest = pick_unique_path(&base_dir);
@@ -48,9 +49,9 @@ pub fn auto_import_regieson(src_file: String) -> Result<Project, String> {
 }
 
 #[tauri::command]
-pub fn auto_import_regiesonnumero(src_file: String) -> Result<Project, String> {
+pub fn auto_import_regiesonnumero(src_file: String) -> AppResult<Project> {
     let archive_name = Path::new(&src_file).file_stem()
-        .ok_or("Nom de fichier invalide")?
+        .ok_or_else(missing("io.invalidFilename"))?
         .to_string_lossy().to_string();
     let base_dir = PathBuf::from(default_numeros_dir()).join(&archive_name);
     let dest = pick_unique_path(&base_dir);

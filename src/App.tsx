@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
+import { translateError } from "./errorMessage";
 import { Project } from "./types";
 import HomePage from "./components/HomePage";
 import ProjectEditor from "./components/ProjectEditor";
@@ -14,6 +16,7 @@ import { useUpdater } from "./useUpdater";
 import "./App.css";
 
 function App() {
+  const { t } = useTranslation(["app"]);
   const [project, setProject] = useState<Project | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const { recents, add: addRecent, remove: removeRecent } = useRecentProjects();
@@ -55,7 +58,7 @@ function App() {
         });
         setProject(updated);
       } catch (err) {
-        alert("Erreur lors de l'import : " + err);
+        alert(t("app:errors.import", { detail: translateError(err) }));
       }
       return;
     }
@@ -64,10 +67,10 @@ function App() {
     if (current) {
       const message = isRegieson
         ? (current.singleNumero
-            ? "Un numéro est ouvert. Le fermer pour ouvrir le spectacle importé ?"
-            : "Un spectacle est déjà ouvert. Le remplacer par celui importé ?")
-        : "Un numéro est déjà ouvert. Le remplacer par celui importé ?";
-      const ok = await ask(message, { title: "Remplacer ?", kind: "warning" });
+            ? t("app:replace.closeActForShow")
+            : t("app:replace.replaceShow"))
+        : t("app:replace.replaceAct");
+      const ok = await ask(message, { title: t("app:replace.title"), kind: "warning" });
       if (!ok) return;
     }
 
@@ -80,7 +83,7 @@ function App() {
         handleNumeroOpen(p);
       }
     } catch (err) {
-      alert("Erreur à l'ouverture : " + err);
+      alert(t("app:errors.open", { detail: translateError(err) }));
     }
   }
 

@@ -1,15 +1,35 @@
 import { Project } from "./types";
 import { BatteryStatus, LOW_BATTERY_PERCENT } from "./useBattery";
-import { formatLongDuration } from "./duration";
 
 export type PreflightSeverity = "error" | "warning";
 
-export interface PreflightIssue {
-  severity: PreflightSeverity;
-  message: string;
+interface IssueLocation {
   numeroIndex?: number;
   itemIndex?: number;
 }
+
+// Issues carry a code and its parameters rather than a sentence: the wording
+// belongs to the catalogue (see preflightMessage.ts), and the rules stay
+// testable without loading i18next.
+//
+// The battery cases are four codes rather than one code with two flags because
+// the sentences do not decompose the same way in every language: "la durée du
+// spectacle" contracts the article, so a French translator needs the whole
+// sentence, not the fragments to glue together.
+export type PreflightIssue = IssueLocation & { severity: PreflightSeverity } & (
+  | { code: "audioDeviceMissing" }
+  | { code: "batteryLowNoEstimate"; percent: number }
+  | { code: "batteryShorterThanShow"; left: number; total: number }
+  | { code: "batteryShorterThanShowAtLeast"; left: number; total: number }
+  | { code: "batteryShorterThanAct"; left: number; total: number }
+  | { code: "batteryShorterThanActAtLeast"; left: number; total: number }
+  | { code: "trackFileMissing"; track: string; act: string }
+  | { code: "trackStartAfterEnd"; track: string; act: string }
+  | { code: "trackFadesTooLong"; track: string; act: string }
+  | { code: "trackVolumeZero"; track: string; act: string }
+);
+
+export type PreflightIssueCode = PreflightIssue["code"];
 
 export interface ShowDuration {
   seconds: number;
@@ -56,14 +76,21 @@ interface PreflightContext {
   showDuration: ShowDuration;
 }
 
+function batteryShortfallCode(
+  singleNumero: boolean,
+  complete: boolean,
+): Extract<PreflightIssueCode, `batteryShorterThan${string}`> {
+  if (singleNumero) {
+    return complete ? "batteryShorterThanAct" : "batteryShorterThanActAtLeast";
+  }
+  return complete ? "batteryShorterThanShow" : "batteryShorterThanShowAtLeast";
+}
+
 export function runPreflight(project: Project, ctx: PreflightContext): PreflightIssue[] {
   const issues: PreflightIssue[] = [];
 
   if (ctx.selectedDeviceId && !ctx.availableDeviceIds.has(ctx.selectedDeviceId)) {
-    issues.push({
-      severity: "error",
-      message: "Sortie audio sélectionnée introuvable. Vérifiez vos périphériques dans les paramètres.",
-    });
+    issues.push({ severity: "error", code: "audioDeviceMissing" });
   }
 
   // Running out of battery mid-show is unrecoverable, so this is worth
@@ -78,20 +105,16 @@ export function runPreflight(project: Project, ctx: PreflightContext): Preflight
       if (ctx.battery.percent < LOW_BATTERY_PERCENT) {
         issues.push({
           severity: "warning",
-          message:
-            `Batterie à ${Math.round(ctx.battery.percent)} %, et le système n'estime pas ` +
-            `l'autonomie restante. Branchez l'ordinateur sur le secteur.`,
+          code: "batteryLowNoEstimate",
+          percent: Math.round(ctx.battery.percent),
         });
       }
     } else if (ctx.showDuration.seconds > 0 && left < ctx.showDuration.seconds) {
-      const what = project.singleNumero ? "du numéro" : "du spectacle";
-      const atLeast = ctx.showDuration.complete ? "" : "au moins ";
       issues.push({
         severity: "warning",
-        message:
-          `Autonomie restante ${formatLongDuration(left)}, inférieure à la durée ${what} ` +
-          `(${atLeast}${formatLongDuration(ctx.showDuration.seconds)}). ` +
-          `Branchez l'ordinateur sur le secteur.`,
+        code: batteryShortfallCode(!!project.singleNumero, ctx.showDuration.complete),
+        left,
+        total: ctx.showDuration.seconds,
       });
     }
   }
@@ -99,47 +122,28 @@ export function runPreflight(project: Project, ctx: PreflightContext): Preflight
   project.numeros.forEach((numero, nIdx) => {
     numero.items.forEach((item, iIdx) => {
       if (item.type !== "audio") return;
-      const label = `« ${item.original_name} » (${numero.name})`;
+      const where = { numeroIndex: nIdx, itemIndex: iIdx };
+      const track = { track: item.original_name, act: numero.name };
 
       if (ctx.missingFiles.has(item.filename)) {
-        issues.push({
-          severity: "error",
-          message: `Fichier manquant sur ${label}`,
-          numeroIndex: nIdx,
-          itemIndex: iIdx,
-        });
+        issues.push({ severity: "error", code: "trackFileMissing", ...track, ...where });
       }
 
       const hasStart = typeof item.startTime === "number";
       const hasEnd = typeof item.endTime === "number";
       if (hasStart && hasEnd && (item.startTime as number) >= (item.endTime as number)) {
-        issues.push({
-          severity: "warning",
-          message: `Début ≥ fin sur ${label}`,
-          numeroIndex: nIdx,
-          itemIndex: iIdx,
-        });
+        issues.push({ severity: "warning", code: "trackStartAfterEnd", ...track, ...where });
       }
       if (hasStart && hasEnd) {
         const effective = (item.endTime as number) - (item.startTime as number);
         const fades = (item.fadeIn ?? 0) + (item.fadeOut ?? 0);
         if (effective > 0 && fades > effective) {
-          issues.push({
-            severity: "warning",
-            message: `Fade in + fade out plus long que la durée de lecture sur ${label}`,
-            numeroIndex: nIdx,
-            itemIndex: iIdx,
-          });
+          issues.push({ severity: "warning", code: "trackFadesTooLong", ...track, ...where });
         }
       }
 
       if ((item.volume ?? 100) === 0) {
-        issues.push({
-          severity: "warning",
-          message: `Volume à 0 sur ${label}`,
-          numeroIndex: nIdx,
-          itemIndex: iIdx,
-        });
+        issues.push({ severity: "warning", code: "trackVolumeZero", ...track, ...where });
       }
     });
   });

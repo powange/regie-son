@@ -3,6 +3,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Clock, GripVertical, Info, PauseCircle, Play, Trash2 } from "lucide-react";
 import { PauseItem } from "../types";
+import { useTranslation } from "react-i18next";
+
 
 interface Props {
   pause: PauseItem;
@@ -14,6 +16,7 @@ interface Props {
 }
 
 function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
+  const { t } = useTranslation(["audio", "common"]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -46,18 +49,18 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
             <GripVertical size={14} />
           </span>
         )}
-        <button className="audio-play-btn" onClick={onPlay} title="Se positionner sur cette étape">
+        <button className="audio-play-btn" onClick={onPlay} title={t("audio:pause.seekHere")}>
           {isActive ? <Play size={13} /> : <PauseCircle size={13} />}
         </button>
         {pause.duration != null && pause.duration > 0 && (
-          <span className="pause-duration-badge" title="Durée avant enchaînement automatique">
+          <span className="pause-duration-badge" title={t("audio:pause.autoAdvance")}>
             <Clock size={11} />
             {pause.duration}s
           </span>
         )}
-        <span className="pause-track-label">Pause</span>
+        <span className="pause-track-label">{t("audio:pause.label")}</span>
         {editMode && (
-          <div className="pause-duration-field" title="Durée en secondes (vide = attente manuelle)">
+          <div className="pause-duration-field" title={t("audio:pause.durationField")}>
             <Clock size={13} />
             <input
               type="number"
@@ -75,7 +78,7 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
           </div>
         )}
         {editMode && (
-          <button className="btn-icon btn-danger" onClick={onDelete} title="Supprimer">
+          <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
             <Trash2 size={14} />
           </button>
         )}
@@ -85,13 +88,13 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
         <input
           className="item-cue-input"
           type="text"
-          placeholder="Top de départ…"
+          placeholder={t("audio:item.cuePlaceholder")}
           value={pause.cue ?? ""}
           onChange={(e) => onChange({ ...pause, cue: e.target.value || undefined }, "pause-cue:" + pause.id)}
         />
       ) : (
         pause.cue && (
-          <p className="item-cue-display" title="Top de départ">
+          <p className="item-cue-display" title={t("audio:item.cue")}>
             <Info size={12} />
             <span>{pause.cue}</span>
           </p>

@@ -1,0 +1,41 @@
+{
+  "tagline": "Sound management for cabaret shows",
+  "removeFromList": "Remove from the list",
+  "folderPlaceholder": "Folder path...",
+  "folderWillBeCreated": "The folder will be created if it does not exist.",
+  "folderRequired": "Please choose a folder.",
+  "show": {
+    "sectionTitle": "Show",
+    "create": "New show",
+    "open": "Open a show",
+    "recents": "Recent shows"
+  },
+  "act": {
+    "sectionTitle": "Act",
+    "create": "New act",
+    "open": "Open an act",
+    "recents": "Recent acts"
+  },
+  "createShow": {
+    "title": "New show",
+    "nameLabel": "Show name",
+    "namePlaceholder": "e.g. Spring Cabaret 2025",
+    "folderLabel": "Project folder",
+    "nameRequired": "Please enter a show name."
+  },
+  "createAct": {
+    "title": "New act",
+    "nameLabel": "Act name",
+    "namePlaceholder": "e.g. Tango de la rose",
+    "folderLabel": "Act folder",
+    "nameRequired": "Please enter an act name."
+  },
+  "errors": {
+    "openProject": "Could not open this project: {{detail}}",
+    "openAct": "Could not open this act: {{detail}}",
+    "import": "Could not import: {{detail}}",
+    "projectNotFound": "Project not found: \"{{name}}\". It may have been moved or deleted.",
+    "actNotFound": "Act not found: \"{{name}}\". It may have been moved or deleted.",
+    "folderPicker": "Could not open the folder picker: {{detail}}"
+  }
+}

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle, Keyboard, RotateCcw, FileVideo } from "lucide-react";
+import { X, Volume2, RefreshCw, CheckCircle, Download, ArrowDownCircle, Keyboard, RotateCcw, FileVideo, Languages } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
+import { translateError } from "../errorMessage";
 import { Settings } from "../useSettings";
+import { SUPPORTED_LNGS, applyLanguage, languageName } from "../i18n";
 import { UpdaterState } from "../useUpdater";
 import {
   KEY_ACTIONS,
@@ -32,6 +35,7 @@ interface Props {
 }
 
 export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
+  const { t } = useTranslation(["settings", "common"]);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
@@ -45,7 +49,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
 
   async function loadDevices() {
     setLoading(true);
-    const fallback = [{ deviceId: "default", label: "Défaut du système" }];
+    const fallback = [{ deviceId: "default", label: t("settings:audioOutput.systemDefault") }];
     try {
       if (!navigator.mediaDevices?.enumerateDevices) {
         setDevices(fallback);
@@ -58,7 +62,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
       const all = await navigator.mediaDevices.enumerateDevices();
       const outputs = all
         .filter((d) => d.kind === "audiooutput")
-        .map((d) => ({ deviceId: d.deviceId, label: d.label || "Périphérique audio" }));
+        .map((d) => ({ deviceId: d.deviceId, label: d.label || t("settings:audioOutput.unnamedDevice") }));
       setDevices(outputs.length > 0 ? outputs : fallback);
     } catch {
       setDevices(fallback);
@@ -74,7 +78,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
       setYtDlpError(null);
     } catch (err) {
       setYtDlpVersion(null);
-      setYtDlpError(String(err));
+      setYtDlpError(translateError(err));
     }
   }
 
@@ -85,7 +89,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
       const v = await invoke<string>("update_yt_dlp");
       setYtDlpVersion(v);
     } catch (err) {
-      setYtDlpError(String(err));
+      setYtDlpError(translateError(err));
     } finally {
       setYtDlpUpdating(false);
     }
@@ -128,7 +132,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
       e.stopPropagation();
       if (isModifierKey(e.key)) return; // wait for a non-modifier key
       if (isForbiddenKey(e.key)) {
-        setCaptureError(`La touche « ${e.key} » ne peut pas être utilisée.`);
+        setCaptureError(t("settings:keyBindings.forbiddenKey", { key: e.key }));
         return;
       }
       const binding = bindingFromEvent(e);
@@ -163,22 +167,48 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
 
+  function changeLanguage(value: string) {
+    const language = value === "system" ? null : value;
+    onUpdate({ language });
+    applyLanguage(language);
+  }
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title-row">
-          <h2>Paramètres</h2>
+          <h2>{t("common:settings")}</h2>
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
 
         <div className="settings-section">
           <div className="settings-section-title">
+            <Languages size={15} />
+            {t("settings:language.title")}
+          </div>
+
+          {/* Options dérivées de supportedLngs : ajouter une langue ne demande
+              aucune modification ici. */}
+          <select
+            className="settings-select"
+            value={settings.language ?? "system"}
+            onChange={(e) => changeLanguage(e.target.value)}
+          >
+            <option value="system">{t("settings:language.systemDefault")}</option>
+            {SUPPORTED_LNGS.map((lng) => (
+              <option key={lng} value={lng}>{languageName(lng)}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
             <Volume2 size={15} />
-            Sortie audio
+            {t("settings:audioOutput.title")}
           </div>
 
           {loading ? (
-            <p className="settings-loading">Chargement des périphériques…</p>
+            <p className="settings-loading">{t("settings:audioOutput.loading")}</p>
           ) : (
             <select
               className="settings-select"
@@ -193,14 +223,14 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
 
           <button className="settings-refresh" onClick={loadDevices}>
             <RefreshCw size={13} />
-            Actualiser la liste
+            {t("settings:audioOutput.refresh")}
           </button>
         </div>
 
         <div className="settings-section">
           <div className="settings-section-title">
             <Keyboard size={15} />
-            Commandes
+            {t("settings:keyBindings.title")}
           </div>
 
           <div className="key-binding-list">
@@ -210,20 +240,20 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               const isListening = listeningAction === def.id;
               return (
                 <div key={def.id} className="key-binding-row">
-                  <span className="key-binding-label">{def.label}</span>
+                  <span className="key-binding-label">{t(def.labelKey)}</span>
                   <button
                     type="button"
                     className={`key-binding-capture${isListening ? " key-binding-capture--listening" : ""}`}
                     onClick={isListening ? cancelListen : () => startListen(def.id)}
                   >
-                    {isListening ? "Appuyez sur une touche…" : formatBinding(current)}
+                    {isListening ? t("settings:keyBindings.pressAKey") : formatBinding(current)}
                   </button>
                   <button
                     type="button"
                     className="btn-icon"
                     onClick={() => resetBinding(def.id)}
                     disabled={isDefault}
-                    title="Réinitialiser au défaut"
+                    title={t("settings:keyBindings.reset")}
                   >
                     <RotateCcw size={14} />
                   </button>
@@ -232,7 +262,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
                     className="btn-icon"
                     onClick={() => disableBinding(def.id)}
                     disabled={current.key === ""}
-                    title="Désactiver le raccourci"
+                    title={t("settings:keyBindings.disable")}
                   >
                     <X size={14} />
                   </button>
@@ -247,7 +277,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
         <div className="settings-section">
           <div className="settings-section-title">
             <Download size={15} />
-            Mises à jour
+            {t("settings:updates.title")}
           </div>
 
           <div className="settings-update-row">
@@ -257,28 +287,28 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               disabled={updaterState.checking || updaterState.installing}
             >
               <RefreshCw size={13} className={updaterState.checking ? "spin" : ""} />
-              {updaterState.checking ? "Vérification…" : "Chercher les mises à jour"}
+              {updaterState.checking ? t("settings:updates.checking") : t("settings:updates.check")}
             </button>
 
             {!updaterState.checking && updaterState.update && (
               <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing}>
                 <ArrowDownCircle size={14} />
                 {updaterState.installing
-                  ? updaterState.progress !== null ? `${updaterState.progress}%` : "Installation…"
-                  : `Installer v${updaterState.update.version}`}
+                  ? updaterState.progress !== null ? `${updaterState.progress}%` : t("settings:updates.installing")
+                  : t("settings:updates.install", { version: updaterState.update.version })}
               </button>
             )}
 
             {!updaterState.checking && !updaterState.update && !updaterState.error && (
               <span className="settings-update-status">
                 <CheckCircle size={13} />
-                À jour
+                {t("settings:updates.upToDate")}
               </span>
             )}
 
             {!updaterState.checking && updaterState.error && (
               <span className="settings-update-status settings-update-error" title={updaterState.error}>
-                Erreur de vérification
+                {t("settings:updates.checkError")}
               </span>
             )}
           </div>
@@ -287,12 +317,12 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
         <div className="settings-section">
           <div className="settings-section-title">
             <FileVideo size={15} />
-            yt-dlp (téléchargement YouTube)
+            {t("settings:ytDlp.title")}
           </div>
 
           <div className="settings-update-row">
             <span className="settings-update-status">
-              {ytDlpVersion ? `Version ${ytDlpVersion}` : "Version inconnue"}
+              {ytDlpVersion ? t("settings:ytDlp.version", { version: ytDlpVersion }) : t("settings:ytDlp.unknownVersion")}
             </span>
             <button
               className="settings-refresh"
@@ -300,7 +330,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               disabled={ytDlpUpdating}
             >
               <RefreshCw size={13} className={ytDlpUpdating ? "spin" : ""} />
-              {ytDlpUpdating ? "Mise à jour…" : "Mettre à jour"}
+              {ytDlpUpdating ? t("settings:ytDlp.updating") : t("settings:ytDlp.update")}
             </button>
           </div>
           {ytDlpError && (
@@ -315,13 +345,13 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               checked={settings.autoUpdateYtDlp !== false}
               onChange={(e) => onUpdate({ autoUpdateYtDlp: e.target.checked })}
             />
-            <span>Mettre à jour automatiquement au démarrage</span>
+            <span>{t("settings:ytDlp.autoUpdate")}</span>
           </label>
         </div>
 
         <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
           {version && <span style={{ fontSize: "0.8rem", color: "var(--text2)" }}>v{version}</span>}
-          <button className="btn-primary" onClick={onClose}>Fermer</button>
+          <button className="btn-primary" onClick={onClose}>{t("common:actions.close")}</button>
         </div>
       </div>
     </div>

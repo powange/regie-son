@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Project, PlaylistItem } from "./types";
 import { audioMimeType } from "./mime";
+import { translateError } from "./errorMessage";
 
 export interface PlayerPosition {
   numeroIndex: number;
@@ -221,7 +222,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       })
       .catch((err) => {
         if (version !== loadVersionRef.current) return;
-        setState((s) => ({ ...s, isPlaying: false, audioError: String(err) }));
+        setState((s) => ({ ...s, isPlaying: false, audioError: translateError(err) }));
       });
   }, []);
 

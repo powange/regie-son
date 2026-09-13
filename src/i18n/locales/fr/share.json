@@ -1,0 +1,39 @@
+{
+  "open": {
+    "showTitle": "Ouvrir un spectacle",
+    "actTitle": "Ouvrir un numéro",
+    "folder": "Un dossier sur l'ordinateur",
+    "folderShowHint": "Choisir le dossier d'un spectacle existant.",
+    "folderActHint": "Choisir le dossier d'un numéro existant.",
+    "file": "Un fichier {{ext}}",
+    "fileHint": "Décompresser une archive {{ext}} dans un dossier du disque.",
+    "cloud": "Sur le cloud",
+    "cloudHint": "Saisir un code pour récupérer une archive partagée en ligne."
+  },
+  "export": {
+    "showTitle": "Exporter le spectacle",
+    "actTitle": "Exporter le numéro",
+    "file": "Exporter en fichier {{ext}}",
+    "fileHint": "Enregistrer une archive sur le disque pour la partager manuellement.",
+    "cloud": "Partager sur le cloud",
+    "cloudHint": "Téléverser l'archive et obtenir un code à transmettre."
+  },
+  "import": {
+    "showTitle": "Récupérer un spectacle",
+    "actTitle": "Récupérer un numéro",
+    "codeLabel": "Code de partage",
+    "codePlaceholder": "Ex : AbCdEf12",
+    "codeRequired": "Veuillez saisir un code.",
+    "inProgress": "Téléchargement et extraction en cours…",
+    "submit": "Récupérer"
+  },
+  "cloudShare": {
+    "title": "Partage cloud",
+    "uploading": "Téléversement en cours…",
+    "caption": "Communiquez ce code pour que votre destinataire récupère l'archive :",
+    "clickToCopy": "Cliquer pour copier",
+    "copy": "Copier",
+    "expiry": "Hébergé sur Litterbox — le fichier expire automatiquement au bout de 72 heures.",
+    "unknownError": "Erreur inconnue"
+  }
+}

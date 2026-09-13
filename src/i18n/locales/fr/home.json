@@ -1,0 +1,41 @@
+{
+  "tagline": "Gestion audio pour spectacles cabaret",
+  "removeFromList": "Retirer de la liste",
+  "folderPlaceholder": "Chemin du dossier...",
+  "folderWillBeCreated": "Le dossier sera créé s'il n'existe pas.",
+  "folderRequired": "Veuillez choisir un dossier.",
+  "show": {
+    "sectionTitle": "Spectacle",
+    "create": "Nouveau spectacle",
+    "open": "Ouvrir un spectacle",
+    "recents": "Spectacles récents"
+  },
+  "act": {
+    "sectionTitle": "Numéro",
+    "create": "Nouveau numéro",
+    "open": "Ouvrir un numéro",
+    "recents": "Numéros récents"
+  },
+  "createShow": {
+    "title": "Nouveau spectacle",
+    "nameLabel": "Nom du spectacle",
+    "namePlaceholder": "Ex : Cabaret de printemps 2025",
+    "folderLabel": "Dossier du projet",
+    "nameRequired": "Veuillez saisir un nom de spectacle."
+  },
+  "createAct": {
+    "title": "Nouveau numéro",
+    "nameLabel": "Nom du numéro",
+    "namePlaceholder": "Ex : Tango de la rose",
+    "folderLabel": "Dossier du numéro",
+    "nameRequired": "Veuillez saisir un nom de numéro."
+  },
+  "errors": {
+    "openProject": "Impossible d'ouvrir ce projet : {{detail}}",
+    "openAct": "Impossible d'ouvrir ce numéro : {{detail}}",
+    "import": "Impossible d'importer : {{detail}}",
+    "projectNotFound": "Projet introuvable : \"{{name}}\". Il a peut-être été déplacé ou supprimé.",
+    "actNotFound": "Numéro introuvable : \"{{name}}\". Il a peut-être été déplacé ou supprimé.",
+    "folderPicker": "Impossible d'ouvrir le sélecteur : {{detail}}"
+  }
+}

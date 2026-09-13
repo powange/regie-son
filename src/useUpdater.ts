@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { translateError } from "./errorMessage";
 
 export interface UpdaterState {
   update: Update | null;
@@ -27,7 +28,7 @@ export function useUpdater() {
     setState((s) => ({ ...s, checking: true, update: null, error: null, progress: null }));
     check()
       .then((update) => setState((s) => ({ ...s, checking: false, update: update ?? null })))
-      .catch((err) => setState((s) => ({ ...s, checking: false, error: String(err) })));
+      .catch((err) => setState((s) => ({ ...s, checking: false, error: translateError(err) })));
   }
 
   useEffect(() => { checkUpdate(); }, []);
@@ -51,7 +52,7 @@ export function useUpdater() {
       });
       await relaunch();
     } catch (err) {
-      setState((s) => ({ ...s, installing: false, progress: null, error: String(err) }));
+      setState((s) => ({ ...s, installing: false, progress: null, error: translateError(err) }));
     }
   }
 

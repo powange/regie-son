@@ -1,6 +1,7 @@
 import { Play, Pause, SkipForward, Square, AlertTriangle, PauseCircle } from "lucide-react";
 import { PlayerState } from "../usePlayer";
 import { Project } from "../types";
+import { Trans, useTranslation } from "react-i18next";
 import { getNextContext } from "../playerNav";
 
 interface Props {
@@ -20,6 +21,7 @@ function formatTime(secs: number): string {
 }
 
 export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop, onSeek }: Props) {
+  const { t } = useTranslation(["audio"]);
   const { position, isPlaying, progress, audioError } = state;
 
   const nextContext = getNextContext(state, project);
@@ -53,8 +55,15 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
             <span className="player-pause-indicator">
               <PauseCircle size={13} />
               {isTimedPause
-                ? <>Pause — <strong>{pauseRemaining.toFixed(1)} s</strong> restantes</>
-                : "En attente — appuyez sur Play pour continuer"}
+                ? (
+                  <Trans
+                    ns="audio"
+                    i18nKey="player.pauseRemaining"
+                    values={{ seconds: pauseRemaining.toFixed(1) }}
+                    components={{ strong: <strong /> }}
+                  />
+                )
+                : t("audio:player.waiting")}
             </span>
           ) : (
             <span className="player-current-numero">{currentNumero!.name}</span>
@@ -64,21 +73,21 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
 
       <div className="player-top">
         <div className="player-controls">
-          <button className="player-btn player-btn--stop" onClick={onStop} disabled={!position} title="Stop">
+          <button className="player-btn player-btn--stop" onClick={onStop} disabled={!position} title={t("audio:player.stop")}>
             <Square size={16} />
           </button>
-          <button className="player-btn player-btn--play" onClick={onTogglePlay} disabled={!hasAudio} title={isPlaying ? "Pause" : "Lecture"}>
+          <button className="player-btn player-btn--play" onClick={onTogglePlay} disabled={!hasAudio} title={isPlaying ? t("audio:player.pause") : t("audio:player.play")}>
             {isPlaying ? <Pause size={22} /> : <Play size={22} />}
           </button>
         </div>
 
         <div className="player-next-card">
-          <button className="player-btn player-btn--next" onClick={onNext} disabled={!hasAudio} title="Piste suivante">
+          <button className="player-btn player-btn--next" onClick={onNext} disabled={!hasAudio} title={t("audio:player.next")}>
             <SkipForward size={18} />
           </button>
           {nextContext && (
             <div className="player-next-info">
-              {nextCue && <span className="player-next-cue" title="Top de départ">{nextCue}</span>}
+              {nextCue && <span className="player-next-cue" title={t("audio:item.cue")}>{nextCue}</span>}
               {nextNumeroName && <span className="player-next-numero">{nextNumeroName}</span>}
             </div>
           )}
@@ -87,7 +96,7 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
         {state.fade && (
           <div className={`player-fade-card player-fade-card--${state.fade.type}`}>
             <span className="player-fade-label">
-              {state.fade.type === "in" ? "Fade in" : "Fade out"}
+              {state.fade.type === "in" ? t("audio:player.fadeIn") : t("audio:player.fadeOut")}
             </span>
             <span className="player-fade-countdown">
               {state.fade.remaining.toFixed(1)}s

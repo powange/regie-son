@@ -1,0 +1,24 @@
+{
+  "act": {
+    "label": "Numéro",
+    "hint": "Un passage avec ses musiques et ses pauses."
+  },
+  "importAct": {
+    "label": "Importer un numéro",
+    "hint": "Depuis un fichier .regiesonnumero exporté."
+  },
+  "importCloud": {
+    "label": "Importer depuis le cloud",
+    "hint": "Récupérer un numéro partagé via son code."
+  },
+  "intermission": {
+    "label": "Entracte",
+    "hint": "Une pause entre deux moments du spectacle."
+  },
+  "hostSegment": {
+    "label": "Présentation",
+    "hint": "Un moment d'annonce ou de transition."
+  },
+  "changeType": "Changer le type",
+  "emptyAct": "Aucun élément — ajoutez une musique ou une pause."
+}

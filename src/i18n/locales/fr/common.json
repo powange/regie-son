@@ -1,0 +1,21 @@
+{
+  "actions": {
+    "back": "Retour",
+    "browse": "Parcourir",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "continue": "Continuer",
+    "create": "Créer",
+    "creating": "Création...",
+    "delete": "Supprimer",
+    "rename": "Renommer",
+    "save": "Enregistrer"
+  },
+  "duration": {
+    "minutes": "{{m}} min",
+    "hours": "{{h}} h",
+    "hoursMinutes": "{{h}} h {{m}}"
+  },
+  "trackInAct": "« {{track}} » ({{act}})",
+  "settings": "Paramètres"
+}

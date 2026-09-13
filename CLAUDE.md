@@ -4,9 +4,86 @@ Application desktop Tauri 2 + React/TypeScript pour la gestion du son pendant le
 
 ## Langue
 
-- **UI / messages utilisateur** : français (labels, placeholders, erreurs)
+- **UI / messages utilisateur** : multilingue via i18next — voir [Internationalisation](#internationalisation-i18n)
 - **Code** : anglais (noms de variables, fonctions, commentaires de logique)
-- **Messages d'erreur renvoyés par Rust** : français (ils remontent directement à l'utilisateur)
+- **Langue de référence des catalogues** : français (`fallbackLng: "fr"`)
+
+## Internationalisation (i18n)
+
+Outillage : `i18next` + `react-i18next` + `i18next-cli` (extraction, génération de types, lint).
+
+### Glossaire — à respecter sans exception
+
+| FR | EN |
+|---|---|
+| spectacle | Show |
+| numéro | Act |
+| entracte | Intermission |
+| présentation | Host segment |
+
+Le nom « Régie Son » ne se traduit pas : c'est la marque, et c'est aussi un identifiant système (session audio WASAPI, `--who` de systemd-inhibit, associations de fichiers).
+
+### Chaînes françaises qu'il ne faut PAS traduire
+
+Ce sont des chemins ou du format de fichier, pas de l'interface :
+
+- `Spectacles` et `Numéros` ([lib.rs](src-tauri/src/lib.rs)) — dossiers créés dans les Documents de l'utilisateur. Les traduire casse les installations existantes.
+- `musiques/` — structure interne de l'archive `.regieson`. La traduire casse le format de fichier.
+- `NumeroType = "numero" | "entracte" | "presentation"` — valeurs persistées dans le JSON projet. Seuls leurs libellés d'affichage se traduisent.
+
+### Décisions arrêtées
+
+- Locales : `fr` et `en` (anglais US ; un seul catalogue anglophone, pas de `en-GB`).
+- Repli : `fr`. Un catalogue `en` incomplet n'affiche donc jamais de clé brute.
+- Premier lancement : détection via `navigator.language`. Le choix explicite de l'utilisateur est persisté dans `Settings.language` (`null` = suivre l'OS).
+- Noms par défaut générés (`Intermission 2`) : produits dans la langue active puis figés comme donnée utilisateur. Un projet créé en anglais garde ses noms anglais ouvert en français.
+- Métadonnées OS (descriptions d'associations `.regieson`, filtres des dialogues natifs) : restent en français. Elles sont figées à l'installation, les traduire ne changerait rien pour un utilisateur déjà installé.
+
+### Ajouter une langue
+
+1. Créer `src/i18n/locales/<lng>/` et y copier les fichiers de `fr/`
+2. `npm run i18n:extract` complète les clés manquantes
+3. Traduire
+4. `npm run i18n:check`
+
+Rien d'autre : les catalogues sont chargés par `import.meta.glob` et le sélecteur de langue est dérivé de `supportedLngs`. Ni import ni liste à mettre à jour.
+
+### Conventions
+
+- **Une clé par phrase complète, jamais de fragment interpolé.** `preflight.batteryShorterThanShow` et `preflight.batteryShorterThanAct` sont deux clés distinctes, parce que « la durée **du** spectacle » / « **du** numéro » ne se recompose pas d'une langue à l'autre.
+- **Pluriels via `count`**, jamais par concaténation d'un `"s"`. i18next s'appuie sur `Intl.PluralRules`, donc les langues à 3 ou 4 formes fonctionneront sans code supplémentaire.
+- **La logique métier renvoie des codes, pas des phrases.** `runPreflight` rend des `PreflightIssue` avec un `code` et ses paramètres ; la traduction se fait à l'affichage ([preflightMessage.ts](src/preflightMessage.ts)). Les tests portent sur les codes, ce qui les rend insensibles aux reformulations.
+- **Durées** : `formatLongDuration(seconds, lng?)` lit son découpage dans `common:duration.*`, donc `1 h 23` en français et `1h 23m` en anglais viennent du catalogue. Les durées arrivent déjà formatées dans les messages (`{{left}}`, pas `{{left, duration}}`) : les types générés par i18next typent tout paramètre formaté en `string`, et passer par un formateur i18next obligeait à convertir les nombres pour rien.
+- Les namespaces dont les clés viennent de données (`preflight` et `errors`) sont **maintenus à la main** — l'extraction statique ne peut pas les voir. D'où `removeUnusedKeys: false`. Deux tests les couvrent : [i18n.test.ts](src/i18n.test.ts) garantit qu'aucune clé de `fr` ne manque dans les autres locales, [errorMessage.test.ts](src/errorMessage.test.ts) que chaque code émis par Rust existe dans le catalogue.
+- **Toujours `useTranslation([...])` avec un tableau**, jamais `useTranslation("audio")`. Les clés préfixées (`t("audio:addStep")`) ne sont typées que sous la forme tableau ; avec un namespace unique il faut écrire la clé nue, et le typage refuse la forme préfixée. Erreur facile à commettre : le message du compilateur parle de types de clés, pas du hook.
+- Pour un message qui contient du balisage inline, `<Trans>` avec un `ns` explicite et la clé **nue** : `<Trans ns="audio" i18nKey="player.pauseRemaining" components={{ strong: <strong /> }} />`. Un `i18nKey` préfixé n'est pas typé sur `<Trans>`. Seul cas dans l'application aujourd'hui : le décompte de pause du lecteur.
+- Dans un `useCallback` dont `t` n'est pas une dépendance, ou dans une fonction de module, utiliser `i18next.t` directement — la closure garderait sinon la langue d'avant le changement. C'est le cas de `newNumero` ([ProjectEditor.tsx](src/components/ProjectEditor.tsx)) et de `formatBinding` ([keyBindings.ts](src/keyBindings.ts)).
+- Texte volontairement non traduit : directive `{/* i18next-instrument-ignore-next-line */}` au-dessus. Un seul usage, le `<h1>Régie Son</h1>` de [HomePage.tsx](src/components/HomePage.tsx).
+
+### Erreurs Rust
+
+Les commandes Tauri rendent un [`AppError`](src-tauri/src/error.rs) — `{ code, detail?, params? }` — jamais une phrase :
+
+```rust
+fs::write(&path, data).map_err(fail("io.saveFailed"))?;
+archive.by_name(name).map_err(|e| AppError::new("archive.readNamedFailed").with("name", name).detail(e))?;
+```
+
+- `code` désigne une entrée de `errors.json`, `params` ses interpolations, `detail` le message brut de l'OS ou de la bibliothèque. **`detail` n'est jamais traduit** : c'est ce qu'on lit pour déboguer, et c'est ce que [errorMessage.ts](src/errorMessage.ts) reconnaît par regex — la sortie de yt-dlp et de reqwest est en anglais et le reste.
+- `translateError(raw)` lit i18next directement au lieu de recevoir un `t`, contrairement à `preflightMessage` : un message d'erreur est calculé une fois au `catch` puis rangé dans un state, donc il n'a pas à être réactif, et les appelants sont autant des hooks que des composants.
+- Un `detail` reconnu **l'emporte** sur le message du code : « Cette vidéo est privée » dit plus que « Erreur yt-dlp : … ».
+- `set_show_mode` rend `Result<(), Vec<AppError>>`. Les deux volets sont indépendants et l'opérateur doit savoir lequel a renoncé : c'est le frontend qui traduit puis joint par ` · `, puisque lui seul connaît la langue.
+- **Ne jamais faire `String(err)` sur une erreur de commande** — ça rend `[object Object]`. Toujours `translateError(err)`.
+- Le code voyage en chaîne de Rust au catalogue : ni rustc ni tsc ne peuvent le vérifier. [errorMessage.test.ts](src/errorMessage.test.ts) le fait à leur place, en relisant les sources Rust par le glob Vite.
+- [audio_session.rs](src-tauri/src/audio_session.rs) garde des `Result<(), String>` : son erreur est jetée par l'appelant (`let _ = …`) et ne remonte jamais à l'utilisateur.
+
+### Où en est la migration
+
+Terminée. **322 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
+
+Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i18n:check`, `tsc` et les tests avant les quatre builds.
+
+**Attention aux branches `#[cfg]`** : sous Linux, `cargo check` ne compile ni le code Windows ni le code macOS de [show_mode.rs](src-tauri/src/show_mode.rs) et [sleep_guard.rs](src-tauri/src/sleep_guard.rs), et le toolchain MSVC n'est pas installable sous WSL. Une modification de ces branches n'est réellement vérifiée que par le build de release.
 
 ## Stack
 

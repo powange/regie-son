@@ -1,0 +1,49 @@
+{
+  "language": {
+    "title": "Langue",
+    "systemDefault": "Langue du système"
+  },
+  "audioOutput": {
+    "title": "Sortie audio",
+    "loading": "Chargement des périphériques…",
+    "refresh": "Actualiser la liste",
+    "systemDefault": "Défaut du système",
+    "unnamedDevice": "Périphérique audio"
+  },
+  "keyBindings": {
+    "title": "Commandes",
+    "playPause": "Lecture / Pause",
+    "next": "Piste suivante",
+    "stop": "Stop",
+    "seekForward": "Avancer de 5 s",
+    "seekBackward": "Reculer de 5 s",
+    "pressAKey": "Appuyez sur une touche…",
+    "reset": "Réinitialiser au défaut",
+    "disable": "Désactiver le raccourci",
+    "forbiddenKey": "La touche « {{key}} » ne peut pas être utilisée.",
+    "none": "Aucune touche",
+    "keys": {
+      "space": "Espace",
+      "escape": "Échap",
+      "backspace": "Retour",
+      "delete": "Suppr"
+    }
+  },
+  "updates": {
+    "title": "Mises à jour",
+    "checking": "Vérification…",
+    "check": "Chercher les mises à jour",
+    "install": "Installer v{{version}}",
+    "installing": "Installation…",
+    "upToDate": "À jour",
+    "checkError": "Erreur de vérification"
+  },
+  "ytDlp": {
+    "title": "yt-dlp (téléchargement YouTube)",
+    "version": "Version {{version}}",
+    "unknownVersion": "Version inconnue",
+    "updating": "Mise à jour…",
+    "update": "Mettre à jour",
+    "autoUpdate": "Mettre à jour automatiquement au démarrage"
+  }
+}

@@ -47,8 +47,33 @@ jobs:
           fi
           echo "release_id=$id" >> "$GITHUB_OUTPUT"
 
+  # Une seule passe de vérifications, avant de lancer quatre builds : un
+  # catalogue de traduction incomplet ou une chaîne laissée en dur n'a pas
+  # besoin de quatre plateformes pour être constatée. Les tests portent les
+  # garde-fous i18n (parité des locales, codes d'erreur Rust), donc ils font
+  # partie de la vérification et pas seulement de l'hygiène.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - name: Traductions (extraction, chaînes en dur, paramètres)
+        run: npm run i18n:check
+
+      - name: Types
+        run: npm run i18n:types && npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
   release:
-    needs: create-release
+    needs: [create-release, checks]
     strategy:
       # One platform failing must not cancel the others: a broken Linux
       # runner should still let the Windows and macOS artifacts ship.

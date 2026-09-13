@@ -1,0 +1,7 @@
+{
+  "installing": "Installing…",
+  "installingPercent": "Installing {{percent}}%",
+  "available": "Update available — version {{version}}",
+  "install": "Install",
+  "dismiss": "Dismiss"
+}

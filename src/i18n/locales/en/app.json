@@ -1,0 +1,12 @@
+{
+  "replace": {
+    "title": "Replace?",
+    "closeActForShow": "An act is open. Close it to open the imported show?",
+    "replaceShow": "A show is already open. Replace it with the imported one?",
+    "replaceAct": "An act is already open. Replace it with the imported one?"
+  },
+  "errors": {
+    "import": "Import failed: {{detail}}",
+    "open": "Could not open: {{detail}}"
+  }
+}

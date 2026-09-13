@@ -1,0 +1,24 @@
+{
+  "act": {
+    "label": "Act",
+    "hint": "A slot with its own tracks and pauses."
+  },
+  "importAct": {
+    "label": "Import an act",
+    "hint": "From an exported .regiesonnumero file."
+  },
+  "importCloud": {
+    "label": "Import from the cloud",
+    "hint": "Fetch a shared act using its code."
+  },
+  "intermission": {
+    "label": "Intermission",
+    "hint": "A break between two parts of the show."
+  },
+  "hostSegment": {
+    "label": "Host segment",
+    "hint": "An announcement or a transition."
+  },
+  "changeType": "Change the type",
+  "emptyAct": "Nothing here yet — add a track or a pause."
+}

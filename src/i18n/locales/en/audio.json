@@ -1,0 +1,60 @@
+{
+  "addStep": "Add a step",
+  "categoryMusic": "Music",
+  "categoryPause": "Pause",
+  "thisComputer": "This computer",
+  "fromUrl": "From a URL",
+  "youtube": "YouTube",
+  "addPause": "Add a pause",
+  "download": {
+    "downloadingTitle": "Downloading “{{title}}”…",
+    "fetchingInfo": "Fetching the video details…",
+    "inProgress": "Downloading…",
+    "initializing": "Starting…",
+    "submit": "Download",
+    "urlLabel": "Audio file URL",
+    "urlPlaceholder": "https://example.com/music.mp3",
+    "youtubeHint": "Downloads the audio from YouTube (bundled with the app)",
+    "youtubeLabel": "YouTube video link",
+    "youtubePlaceholder": "https://www.youtube.com/watch?v=..."
+  },
+  "settings": {
+    "title": "Settings — {{name}}",
+    "waveformError": "Could not load the waveform.",
+    "playPreview": "Play the preview",
+    "startLabel": "Start (optional)",
+    "startPlaceholder": "e.g. 0:30 or 30",
+    "endLabel": "End (optional)",
+    "endPlaceholder": "e.g. 2:45 or 165",
+    "fadeInLabel": "Fade in — seconds",
+    "fadeOutLabel": "Fade out — seconds",
+    "secondsPlaceholder": "e.g. 3",
+    "invalidStart": "Invalid start time (format: mm:ss or seconds)",
+    "invalidEnd": "Invalid end time (format: mm:ss or seconds)",
+    "endBeforeStart": "The end time must be later than the start time",
+    "invalidFadeIn": "Invalid fade-in length (in seconds, e.g. 3)",
+    "invalidFadeOut": "Invalid fade-out length (in seconds, e.g. 3)"
+  },
+  "item": {
+    "duration": "Length",
+    "cue": "Cue",
+    "cuePlaceholder": "Cue…",
+    "volume": "Volume: {{percent}}%"
+  },
+  "pause": {
+    "label": "Pause",
+    "seekHere": "Jump to this step",
+    "autoAdvance": "Wait before moving on automatically",
+    "durationField": "Seconds (empty = wait for the operator)"
+  },
+  "player": {
+    "stop": "Stop",
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next track",
+    "waiting": "Waiting — press Play to carry on",
+    "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> left",
+    "fadeIn": "Fade in",
+    "fadeOut": "Fade out"
+  }
+}

@@ -5,6 +5,8 @@ import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { Region } from "wavesurfer.js/dist/plugins/regions";
 import { AudioFile } from "../types";
 import { audioMimeType } from "../mime";
+import { useTranslation } from "react-i18next";
+
 
 function formatTime(seconds: number | undefined): string {
   if (seconds === undefined || seconds === null) return "";
@@ -41,6 +43,7 @@ interface Props {
 }
 
 export default function AudioSettingsModal({ audio, projectPath, onSave, onClose }: Props) {
+  const { t } = useTranslation(["audio", "common"]);
   const [startRaw, setStartRaw] = useState(formatTime(audio.startTime));
   const [endRaw, setEndRaw] = useState(formatTime(audio.endTime));
   const [fadeInRaw, setFadeInRaw] = useState(audio.fadeIn !== undefined ? String(audio.fadeIn) : "");
@@ -115,7 +118,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
         ws.on("finish", () => setIsPlaying(false));
       })
       .catch(() => {
-        if (!cancelled) setError("Impossible de charger la forme d'onde.");
+        if (!cancelled) setError(t("audio:settings.waveformError"));
       });
 
     return () => {
@@ -152,23 +155,23 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
     const fadeOut = parseDuration(fadeOutRaw);
 
     if (startRaw.trim() !== "" && startTime === undefined) {
-      setError("Heure de début invalide (format : mm:ss ou secondes)");
+      setError(t("audio:settings.invalidStart"));
       return;
     }
     if (endRaw.trim() !== "" && endTime === undefined) {
-      setError("Heure de fin invalide (format : mm:ss ou secondes)");
+      setError(t("audio:settings.invalidEnd"));
       return;
     }
     if (startTime !== undefined && endTime !== undefined && endTime <= startTime) {
-      setError("L'heure de fin doit être supérieure à l'heure de début");
+      setError(t("audio:settings.endBeforeStart"));
       return;
     }
     if (fadeInRaw.trim() !== "" && fadeIn === undefined) {
-      setError("Durée de fade in invalide (en secondes, ex : 3)");
+      setError(t("audio:settings.invalidFadeIn"));
       return;
     }
     if (fadeOutRaw.trim() !== "" && fadeOut === undefined) {
-      setError("Durée de fade out invalide (en secondes, ex : 3)");
+      setError(t("audio:settings.invalidFadeOut"));
       return;
     }
 
@@ -180,7 +183,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ width: "calc(100vw - 4rem)", maxWidth: 1200 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-title-row">
-          <h2>Paramètres — {audio.original_name}</h2>
+          <h2>{t("audio:settings.title", { name: audio.original_name })}</h2>
           <button className="btn-icon" onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -190,7 +193,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
             className="waveform-play-btn"
             onClick={togglePreview}
             disabled={!waveformReady}
-            title={isPlaying ? "Pause" : "Lire l'aperçu"}
+            title={isPlaying ? t("audio:player.pause") : t("audio:settings.playPreview")}
           >
             {isPlaying ? <Pause size={18} /> : <Play size={18} />}
           </button>
@@ -199,44 +202,44 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
 
         <div className="audio-settings-grid">
           <div className="modal-field">
-            <label>Début (optionnel)</label>
+            <label>{t("audio:settings.startLabel")}</label>
             <input
               type="text"
-              placeholder="ex : 0:30 ou 30"
+              placeholder={t("audio:settings.startPlaceholder")}
               value={startRaw}
               onChange={(e) => { setStartRaw(e.target.value); setError(null); }}
             />
           </div>
 
           <div className="modal-field">
-            <label>Fin (optionnel)</label>
+            <label>{t("audio:settings.endLabel")}</label>
             <input
               type="text"
-              placeholder="ex : 2:45 ou 165"
+              placeholder={t("audio:settings.endPlaceholder")}
               value={endRaw}
               onChange={(e) => { setEndRaw(e.target.value); setError(null); }}
             />
           </div>
 
           <div className="modal-field">
-            <label>Fade in — durée en secondes</label>
+            <label>{t("audio:settings.fadeInLabel")}</label>
             <input
               type="number"
               min={0}
               step={0.5}
-              placeholder="ex : 3"
+              placeholder={t("audio:settings.secondsPlaceholder")}
               value={fadeInRaw}
               onChange={(e) => { setFadeInRaw(e.target.value); setError(null); }}
             />
           </div>
 
           <div className="modal-field">
-            <label>Fade out — durée en secondes</label>
+            <label>{t("audio:settings.fadeOutLabel")}</label>
             <input
               type="number"
               min={0}
               step={0.5}
-              placeholder="ex : 3"
+              placeholder={t("audio:settings.secondsPlaceholder")}
               value={fadeOutRaw}
               onChange={(e) => { setFadeOutRaw(e.target.value); setError(null); }}
             />
@@ -246,8 +249,8 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
         {error && <p className="modal-error">{error}</p>}
 
         <div className="modal-actions">
-          <button className="btn btn-primary" onClick={handleSave}>Enregistrer</button>
-          <button className="btn btn-secondary" onClick={onClose}>Annuler</button>
+          <button className="btn btn-primary" onClick={handleSave}>{t("common:actions.save")}</button>
+          <button className="btn btn-secondary" onClick={onClose}>{t("common:actions.cancel")}</button>
         </div>
       </div>
     </div>

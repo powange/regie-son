@@ -6,6 +6,9 @@ import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
 import { PreflightIssue, gatherPreflight, estimateShowDuration } from "../preflight";
 import { useBattery, LOW_BATTERY_PERCENT } from "../useBattery";
+import i18next from "i18next";
+import { useTranslation } from "react-i18next";
+import { translateError } from "../errorMessage";
 import { formatLongDuration } from "../duration";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
@@ -40,9 +43,9 @@ interface Props {
 
 function newNumero(type: NumeroType, index: number): Numero {
   const names: Record<NumeroType, string> = {
-    numero: `Numéro ${index}`,
-    entracte: `Entracte ${index}`,
-    presentation: `Présentation ${index}`,
+    numero: i18next.t("editor:defaultName.act", { index }),
+    entracte: i18next.t("editor:defaultName.intermission", { index }),
+    presentation: i18next.t("editor:defaultName.hostSegment", { index }),
   };
   return { id: crypto.randomUUID(), type, name: names[type], items: [] };
 }
@@ -50,6 +53,7 @@ function newNumero(type: NumeroType, index: number): Numero {
 interface VerifyResult { missing: string[]; orphans: string[] }
 
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
+  const { t } = useTranslation(["editor", "common"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
   const [showAddPart, setShowAddPart] = useState(false);
@@ -91,7 +95,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: verify.orphans });
       setVerify((v) => ({ ...v, orphans: [] }));
     } catch (err) {
-      alert("Erreur lors du nettoyage : " + err);
+      alert(t("editor:errors.cleanup", { detail: translateError(err) }));
     }
   }
 
@@ -210,7 +214,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       setShowModeError(null);
     } catch (err) {
       setShowMode(active);
-      setShowModeError(String(err));
+      setShowModeError(translateError(err));
     }
   }
 
@@ -246,7 +250,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         await invoke("export_project", { projectPath: project.path, destFile });
       }
     } catch (err) {
-      alert("Erreur lors de l'export : " + err);
+      alert(t("editor:errors.export", { detail: translateError(err) }));
     }
   }
 
@@ -261,7 +265,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       setShareCode(code);
       setShareStatus("done");
     } catch (err) {
-      setShareError(String(err));
+      setShareError(translateError(err));
       setShareStatus("error");
     }
   }
@@ -277,7 +281,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       setSaved(true);
       runVerify();
     } catch (err) {
-      alert("Erreur lors de l'import : " + err);
+      alert(t("editor:errors.import", { detail: translateError(err) }));
     }
   }
 
@@ -359,11 +363,11 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     <div className="project-editor">
       <div className="editor-header">
         <h1>{project.name}</h1>
-        {saved && <span className="saved-badge">✓ Sauvegardé</span>}
+        {saved && <span className="saved-badge">{t("editor:saved")}</span>}
 
-        <label className="edit-mode-toggle" title={editMode ? "Mode édition actif" : "Mode édition inactif"}>
+        <label className="edit-mode-toggle" title={editMode ? t("editor:editMode.on") : t("editor:editMode.off")}>
           <Pencil size={14} />
-          <span>Édition</span>
+          <span>{t("editor:editMode.label")}</span>
           <div className={`toggle-switch${editMode ? " toggle-switch--on" : ""}`} onClick={() => setEditMode((v) => !v)}>
             <div className="toggle-thumb" />
           </div>
@@ -374,10 +378,10 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
             className={`battery-indicator${!batteryCharging && batteryPercent < LOW_BATTERY_PERCENT ? " battery-indicator--low" : ""}`}
             title={
               batteryCharging
-                ? "En charge"
+                ? t("editor:battery.charging")
                 : batteryTime
-                  ? `Autonomie restante : ${batteryTime}`
-                  : "Sur batterie — autonomie non estimée par le système"
+                  ? t("editor:battery.remaining", { time: batteryTime })
+                  : t("editor:battery.noEstimate")
             }
           >
             <BatteryIcon size={15} />
@@ -389,7 +393,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         <button
           className="btn-icon"
           onClick={() => openPreflight(false)}
-          title="Vérifier le spectacle"
+          title={t("editor:checkShow")}
         >
           <ShieldCheck size={18} />
         </button>
@@ -399,27 +403,27 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClick={toggleShowMode}
           title={
             showMode
-              ? "Mode spectacle actif : notifications coupées, veille bloquée — cliquer pour désactiver"
-              : "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
+              ? t("editor:showMode.activeTitle")
+              : t("editor:showMode.inactiveTitle")
           }
         >
           <MonitorPlay size={15} />
-          {showMode ? "Mode spectacle actif" : "Mode spectacle"}
+          {showMode ? t("editor:showMode.active") : t("editor:showMode.inactive")}
         </button>
 
         <button
           className="btn-icon"
           onClick={() => setShowExport(true)}
-          title={isSingle ? "Exporter le numéro" : "Exporter le projet"}
+          title={isSingle ? t("editor:exportAct") : t("editor:exportShow")}
         >
           <Share2 size={18} />
         </button>
-        <button className="btn-icon" onClick={onOpenSettings} title="Paramètres">
+        <button className="btn-icon" onClick={onOpenSettings} title={t("common:settings")}>
           <Settings size={18} />
         </button>
         <button className="btn-ghost btn-close-project" onClick={handleClose}>
           <ArrowLeft size={15} />
-          Fermer
+          {t("common:actions.close")}
         </button>
       </div>
 
@@ -435,20 +439,20 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           <AlertTriangle size={14} />
           <div className="verify-banner-text">
             {verify.missing.length > 0 && (
-              <span>{verify.missing.length} fichier{verify.missing.length > 1 ? "s" : ""} manquant{verify.missing.length > 1 ? "s" : ""}</span>
+              <span>{t("editor:verify.missingFiles", { count: verify.missing.length })}</span>
             )}
             {verify.missing.length > 0 && verify.orphans.length > 0 && <span>·</span>}
             {verify.orphans.length > 0 && (
-              <span>{verify.orphans.length} fichier{verify.orphans.length > 1 ? "s" : ""} orphelin{verify.orphans.length > 1 ? "s" : ""} dans le dossier</span>
+              <span>{t("editor:verify.orphanFiles", { count: verify.orphans.length })}</span>
             )}
           </div>
           {verify.orphans.length > 0 && (
-            <button className="btn-ghost verify-banner-btn" onClick={cleanupOrphans} title="Supprimer les fichiers orphelins">
+            <button className="btn-ghost verify-banner-btn" onClick={cleanupOrphans} title={t("editor:verify.cleanupTitle")}>
               <Trash2 size={13} />
-              Nettoyer
+              {t("editor:verify.cleanup")}
             </button>
           )}
-          <button className="btn-icon" onClick={() => setVerifyDismissed(true)} title="Masquer"><X size={13} /></button>
+          <button className="btn-icon" onClick={() => setVerifyDismissed(true)} title={t("editor:verify.dismiss")}><X size={13} /></button>
         </div>
       )}
 
@@ -464,7 +468,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       <div className="editor-body">
         {project.numeros.length === 0 && !isSingle && (
           <p style={{ color: "var(--text2)", fontSize: "0.9rem", textAlign: "center", padding: "2rem 0" }}>
-            Aucun élément — commencez par ajouter un numéro, un entracte ou une présentation.
+            {t("editor:emptyState")}
           </p>
         )}
 
@@ -500,7 +504,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           <div className="add-numero-bar">
             <button className="btn-secondary" onClick={() => setShowAddPart(true)}>
               <Plus size={16} />
-              Ajouter une partie
+              {t("editor:addPart")}
             </button>
           </div>
         )}
@@ -530,7 +534,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           issues={preflightIssues}
           onClose={() => { setPreflightIssues(null); setPreflightConfirmActivation(false); }}
           onConfirm={preflightConfirmActivation ? () => applyShowMode(true) : undefined}
-          confirmLabel="Activer le mode spectacle"
+          confirmLabel={t("editor:showMode.activate")}
         />
       )}
 
