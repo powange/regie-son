@@ -59,6 +59,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # Plus récent que les jobs de build, qui restent sur 20 : i18next-cli
+          # passe par execa, qui utilise Set.prototype.union — Node 22+.
           node-version: 24
 
       - run: npm ci
@@ -66,8 +68,17 @@ jobs:
       - name: Traductions (extraction, chaînes en dur, paramètres)
         run: npm run i18n:check
 
+      # Les types générés sont commités, parce que le build de production ne
+      # doit pas avoir besoin de l'outil qui les produit. Il faut donc vérifier
+      # qu'ils n'ont pas divergé du catalogue.
+      - name: Types à jour
+        run: |
+          npm run i18n:types
+          git diff --exit-code -- src/types \
+            || { echo "::error::src/types est périmé — lance npm run i18n:types et commite"; exit 1; }
+
       - name: Types
-        run: npm run i18n:types && npx tsc --noEmit
+        run: npx tsc --noEmit
 
       - name: Tests
         run: npm test
