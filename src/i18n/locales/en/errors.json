@@ -98,7 +98,8 @@
     "macosManual": "Turn on Do Not Disturb by hand in System Settings > Notifications.",
     "gsettingsMissing": "gsettings is unavailable. Turn on Do Not Disturb by hand.",
     "gnomeFailed": "Could not change the GNOME notification setting. Turn on Do Not Disturb by hand.",
-    "unsupportedOs": "Show mode is not supported on this OS."
+    "unsupportedOs": "Show mode is not supported on this OS.",
+    "desktopUnsupported": "Muting notifications is only possible under GNOME (desktop detected: {{desktop}}). Turn on Do Not Disturb by hand."
   },
   "sleep": {
     "windowsFailed": "Could not block sleep (SetThreadExecutionState failed).",

@@ -98,7 +98,8 @@
     "macosManual": "Activez manuellement le mode Ne pas déranger dans Réglages Système > Notifications.",
     "gsettingsMissing": "gsettings non disponible. Activez manuellement le mode Ne pas déranger.",
     "gnomeFailed": "Impossible de modifier les notifications GNOME. Activez manuellement le mode Ne pas déranger.",
-    "unsupportedOs": "Mode spectacle non supporté sur cet OS."
+    "unsupportedOs": "Mode spectacle non supporté sur cet OS.",
+    "desktopUnsupported": "Couper les notifications n'est possible que sous GNOME (bureau détecté : {{desktop}}). Activez manuellement le mode Ne pas déranger."
   },
   "sleep": {
     "windowsFailed": "Impossible d'empêcher la mise en veille (SetThreadExecutionState a échoué).",

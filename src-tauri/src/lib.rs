@@ -466,6 +466,9 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             let _ = ASSET_SCOPE.set(app.asset_protocol_scope());
+            if let Ok(dir) = app.path().app_data_dir() {
+                show_mode::init(dir);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -511,11 +514,14 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                show_mode::release_on_exit();
+            }
             // macOS passes double-clicked files as an Apple Event, not argv,
             // both at cold start and while running.
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = _event {
+            if let tauri::RunEvent::Opened { urls } = event {
                 let file = urls
                     .iter()
                     .filter_map(|url| url.to_file_path().ok())

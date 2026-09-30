@@ -280,6 +280,7 @@ export default interface Resources {
     "showMode": {
       "appleScriptFailed": "Erreur : {{detail}}",
       "audioApiFailed": "{{api}} : {{detail}}",
+      "desktopUnsupported": "Couper les notifications n'est possible que sous GNOME (bureau détecté : {{desktop}}). Activez manuellement le mode Ne pas déranger.",
       "gnomeFailed": "Impossible de modifier les notifications GNOME. Activez manuellement le mode Ne pas déranger.",
       "gsettingsMissing": "gsettings non disponible. Activez manuellement le mode Ne pas déranger.",
       "macosManual": "Activez manuellement le mode Ne pas déranger dans Réglages Système > Notifications.",

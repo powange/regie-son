@@ -1,8 +1,80 @@
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use crate::error::{AppError, AppResult};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
+
+// Everything show mode changed, so that it can be undone exactly. One lock
+// covers a whole toggle: without it an activation that takes 500 ms on
+// Windows could finish after the deactivation clicked right behind it, and
+// leave notifications muted while the UI shows show mode off.
+struct ShowModeState {
+    active: bool,
+    // Some(previously muted) while notifications are muted by us.
+    muted_before: Option<bool>,
+    // Records muted_before on disk, so that a crash is undone at next launch.
+    marker: Option<PathBuf>,
+}
+
+static STATE: Mutex<ShowModeState> = Mutex::new(ShowModeState {
+    active: false,
+    muted_before: None,
+    marker: None,
+});
+
+fn lock_state() -> MutexGuard<'static, ShowModeState> {
+    STATE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn write_marker(path: &Path, muted_before: bool) {
+    let tmp = path.with_extension("tmp");
+    if fs::write(&tmp, if muted_before { "1" } else { "0" }).is_ok() {
+        let _ = fs::rename(&tmp, path);
+    }
+}
+
+/// Called once at startup. A marker left behind means the app died with
+/// notifications muted: put them back as they were before that show.
+pub fn init(data_dir: PathBuf) {
+    std::thread::spawn(move || {
+        let mut state = lock_state();
+        let marker = data_dir.join("show-mode-notifications");
+        state.marker = Some(marker.clone());
+        if let Ok(saved) = fs::read_to_string(&marker) {
+            if set_notifications_muted(saved.trim() == "1").is_ok() {
+                let _ = fs::remove_file(&marker);
+            }
+        }
+    });
+}
+
+fn mute_notifications(state: &mut ShowModeState) -> AppResult<()> {
+    if state.muted_before.is_some() {
+        return Ok(());
+    }
+    let before = set_notifications_muted(true)?;
+    state.muted_before = Some(before);
+    if let Some(marker) = &state.marker {
+        write_marker(marker, before);
+    }
+    Ok(())
+}
+
+// Puts back the setting found at activation instead of forcing notifications
+// on: a user who keeps banners or system sounds off gets them back off.
+fn restore_notifications(state: &mut ShowModeState) -> AppResult<()> {
+    let Some(before) = state.muted_before else {
+        return Ok(());
+    };
+    set_notifications_muted(before)?;
+    state.muted_before = None;
+    if let Some(marker) = &state.marker {
+        let _ = fs::remove_file(marker);
+    }
+    Ok(())
+}
 
 // `async` sans fonction async : les commandes non-async tournent sur le thread
 // principal, et les deux volets bloquent — réveil de la session SystemSounds
@@ -10,12 +82,18 @@ use std::process::Command;
 // Sans cet attribut, l'interface se fige à chaque bascule du mode spectacle.
 #[tauri::command(async)]
 pub fn set_show_mode(active: bool) -> Result<(), Vec<AppError>> {
+    let mut state = lock_state();
     // Les deux volets sont toujours tentés, même si l'autre échoue : un
     // spectacle qui se joue avec les notifications encore audibles n'est pas
     // le même problème qu'un spectacle joué sur une machine qui peut encore
     // s'endormir, et l'opérateur doit savoir lequel des deux a renoncé.
-    let notifications = set_notifications_muted(active);
+    let notifications = if active {
+        mute_notifications(&mut state)
+    } else {
+        restore_notifications(&mut state)
+    };
     let sleep = crate::sleep_guard::set_sleep_inhibited(active);
+    state.active = active;
 
     let errors: Vec<AppError> = [notifications.err(), sleep.err()]
         .into_iter()
@@ -25,6 +103,17 @@ pub fn set_show_mode(active: bool) -> Result<(), Vec<AppError>> {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+/// Closing the window or quitting (Cmd+Q, Alt+F4) skips the editor's own
+/// deactivation: undo show mode here, on the way out.
+pub fn release_on_exit() {
+    let mut state = lock_state();
+    if state.active || state.muted_before.is_some() {
+        let _ = restore_notifications(&mut state);
+        let _ = crate::sleep_guard::set_sleep_inhibited(false);
+        state.active = false;
     }
 }
 
@@ -82,11 +171,12 @@ fn nudge_system_sounds() {
 #[cfg(target_os = "windows")]
 struct MuteOutcome {
     muted: bool,
+    was_muted: bool,
     session_count: u32,
 }
 
 #[cfg(target_os = "windows")]
-fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
+fn try_mute_system_sounds(mute: bool) -> AppResult<MuteOutcome> {
     use windows::core::Interface;
     use windows::Win32::Foundation::S_OK;
     use windows::Win32::Media::Audio::{
@@ -137,6 +227,7 @@ fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
             })? as u32;
 
             let mut muted_any = false;
+            let mut was_muted = false;
             let mut tree: Option<crate::audio_session::ProcessTree> = None;
             for i in 0..(count as i32) {
                 let ctrl = match session_enum.GetSession(i) {
@@ -175,7 +266,8 @@ fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
                         Ok(v) => v,
                         Err(_) => continue,
                     };
-                    vol.SetMute(active, std::ptr::null()).map_err(|e| {
+                    was_muted |= vol.GetMute().map(|m| m.as_bool()).unwrap_or(false);
+                    vol.SetMute(mute, std::ptr::null()).map_err(|e| {
                         AppError::new("showMode.audioApiFailed")
                             .with("api", "SetMute")
                             .detail(e)
@@ -185,6 +277,7 @@ fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
             }
             Ok(MuteOutcome {
                 muted: muted_any,
+                was_muted,
                 session_count: count,
             })
         })();
@@ -197,37 +290,53 @@ fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
     }
 }
 
+/// Mutes or unmutes notifications and returns whether they were muted before.
 #[cfg(target_os = "windows")]
-fn set_notifications_muted(active: bool) -> AppResult<()> {
-    let first = try_mute_system_sounds(active)?;
+fn set_notifications_muted(mute: bool) -> AppResult<bool> {
+    let first = try_mute_system_sounds(mute)?;
     if first.muted {
-        return Ok(());
+        return Ok(first.was_muted);
     }
     // Session not yet materialised — play 100 ms of silent WAV through the
     // SystemSounds channel so Windows creates it, then retry once.
     nudge_system_sounds();
-    let second = try_mute_system_sounds(active)?;
+    let second = try_mute_system_sounds(mute)?;
     if second.muted {
-        return Ok(());
+        return Ok(second.was_muted);
     }
     Err(AppError::new("showMode.systemSoundsNotFound").with("count", second.session_count))
 }
 
+#[cfg(any(target_os = "macos", test))]
+fn parse_major_version(version: &str) -> Option<u32> {
+    version.trim().split('.').next()?.parse().ok()
+}
+
 #[cfg(target_os = "macos")]
-fn set_notifications_muted(active: bool) -> AppResult<()> {
-    // Essayer AppleScript (macOS ≤ 12)
-    let value = if active { "true" } else { "false" };
-    let script = format!(
-        "tell application \"System Events\" to set Do Not Disturb to {}",
-        value
-    );
-    if let Ok(out) = Command::new("osascript").args(["-e", &script]).output() {
-        if out.status.success() {
-            return Ok(());
-        }
+fn set_notifications_muted(mute: bool) -> AppResult<bool> {
+    // Since Monterey (12), Focus replaced the doNotDisturb preference: writing
+    // it still succeeds but no longer silences anything. Say so rather than
+    // report a success that did not happen.
+    let major = Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .and_then(|o| parse_major_version(&String::from_utf8_lossy(&o.stdout)));
+    if major.is_none_or(|v| v >= 12) {
+        return Err(AppError::new("showMode.macosManual"));
     }
-    // Fallback defaults + redémarrage NotificationCenter (macOS 12+)
-    let bool_val = if active { "YES" } else { "NO" };
+
+    let before = Command::new("defaults")
+        .args([
+            "-currentHost",
+            "read",
+            "com.apple.notificationcenterui",
+            "doNotDisturb",
+        ])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "1");
+
+    let bool_val = if mute { "YES" } else { "NO" };
     let out = Command::new("defaults")
         .args([
             "-currentHost",
@@ -241,34 +350,55 @@ fn set_notifications_muted(active: bool) -> AppResult<()> {
         .map_err(|e| AppError::new("showMode.appleScriptFailed").detail(e))?;
     if out.status.success() {
         let _ = Command::new("killall").arg("NotificationCenter").output();
-        Ok(())
+        Ok(before)
     } else {
         Err(AppError::new("showMode.macosManual"))
     }
 }
 
+// Only GNOME honours org.gnome.desktop.notifications: under KDE or XFCE the
+// schema may be installed and `gsettings set` succeeds without silencing
+// anything. XDG_CURRENT_DESKTOP is a colon-separated list ("ubuntu:GNOME").
+#[cfg(any(target_os = "linux", test))]
+fn is_gnome_desktop(xdg_current_desktop: &str) -> bool {
+    xdg_current_desktop
+        .split(':')
+        .any(|d| d.eq_ignore_ascii_case("GNOME"))
+}
+
 #[cfg(target_os = "linux")]
-fn set_notifications_muted(active: bool) -> AppResult<()> {
-    // GNOME : inverser show-banners (false = muet)
-    let value = if active { "false" } else { "true" };
+fn set_notifications_muted(mute: bool) -> AppResult<bool> {
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    if !is_gnome_desktop(&desktop) {
+        return Err(AppError::new("showMode.desktopUnsupported").with(
+            "desktop",
+            if desktop.is_empty() {
+                "?"
+            } else {
+                desktop.as_str()
+            },
+        ));
+    }
+    let schema = "org.gnome.desktop.notifications";
+    // show-banners=false is GNOME's Do Not Disturb.
+    let before = Command::new("gsettings")
+        .args(["get", schema, "show-banners"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "false");
+    let value = if mute { "false" } else { "true" };
     let out = Command::new("gsettings")
-        .args([
-            "set",
-            "org.gnome.desktop.notifications",
-            "show-banners",
-            value,
-        ])
+        .args(["set", schema, "show-banners", value])
         .output()
         .map_err(|_| AppError::new("showMode.gsettingsMissing"))?;
     if out.status.success() {
-        Ok(())
+        Ok(before)
     } else {
         Err(AppError::new("showMode.gnomeFailed"))
     }
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn set_notifications_muted(_active: bool) -> AppResult<()> {
+fn set_notifications_muted(_mute: bool) -> AppResult<bool> {
     Err(AppError::new("showMode.unsupportedOs"))
 }
 
@@ -281,4 +411,27 @@ pub fn configure_wsl2_audio() {
         return;
     }
     std::env::set_var("PULSE_LATENCY_MSEC", "500");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_gnome_gets_gsettings() {
+        assert!(is_gnome_desktop("GNOME"));
+        assert!(is_gnome_desktop("ubuntu:GNOME"));
+        assert!(is_gnome_desktop("Pop:GNOME"));
+        assert!(!is_gnome_desktop("KDE"));
+        assert!(!is_gnome_desktop("XFCE"));
+        assert!(!is_gnome_desktop("X-Cinnamon"));
+        assert!(!is_gnome_desktop(""));
+    }
+
+    #[test]
+    fn macos_major_version() {
+        assert_eq!(parse_major_version("11.7.10\n"), Some(11));
+        assert_eq!(parse_major_version("14.2.1"), Some(14));
+        assert_eq!(parse_major_version(""), None);
+    }
 }
