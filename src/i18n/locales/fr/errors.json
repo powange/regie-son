@@ -76,7 +76,8 @@
     "metadataFailed": "metadata : {{detail}}",
     "chmodFailed": "chmod : {{detail}}",
     "notExecutable": "Le binaire téléchargé n'est pas exécutable sur ce système.",
-    "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}"
+    "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}",
+    "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://."
   },
   "battery": {
     "accessFailed": "Accès à la batterie : {{detail}}",

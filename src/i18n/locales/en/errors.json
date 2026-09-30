@@ -76,7 +76,8 @@
     "metadataFailed": "metadata: {{detail}}",
     "chmodFailed": "chmod: {{detail}}",
     "notExecutable": "The downloaded binary is not executable on this system.",
-    "replaceBinaryFailed": "Could not replace the old binary: {{detail}}"
+    "replaceBinaryFailed": "Could not replace the old binary: {{detail}}",
+    "invalidUrl": "Invalid link: paste an address that starts with http:// or https://."
   },
   "battery": {
     "accessFailed": "Reaching the battery: {{detail}}",

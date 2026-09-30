@@ -59,6 +59,19 @@ pub fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
         .filter(|f| !f.is_empty())
 }
 
+// A pasted link reaches yt-dlp as an argument: anything but a plain http(s)
+// URL is refused, and callers also pass it after "--" so that a value such as
+// `--exec=...` can never be read as an option.
+fn validate_http_url(raw: &str) -> AppResult<String> {
+    let trimmed = raw.trim();
+    match reqwest::Url::parse(trimmed) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") && url.host().is_some() => {
+            Ok(trimmed.to_string())
+        }
+        _ => Err(AppError::new("download.invalidUrl")),
+    }
+}
+
 #[derive(Serialize, Clone)]
 struct YtDlpProgress {
     step: &'static str,
@@ -210,6 +223,7 @@ pub async fn download_youtube_audio(
     download_id: String,
     app: tauri::AppHandle,
 ) -> AppResult<AudioFile> {
+    let url = validate_http_url(&url)?;
     let guard = DownloadGuard::new(download_id);
     let yt_dlp = find_yt_dlp_with_app(&app);
 
@@ -233,6 +247,7 @@ pub async fn download_youtube_audio(
             "--skip-download",
             "--no-warnings",
             "--no-playlist",
+            "--",
             &url,
         ])
         .output()
@@ -279,6 +294,7 @@ pub async fn download_youtube_audio(
         "-o",
         &output_template,
         "--no-playlist",
+        "--",
         &url,
     ])
     .kill_on_drop(true);
@@ -341,6 +357,7 @@ pub async fn download_audio_from_url(
 ) -> AppResult<AudioFile> {
     use std::io::Write;
 
+    let url = validate_http_url(&url)?;
     let guard = DownloadGuard::new(download_id);
 
     let client = reqwest::Client::builder()
@@ -547,4 +564,33 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
     fs::rename(&tmp_path, &target_path).map_err(fail("download.replaceBinaryFailed"))?;
 
     Ok(version)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_http_urls_are_accepted() {
+        assert_eq!(
+            validate_http_url(" https://www.youtube.com/watch?v=x ").unwrap(),
+            "https://www.youtube.com/watch?v=x"
+        );
+        assert!(validate_http_url("http://example.com/a.mp3").is_ok());
+        for bad in [
+            "--exec=touch /tmp/pwned",
+            "-o/etc/x",
+            "file:///etc/passwd",
+            "ftp://example.com/a.mp3",
+            "javascript:alert(1)",
+            "example.com/a.mp3",
+            "",
+        ] {
+            assert_eq!(
+                validate_http_url(bad).unwrap_err().code,
+                "download.invalidUrl",
+                "{bad:?}"
+            );
+        }
+    }
 }

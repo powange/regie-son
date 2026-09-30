@@ -225,6 +225,7 @@ export default interface Resources {
       "fileTooLargeLimit": "Fichier trop volumineux (limite : {{limit}} Mo).",
       "httpStatus": "Erreur HTTP {{status}} : {{url}}",
       "httpStatusUpdate": "Erreur HTTP {{status}} lors du téléchargement",
+      "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://.",
       "metadataFailed": "metadata : {{detail}}",
       "notExecutable": "Le binaire téléchargé n'est pas exécutable sur ce système.",
       "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}",
