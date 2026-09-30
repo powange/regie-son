@@ -30,7 +30,7 @@ import {
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
@@ -101,6 +101,15 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
+  // Mirrors the stack sizes for the Undo / Redo buttons.
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const syncHistory = useCallback(() => {
+    const undo = undoStackRef.current.length;
+    const redo = redoStackRef.current.length;
+    setHistory((h) => (h.undo === undo && h.redo === redo ? h : { undo, redo }));
+    // An "Undo" offered by a toast only makes sense until the next change.
+    setToast((cur) => (cur?.action ? null : cur));
+  }, []);
   const UNDO_LIMIT = 50;
   const COALESCE_WINDOW_MS = 1500;
   const lastUpdateTagRef = useRef<string | null>(null);
@@ -211,7 +220,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = updated;
     onProjectChangeRef.current(updated);
     scheduleSave(updated);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   const undo = useCallback(() => {
     const prev = undoStackRef.current.pop();
@@ -221,7 +231,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = prev;
     onProjectChangeRef.current(prev);
     scheduleSave(prev);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   const redo = useCallback(() => {
     const nxt = redoStackRef.current.pop();
@@ -231,7 +242,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = nxt;
     onProjectChangeRef.current(nxt);
     scheduleSave(nxt);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   // Leaving the editor writes what the 600 ms debounce still held.
   useEffect(() => () => { void flushSave(); }, [flushSave]);
@@ -427,10 +439,17 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     update({ ...cur, numeros: cur.numeros.map((n) => (n.id === updated.id ? updated : n)) }, tag);
   }, [update]);
 
+  // A deletion is one click away from a mistake: it says so, with an Undo.
+  const offerUndo = useCallback((message: string) => {
+    setToast(makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() }));
+  }, []);
+
   const deleteNumero = useCallback((id: string) => {
     const cur = projectRef.current;
+    const name = cur.numeros.find((n) => n.id === id)?.name ?? "";
     update({ ...cur, numeros: cur.numeros.filter((n) => n.id !== id) });
-  }, [update]);
+    offerUndo(i18next.t("editor:undo.partDeleted", { name }));
+  }, [update, offerUndo]);
 
   const updateItem = useCallback((numeroId: string, item: PlaylistItem, tag?: string) => {
     const cur = projectRef.current;
@@ -450,7 +469,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       ...cur,
       numeros: cur.numeros.map((n) => (n.id === numeroId ? { ...n, items: n.items.filter((i) => i.id !== itemId) } : n)),
     });
-  }, [update]);
+    offerUndo(i18next.t("editor:undo.stepDeleted"));
+  }, [update, offerUndo]);
 
   // Items added by a long operation (copies, downloads) are appended to the
   // act as it is when they arrive, not as it was when the operation started.
@@ -525,6 +545,29 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
             <div className="toggle-thumb" />
           </div>
         </label>
+
+        {editable && (
+          <div className="undo-buttons">
+            <button
+              className="btn-icon"
+              onClick={undo}
+              disabled={history.undo === 0}
+              title={t("editor:undo.undoTitle")}
+              aria-label={t("editor:undo.undoTitle")}
+            >
+              <Undo2 size={17} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={redo}
+              disabled={history.redo === 0}
+              title={t("editor:undo.redoTitle")}
+              aria-label={t("editor:undo.redoTitle")}
+            >
+              <Redo2 size={17} />
+            </button>
+          </div>
+        )}
 
         {battery && (
           <div

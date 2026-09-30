@@ -151,6 +151,13 @@ export default interface Resources {
       "inactive": "Mode spectacle",
       "inactiveTitle": "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
     },
+    "undo": {
+      "partDeleted": "« {{name}} » supprimé",
+      "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
+      "stepDeleted": "Étape supprimée",
+      "undo": "Annuler",
+      "undoTitle": "Annuler la dernière modification (Ctrl+Z)"
+    },
     "verify": {
       "cleanup": "Nettoyer",
       "cleanupTitle": "Supprimer les fichiers orphelins",
