@@ -482,6 +482,8 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Launched again without a file, the app must still show itself.
+            file_assoc::focus_main_window(app);
             if let Some(file) = file_assoc::extract_file_from_args(&args) {
                 file_assoc::deliver_open_file(app, file);
             }

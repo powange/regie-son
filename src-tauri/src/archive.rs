@@ -51,7 +51,7 @@ pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> 
 
 /// Audio files the project references, in a stable order. Orphans, leftover
 /// `.part` downloads and anything else in musiques/ stay out of the archive.
-fn referenced_audio(project: &Project) -> std::collections::BTreeSet<String> {
+pub(crate) fn referenced_audio(project: &Project) -> std::collections::BTreeSet<String> {
     project
         .numeros
         .iter()

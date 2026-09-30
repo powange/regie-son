@@ -138,6 +138,7 @@ Créer ou importer dans un dossier qui contient déjà `projet.json` ou `numero.
 
 - **Export** : `projet.json` est lu et validé avant de toucher la destination, puis réécrit sans chemin absolu. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
 - **Import** : `entry_target` n'accepte que `projet.json`, `numero.json` et `musiques/<fichier>`, et ignore le reste. Un nom qui sortirait du dossier fait échouer l'import : `..`, lettre de lecteur, flux NTFS, barre oblique inverse. Plafonds : 500 Mo par piste, 16 Mo par JSON, 16 Go par archive.
+- **Double-clic** : l'archive est importée dans `Documents/Spectacles/<nom>` (ou `Numéros`), `-2`, `-3`… si le dossier existe. Une copie laissée intacte par un double-clic précédent (même projet, pistes de même taille) est rouverte au lieu d'être dupliquée. Relancer l'application sans fichier remet la fenêtre existante au premier plan.
 
 ### 3.5 Téléchargements
 
