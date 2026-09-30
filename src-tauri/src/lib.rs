@@ -148,9 +148,23 @@ fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
 
 // ===== Project commands =====
 
+// Creating or importing into a folder that already holds a show or an act
+// would overwrite it. Both kinds are checked: they would share musiques/ and
+// cleaning one's orphans would delete the other's audio.
+pub(crate) fn ensure_no_project(dir: &Path) -> AppResult<()> {
+    let taken = ["projet.json", "numero.json"]
+        .iter()
+        .any(|f| dir.join(f).exists() || dir.join(format!("{}.bak1", f)).exists());
+    if taken {
+        return Err(AppError::new("project.alreadyExists").with("path", dir.display()));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn create_project(name: String, folder_path: String) -> AppResult<Project> {
     let project_dir = PathBuf::from(&folder_path);
+    ensure_no_project(&project_dir)?;
     fs::create_dir_all(project_dir.join("musiques")).map_err(fail("io.createDirFailed"))?;
     let project = Project {
         name,
@@ -189,6 +203,7 @@ fn save_project(project: Project) -> AppResult<()> {
 #[tauri::command]
 fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
     let numero_dir = PathBuf::from(&folder_path);
+    ensure_no_project(&numero_dir)?;
     fs::create_dir_all(numero_dir.join("musiques")).map_err(fail("io.createDirFailed"))?;
     let numero = Numero {
         id: uuid::Uuid::new_v4().to_string(),
@@ -505,6 +520,31 @@ mod tests {
             open_project_from_file(&dir, "projet.json").unwrap().name,
             "v1"
         );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn create_refuses_a_folder_that_holds_a_show_or_an_act() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "existing")).unwrap();
+        let folder = dir.to_string_lossy().to_string();
+        let err = create_project("new".into(), folder.clone()).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        let err = create_numero("new".into(), folder).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "existing"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn create_accepts_an_empty_folder() {
+        let dir = scratch_dir();
+        let project = create_project("new".into(), dir.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.name, "new");
+        assert!(dir.join("musiques").is_dir());
         fs::remove_dir_all(&dir).unwrap();
     }
 

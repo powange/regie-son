@@ -30,7 +30,7 @@ pub fn take_pending_open_file() -> Option<String> {
     pending_open_file().lock().unwrap().take()
 }
 
-fn pick_unique_path(base: &Path) -> PathBuf {
+pub(crate) fn pick_unique_path(base: &Path) -> PathBuf {
     if !base.exists() {
         return base.to_path_buf();
     }

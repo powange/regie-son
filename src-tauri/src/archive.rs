@@ -6,7 +6,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::error::{fail, missing, AppError, AppResult};
 use crate::types::{migrate_project, PlaylistItem, Project};
-use crate::{open_project_from_file, safe_filename, save_project_to_disk};
+use crate::{ensure_no_project, open_project_from_file, safe_filename, save_project_to_disk};
 
 #[tauri::command]
 pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
@@ -169,6 +169,7 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
 #[tauri::command]
 pub fn import_project(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
+    ensure_no_project(&dest)?;
     extract_zip_to(&src_file, &dest)?;
     open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
 }
@@ -176,6 +177,7 @@ pub fn import_project(src_file: String, dest_folder: String) -> AppResult<Projec
 #[tauri::command]
 pub fn import_numero_standalone(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
+    ensure_no_project(&dest)?;
     extract_zip_to(&src_file, &dest)?;
     let mut project =
         open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;
@@ -341,6 +343,45 @@ mod tests {
             b"audio"
         );
         assert!(!dest.join("__MACOSX").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn import_refuses_to_overwrite_a_show() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(
+            &src,
+            &[("projet.json", b"{\"name\":\"imported\",\"numeros\":[]}")],
+        );
+        let dest = dir.join("out");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("projet.json"), b"original").unwrap();
+        let src_file = src.to_string_lossy().to_string();
+        let dest_folder = dest.to_string_lossy().to_string();
+        let err = import_project(src_file.clone(), dest_folder.clone()).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        let err = import_numero_standalone(src_file, dest_folder).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        assert_eq!(fs::read(dest.join("projet.json")).unwrap(), b"original");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn import_into_a_fresh_folder() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(
+            &src,
+            &[("projet.json", b"{\"name\":\"imported\",\"numeros\":[]}")],
+        );
+        let dest = dir.join("out");
+        let project = import_project(
+            src.to_string_lossy().to_string(),
+            dest.to_string_lossy().to_string(),
+        )
+        .unwrap();
+        assert_eq!(project.name, "imported");
         fs::remove_dir_all(&dir).unwrap();
     }
 

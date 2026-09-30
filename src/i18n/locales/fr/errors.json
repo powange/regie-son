@@ -15,7 +15,8 @@
   },
   "project": {
     "invalidFile": "Fichier projet invalide : {{detail}}",
-    "invalidItems": "Items invalides pour « {{name}} » : {{detail}}"
+    "invalidItems": "Items invalides pour « {{name}} » : {{detail}}",
+    "alreadyExists": "Le dossier {{path}} contient déjà un spectacle ou un numéro. Choisissez-en un autre."
   },
   "archive": {
     "createFailed": "Impossible de créer l'archive : {{detail}}",

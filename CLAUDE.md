@@ -79,7 +79,7 @@ archive.by_name(name).map_err(|e| AppError::new("archive.readNamedFailed").with(
 
 ### Où en est la migration
 
-Terminée. **322 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
+Terminée. **323 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
 
 Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i18n:check`, `tsc` et les tests avant les quatre builds.
 
