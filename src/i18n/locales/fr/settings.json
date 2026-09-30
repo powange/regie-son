@@ -8,7 +8,8 @@
     "loading": "Chargement des périphériques…",
     "refresh": "Actualiser la liste",
     "systemDefault": "Défaut du système",
-    "unnamedDevice": "Périphérique audio"
+    "unnamedDevice": "Périphérique audio",
+    "missingDevice": "Périphérique introuvable (débranché ?)"
   },
   "keyBindings": {
     "title": "Commandes",

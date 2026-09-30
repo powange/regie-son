@@ -21,6 +21,11 @@ import {
 } from "../keyBindings";
 import Modal from "./Modal";
 
+// Device labels are only given once the page may use the microphone. Asking
+// for it means an OS prompt and a recording indicator: done once per session,
+// and only when the labels come back empty.
+let micProbed = false;
+
 interface AudioDevice {
   deviceId: string;
   label: string;
@@ -57,11 +62,15 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
         setDevices(fallback);
         return;
       }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-      } catch { /* some platforms (WebKit2GTK) don't support it — continue anyway */ }
-      const all = await navigator.mediaDevices.enumerateDevices();
+      let all = await navigator.mediaDevices.enumerateDevices();
+      if (!micProbed && all.some((d) => d.kind === "audiooutput" && !d.label)) {
+        micProbed = true;
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((t) => t.stop());
+          all = await navigator.mediaDevices.enumerateDevices();
+        } catch { /* some platforms (WebKit2GTK) don't support it — continue anyway */ }
+      }
       const outputs = all
         .filter((d) => d.kind === "audiooutput")
         .map((d) => ({ deviceId: d.deviceId, label: d.label || t("settings:audioOutput.unnamedDevice") }));
@@ -168,6 +177,11 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   }
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
+  // A chosen output that is unplugged stays chosen: say so, rather than
+  // showing the first entry as if it were selected.
+  const shownDevices = selectedId === "default" || devices.some((d) => d.deviceId === selectedId)
+    ? devices
+    : [{ deviceId: selectedId, label: t("settings:audioOutput.missingDevice") }, ...devices];
 
   function changeLanguage(value: string) {
     const language = value === "system" ? null : value;
@@ -212,7 +226,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               value={selectedId}
               onChange={(e) => onUpdate({ audioOutputDeviceId: e.target.value === "default" ? null : e.target.value })}
             >
-              {devices.map((d) => (
+              {shownDevices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
               ))}
             </select>

@@ -8,7 +8,8 @@
     "loading": "Loading devices…",
     "refresh": "Refresh the list",
     "systemDefault": "System default",
-    "unnamedDevice": "Audio device"
+    "unnamedDevice": "Audio device",
+    "missingDevice": "Device not found (unplugged?)"
   },
   "keyBindings": {
     "title": "Controls",

@@ -373,6 +373,7 @@ export default interface Resources {
   "settings": {
     "audioOutput": {
       "loading": "Chargement des périphériques…",
+      "missingDevice": "Périphérique introuvable (débranché ?)",
       "refresh": "Actualiser la liste",
       "systemDefault": "Défaut du système",
       "title": "Sortie audio",
