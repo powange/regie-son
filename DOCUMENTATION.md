@@ -296,3 +296,32 @@ Un numéro isolé a la même structure avec `numero.json` et `singleNumero: true
 | Ajouter un message | Catalogues `fr` et `en` puis `npm run i18n:types` ; un code d'erreur Rust va dans `errors.json` |
 | Ajouter une permission | [capabilities/default.json](src-tauri/capabilities/default.json) |
 | Apparence | [src/styles/](src/styles/) ; ne pas casser la chaîne `html/body/#root` |
+
+---
+
+## 11. Préparation Android : ce qui est propre à l'ordinateur
+
+Inventaire de l'étape 1 du plan Android (mode lecteur pour téléphone et tablette). Ce plan fixe une règle : le comportement sur ordinateur ne change jamais.
+- Le code réservé à l'ordinateur passe derrière `#[cfg(desktop)]`.
+- Le code Android va derrière `#[cfg(mobile)]` ou dans le projet Android.
+- Android se déclare `target_os = "android"` : il tombe dans les branches de repli `not(any(windows, macos, linux))`, pas dans celles de Linux.
+
+| Élément | Où | Sur Android | Prévu à |
+|---|---|---|---|
+| Instance unique, arguments de lancement | `run()` ([lib.rs](src-tauri/src/lib.rs)), [file_assoc.rs](src-tauri/src/file_assoc.rs) | Plugin déjà limité au bureau par `Cargo.toml` ; les fichiers arrivent par intent | Étape 3 (« Ouvrir avec ») |
+| Mise à jour automatique et relance | plugins `updater` et `process` dans `run()`, [useUpdater.ts](src/useUpdater.ts) | Inexistants sur mobile : APK installé par-dessus, avec un avis de nouvelle version | Étapes 2 et 6 |
+| yt-dlp (sidecar, mise à jour) | [download.rs](src-tauri/src/download.rs) : `download_youtube_audio`, `get_yt_dlp_version`, `update_yt_dlp` | Impossible (pas de sidecar ni de Python) : code `platform.unsupported`, YouTube masqué | Étape 2 |
+| Sélecteur de dossier, zenity | `pick_folder`, `pick_audio_files` ([lib.rs](src-tauri/src/lib.rs)) | Pas de dossier libre ; les fichiers arrivent en URI `content://` | Étapes 2 et 3 |
+| Dialogues d'archive | `pick_*_file`, `save_*_file` ([archive.rs](src-tauri/src/archive.rs)) | Ouverture par le sélecteur, enregistrement remplacé par la feuille de partage | Étape 3 |
+| Dossiers par défaut | `default_dir` ([lib.rs](src-tauri/src/lib.rs)), `Documents/Spectacles` et `Documents/Numéros` | Pas de Documents utilisateur : stockage de l'application (`app_data_dir`) | Étape 2 |
+| Coupure des notifications | [show_mode.rs](src-tauri/src/show_mode.rs) | Branche de repli sans effet ; « Ne pas déranger » via un plugin Kotlin | Étape 4 |
+| Blocage de la veille | [sleep_guard.rs](src-tauri/src/sleep_guard.rs) | Branche de repli sans effet ; écran maintenu allumé via un plugin Kotlin | Étape 4 |
+| Nom de la session audio | [audio_session.rs](src-tauri/src/audio_session.rs) | Déjà limité à Windows | — |
+| Batterie | [battery.rs](src-tauri/src/battery.rs), crate `starship-battery` | Crate non prévue pour Android : à exclure et remplacer par BatteryManager | Étapes 2 et 4 |
+| Choix de la sortie audio, pré-écoute | `setSinkId` dans [usePlayer.ts](src/usePlayer.ts) et [AudioSettingsModal.tsx](src/components/AudioSettingsModal.tsx) | Absent de la WebView d'Android : réglages masqués | Étape 2 |
+| Fermeture de la fenêtre | `onCloseRequested` ([useAutosave.ts](src/useAutosave.ts)) | Pas de fenêtre à fermer : sauvegarde au passage en arrière-plan | Étape 4 |
+| Protocole asset | `grant_audio_access` ([lib.rs](src-tauri/src/lib.rs)) | Fonctionne ; les chemins du stockage de l'application sont autorisés de la même façon | Étape 2 |
+
+Filets de sécurité posés à l'étape 1 :
+- [roundtrip_tests.rs](src-tauri/src/roundtrip_tests.rs) couvre les allers-retours de bout en bout : créer, ajouter une piste avec tous ses réglages (y compris `loop`), sauvegarder, rouvrir, exporter, importer, pour un spectacle, un numéro isolé et un numéro importé dans un spectacle.
+- Le calcul des dossiers par défaut est réuni dans `default_dir`, lui aussi testé.
