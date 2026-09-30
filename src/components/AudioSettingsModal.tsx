@@ -7,34 +7,8 @@ import { AudioFile } from "../types";
 import { audioMimeType } from "../mime";
 import { useTranslation } from "react-i18next";
 import Modal from "./Modal";
+import { TrackTimesError, formatTime, parseTime, validateTrackTimes } from "../trackTimes";
 
-
-function formatTime(seconds: number | undefined): string {
-  if (seconds === undefined || seconds === null) return "";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function parseTime(str: string): number | undefined {
-  str = str.trim();
-  if (str === "") return undefined;
-  if (/^\d+:\d{1,2}$/.test(str)) {
-    const [m, s] = str.split(":").map(Number);
-    return m * 60 + s;
-  }
-  const n = Number(str);
-  if (!isNaN(n) && n >= 0) return n;
-  return undefined;
-}
-
-function parseDuration(str: string): number | undefined {
-  str = str.trim();
-  if (str === "") return undefined;
-  const n = Number(str);
-  if (!isNaN(n) && n > 0) return n;
-  return undefined;
-}
 
 interface Props {
   audio: AudioFile;
@@ -52,6 +26,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [waveformReady, setWaveformReady] = useState(false);
+  const [fileDuration, setFileDuration] = useState<number | null>(null);
 
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -112,6 +87,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
             setEndRaw(formatTime(region.end));
             setError(null);
           });
+          setFileDuration(duration);
           setWaveformReady(true);
         });
         ws.on("play", () => setIsPlaying(true));
@@ -136,6 +112,33 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A valid value typed in a field moves the region, so that the waveform
+  // always shows what will be saved.
+  useEffect(() => {
+    const region = regionRef.current;
+    if (!waveformReady || !region || fileDuration === null) return;
+    const start = startRaw.trim() === "" ? 0 : parseTime(startRaw);
+    const end = endRaw.trim() === "" ? fileDuration : parseTime(endRaw);
+    if (start === undefined || end === undefined) return;
+    const clampedEnd = Math.min(end, fileDuration);
+    if (start >= clampedEnd) return;
+    if (Math.abs(region.start - start) < 0.05 && Math.abs(region.end - clampedEnd) < 0.05) return;
+    region.setOptions({ start, end: clampedEnd });
+  }, [startRaw, endRaw, waveformReady, fileDuration]);
+
+  function errorMessage(error: TrackTimesError): string {
+    switch (error.code) {
+      case "invalidStart": return t("audio:settings.invalidStart");
+      case "invalidEnd": return t("audio:settings.invalidEnd");
+      case "endBeforeStart": return t("audio:settings.endBeforeStart");
+      case "startBeyondFile": return t("audio:settings.startBeyondFile", { duration: formatTime(error.duration) });
+      case "endBeyondFile": return t("audio:settings.endBeyondFile", { duration: formatTime(error.duration) });
+      case "invalidFadeIn": return t("audio:settings.invalidFadeIn");
+      case "invalidFadeOut": return t("audio:settings.invalidFadeOut");
+      case "fadesTooLong": return t("audio:settings.fadesTooLong", { length: formatTime(error.length) });
+    }
+  }
+
   function togglePreview() {
     const ws = wavesurferRef.current;
     if (!ws) return;
@@ -150,33 +153,15 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
   }
 
   function handleSave() {
-    const startTime = parseTime(startRaw);
-    const endTime = parseTime(endRaw);
-    const fadeIn = parseDuration(fadeInRaw);
-    const fadeOut = parseDuration(fadeOutRaw);
-
-    if (startRaw.trim() !== "" && startTime === undefined) {
-      setError(t("audio:settings.invalidStart"));
+    const result = validateTrackTimes(
+      { start: startRaw, end: endRaw, fadeIn: fadeInRaw, fadeOut: fadeOutRaw },
+      fileDuration,
+    );
+    if (!result.ok) {
+      setError(errorMessage(result.error));
       return;
     }
-    if (endRaw.trim() !== "" && endTime === undefined) {
-      setError(t("audio:settings.invalidEnd"));
-      return;
-    }
-    if (startTime !== undefined && endTime !== undefined && endTime <= startTime) {
-      setError(t("audio:settings.endBeforeStart"));
-      return;
-    }
-    if (fadeInRaw.trim() !== "" && fadeIn === undefined) {
-      setError(t("audio:settings.invalidFadeIn"));
-      return;
-    }
-    if (fadeOutRaw.trim() !== "" && fadeOut === undefined) {
-      setError(t("audio:settings.invalidFadeOut"));
-      return;
-    }
-
-    onSave({ ...audio, startTime, endTime, fadeIn, fadeOut });
+    onSave({ ...audio, ...result.value });
     onClose();
   }
 

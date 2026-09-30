@@ -5,6 +5,7 @@ import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings,
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
+import { formatTime } from "../trackTimes";
 import { useTranslation } from "react-i18next";
 
 
@@ -125,8 +126,8 @@ function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive
 
         {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
           <span className="audio-badges">
-            {audio.startTime != null && <span className="audio-badge">▶ {fmt(audio.startTime)}</span>}
-            {audio.endTime   != null && <span className="audio-badge">⏹ {fmt(audio.endTime)}</span>}
+            {audio.startTime != null && <span className="audio-badge">▶ {formatTime(audio.startTime)}</span>}
+            {audio.endTime   != null && <span className="audio-badge">⏹ {formatTime(audio.endTime)}</span>}
             {audio.fadeIn    != null && audio.fadeIn  > 0 && (
               <span className={`audio-badge${isActive && activeFade?.type === "in" ? " audio-badge--active" : ""}`}>
                 ↑ {isActive && activeFade?.type === "in" ? `${activeFade.remaining.toFixed(1)}s` : `${audio.fadeIn}s`}
