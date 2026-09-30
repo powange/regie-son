@@ -40,6 +40,7 @@ pub fn deliver_open_file(app: &tauri::AppHandle, path: String) {
         set_pending_open_file(path);
         return;
     }
+    #[cfg(desktop)]
     focus_main_window(app);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("open-file", path);
@@ -47,6 +48,8 @@ pub fn deliver_open_file(app: &tauri::AppHandle, path: String) {
 }
 
 /// Brings the window forward, for a second launch that found us running.
+/// Only desktop has windows to bring forward, and a second instance.
+#[cfg(desktop)]
 pub fn focus_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();

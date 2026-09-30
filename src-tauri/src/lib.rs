@@ -157,14 +157,17 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     #[cfg(mobile)]
     {
         let _ = app;
-        return Err(AppError::new("platform.unsupported"));
+        Err(AppError::new("platform.unsupported"))
     }
-    #[cfg(target_os = "linux")]
-    if let Some(picked) = zenity_pick(&["--directory"]) {
-        return Ok(picked.into_iter().next());
+    #[cfg(desktop)]
+    {
+        #[cfg(target_os = "linux")]
+        if let Some(picked) = zenity_pick(&["--directory"]) {
+            return Ok(picked.into_iter().next());
+        }
+        let result = app.dialog().file().blocking_pick_folder();
+        Ok(result.map(|p| p.to_string()))
     }
-    let result = app.dialog().file().blocking_pick_folder();
-    Ok(result.map(|p| p.to_string()))
 }
 
 #[tauri::command(async)]
