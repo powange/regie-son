@@ -28,6 +28,11 @@ export interface PlayerState {
   fade: FadeState | null;
 }
 
+// Fades and timed pauses run on timers rather than requestAnimationFrame: rAF
+// stops altogether while the window is minimised or covered, which froze a
+// fade mid-volume and left the next track waiting until the window came back.
+const TICK_MS = 25;
+
 export function usePlayer(project: Project, audioDeviceId: string | null) {
   const [state, setState] = useState<PlayerState>({
     position: null,
@@ -47,7 +52,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const playAtRef = useRef<(nIdx: number, iIdx: number) => void>(() => {});
   const endTimeRef = useRef<number | null>(null);
   const nextRef = useRef<() => void>(() => {});
-  const fadeAnimRef = useRef<number | null>(null);
+  const fadeTimerRef = useRef<number | null>(null);
   const fadingOutRef = useRef(false);
   const ignoreSrcErrorRef = useRef(false);
   // Preload cache: keeps up to 3 decoded audio buffers (LRU by insertion) so
@@ -82,12 +87,44 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }
 
   function cancelFade() {
-    if (fadeAnimRef.current !== null) {
-      cancelAnimationFrame(fadeAnimRef.current);
-      fadeAnimRef.current = null;
+    if (fadeTimerRef.current !== null) {
+      window.clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
     }
     fadingOutRef.current = false;
     setState((s) => (s.fade === null ? s : { ...s, fade: null }));
+  }
+
+  // Drives a fade from wall-clock time on an interval. `apply` receives the
+  // progress in [0, 1]; a late tick jumps straight to the right volume.
+  // `isStale` lets a fade-in stand down once a newer track has been requested.
+  function runFade(
+    type: "in" | "out",
+    duration: number,
+    apply: (progress: number) => void,
+    onDone: () => void,
+    isStale: () => boolean = () => false,
+  ) {
+    const startedAt = performance.now();
+    setState((s) => ({ ...s, fade: { type, remaining: duration, total: duration } }));
+    const id = window.setInterval(() => {
+      if (isStale()) {
+        window.clearInterval(id);
+        if (fadeTimerRef.current === id) fadeTimerRef.current = null;
+        return;
+      }
+      const elapsed = (performance.now() - startedAt) / 1000;
+      if (elapsed >= duration) {
+        window.clearInterval(id);
+        fadeTimerRef.current = null;
+        apply(1);
+        onDone();
+        return;
+      }
+      apply(elapsed / duration);
+      setState((s) => ({ ...s, fade: { type, remaining: duration - elapsed, total: duration } }));
+    }, TICK_MS);
+    fadeTimerRef.current = id;
   }
 
   // Timed pause: counts down in real time and advances to the next item when done.
@@ -95,20 +132,21 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     duration: number;
     elapsed: number;       // seconds accumulated across pause/resume cycles
     startedAt: number | null; // performance.now() when currently running, null when paused
-    rafId: number | null;
+    timerId: number | null;
   } | null>(null);
 
   function cancelPauseTimer() {
     const t = pauseTimerRef.current;
     if (!t) return;
-    if (t.rafId !== null) cancelAnimationFrame(t.rafId);
+    if (t.timerId !== null) window.clearInterval(t.timerId);
     pauseTimerRef.current = null;
   }
 
   function runPauseTimerTick() {
     const t = pauseTimerRef.current;
     if (!t || t.startedAt === null) return;
-    const tick = () => {
+    if (t.timerId !== null) window.clearInterval(t.timerId);
+    t.timerId = window.setInterval(() => {
       const cur = pauseTimerRef.current;
       if (!cur || cur.startedAt === null) return;
       const totalElapsed = cur.elapsed + (performance.now() - cur.startedAt) / 1000;
@@ -119,9 +157,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         return;
       }
       setState((s) => ({ ...s, progress: { position: totalElapsed, duration: cur.duration } }));
-      cur.rafId = requestAnimationFrame(tick);
-    };
-    t.rafId = requestAnimationFrame(tick);
+    }, TICK_MS);
   }
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
@@ -142,7 +178,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       posRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
       const duration = item.duration && item.duration > 0 ? item.duration : 0;
       if (duration > 0) {
-        pauseTimerRef.current = { duration, elapsed: 0, startedAt: performance.now(), rafId: null };
+        pauseTimerRef.current = { duration, elapsed: 0, startedAt: performance.now(), timerId: null };
         setState((s) => ({
           ...s,
           position: { numeroIndex: nIdx, audioIndex: iIdx },
@@ -200,24 +236,13 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         }));
         preloadAfter({ numeroIndex: nIdx, audioIndex: iIdx });
         if (item.type === "audio" && item.fadeIn && item.fadeIn > 0) {
-          const duration = item.fadeIn;
-          const startTime = performance.now();
-          setState((s) => ({ ...s, fade: { type: "in", remaining: duration, total: duration } }));
-          const tick = () => {
-            if (version !== loadVersionRef.current) return;
-            const elapsed = (performance.now() - startTime) / 1000;
-            if (elapsed >= duration) {
-              audio.volume = targetVolume;
-              fadeAnimRef.current = null;
-              setState((s) => ({ ...s, fade: null }));
-              return;
-            }
-            const t = elapsed / duration;
-            audio.volume = targetVolume * t * t; // courbe quadratique (perçue comme naturelle)
-            setState((s) => ({ ...s, fade: { type: "in", remaining: duration - elapsed, total: duration } }));
-            fadeAnimRef.current = requestAnimationFrame(tick);
-          };
-          fadeAnimRef.current = requestAnimationFrame(tick);
+          runFade(
+            "in",
+            item.fadeIn,
+            (t) => { audio.volume = targetVolume * t * t; }, // courbe quadratique (perçue comme naturelle)
+            () => setState((s) => ({ ...s, fade: null })),
+            () => version !== loadVersionRef.current,
+          );
         } else {
           setState((s) => (s.fade === null ? s : { ...s, fade: null }));
         }
@@ -261,9 +286,9 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     });
 
     return () => {
-      if (fadeAnimRef.current !== null) {
-        cancelAnimationFrame(fadeAnimRef.current);
-        fadeAnimRef.current = null;
+      if (fadeTimerRef.current !== null) {
+        window.clearInterval(fadeTimerRef.current);
+        fadeTimerRef.current = null;
       }
       fadingOutRef.current = false;
       loadVersionRef.current++;
@@ -285,7 +310,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   // Sync volume in real-time when the project changes (e.g. user drags volume slider)
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !posRef.current || fadingOutRef.current || fadeAnimRef.current !== null) return;
+    if (!audio || !posRef.current || fadingOutRef.current || fadeTimerRef.current !== null) return;
     const { numeroIndex, audioIndex } = posRef.current;
     const item = project.numeros[numeroIndex]?.items[audioIndex];
     if (item?.type === "audio") {
@@ -317,7 +342,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       }
       // Timed pause: toggle the countdown.
       if (isPlaying) {
-        if (t.rafId !== null) { cancelAnimationFrame(t.rafId); t.rafId = null; }
+        if (t.timerId !== null) { window.clearInterval(t.timerId); t.timerId = null; }
         if (t.startedAt !== null) {
           t.elapsed += (performance.now() - t.startedAt) / 1000;
           t.startedAt = null;
@@ -363,27 +388,20 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       item?.type === "audio" &&
       item.fadeOut && item.fadeOut > 0
     ) {
+      // A fade-in still running would fight this one for the volume.
+      cancelFade();
       fadingOutRef.current = true;
       const startVolume = audio.volume;
-      const duration = item.fadeOut;
-      const startTime = performance.now();
-      setState((s) => ({ ...s, fade: { type: "out", remaining: duration, total: duration } }));
-      const tick = () => {
-        const elapsed = (performance.now() - startTime) / 1000;
-        if (elapsed >= duration) {
-          audio.volume = 0;
+      runFade(
+        "out",
+        item.fadeOut,
+        (t) => { const r = 1 - t; audio.volume = startVolume * r * r; }, // courbe quadratique descendante
+        () => {
           fadingOutRef.current = false;
-          fadeAnimRef.current = null;
           setState((s) => ({ ...s, fade: null }));
           doAdvance();
-          return;
-        }
-        const r = 1 - elapsed / duration;
-        audio.volume = startVolume * r * r; // courbe quadratique descendante
-        setState((s) => ({ ...s, fade: { type: "out", remaining: duration - elapsed, total: duration } }));
-        fadeAnimRef.current = requestAnimationFrame(tick);
-      };
-      fadeAnimRef.current = requestAnimationFrame(tick);
+        },
+      );
     } else {
       doAdvance();
     }
@@ -418,26 +436,17 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     }
 
     // Safety fade-out: avoid audible pop on abrupt cut.
-    const duration = 0.25; // 250ms
     const startVolume = audio.volume;
-    const startTime = performance.now();
     fadingOutRef.current = true;
-    setState((s) => ({ ...s, fade: { type: "out", remaining: duration, total: duration } }));
-    const tick = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      if (elapsed >= duration) {
-        audio.volume = 0;
+    runFade(
+      "out",
+      0.25,
+      (t) => { const r = 1 - t; audio.volume = startVolume * r * r; },
+      () => {
         fadingOutRef.current = false;
-        fadeAnimRef.current = null;
         finalize();
-        return;
-      }
-      const r = 1 - elapsed / duration;
-      audio.volume = startVolume * r * r;
-      setState((s) => ({ ...s, fade: { type: "out", remaining: duration - elapsed, total: duration } }));
-      fadeAnimRef.current = requestAnimationFrame(tick);
-    };
-    fadeAnimRef.current = requestAnimationFrame(tick);
+      },
+    );
   }, []);
 
   return { state, playAt, togglePlay, next, stop, seek };
