@@ -59,9 +59,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Plus récent que les jobs de build, qui restent sur 20 : i18next-cli
-          # passe par execa, qui utilise Set.prototype.union — Node 22+.
+          # Même version que les builds et que ci.yml. Pas moins de 22 :
+          # i18next-cli passe par execa, qui utilise Set.prototype.union.
           node-version: 24
+          cache: npm
 
       - run: npm ci
 
@@ -110,7 +111,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install Rust
