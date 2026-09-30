@@ -108,3 +108,11 @@ export function translateError(raw: unknown): string {
   }
   return translate(err.code, { ...err.params, detail: err.detail ?? "" });
 }
+
+// open_project and open_numero have no code of their own for a missing
+// folder: io.readProjectFailed carries the OS error, whose number says it.
+// ENOENT is 2 on Linux and macOS; Windows uses 2 (file) and 3 (path).
+export function isNotFoundError(raw: unknown): boolean {
+  const err = asAppError(raw);
+  return err?.code === "io.readProjectFailed" && /\(os error [23]\)/.test(err.detail ?? "");
+}

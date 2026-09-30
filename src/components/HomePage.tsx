@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { translateError } from "../errorMessage";
+import { isNotFoundError, translateError } from "../errorMessage";
 import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings } from "lucide-react";
 import { Project } from "../types";
 import { RecentProject } from "../useRecentProjects";
@@ -65,9 +65,15 @@ export default function HomePage({
     try {
       const project = await invoke<Project>("open_project", { projectPath: recent.path });
       onProjectOpen(project);
-    } catch {
-      setOpenError(t("home:errors.projectNotFound", { name: recent.name }));
-      onRemoveRecent(recent.path);
+    } catch (err) {
+      // Only a folder that is really gone leaves the list: a corrupt file, an
+      // unmounted network drive or a denied permission may well be temporary.
+      if (isNotFoundError(err)) {
+        setOpenError(t("home:errors.projectNotFound", { name: recent.name }));
+        onRemoveRecent(recent.path);
+      } else {
+        setOpenError(t("home:errors.openProject", { detail: translateError(err) }));
+      }
     }
   }
 
@@ -102,9 +108,13 @@ export default function HomePage({
     try {
       const project = await invoke<Project>("open_numero", { numeroPath: recent.path });
       onNumeroOpen(project);
-    } catch {
-      setOpenError(t("home:errors.actNotFound", { name: recent.name }));
-      onRemoveNumeroRecent(recent.path);
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        setOpenError(t("home:errors.actNotFound", { name: recent.name }));
+        onRemoveNumeroRecent(recent.path);
+      } else {
+        setOpenError(t("home:errors.openAct", { detail: translateError(err) }));
+      }
     }
   }
 
