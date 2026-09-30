@@ -51,7 +51,10 @@
     "showModeOffMessage": "Les notifications reviendront et la mise en veille ne sera plus bloquée.",
     "showModeOff": "Désactiver",
     "cleanupMessage_one": "{{count}} fichier audio que plus aucun élément n'utilise sera supprimé du dossier. Cette action est définitive.",
-    "cleanupMessage_other": "{{count}} fichiers audio que plus aucun élément n'utilise seront supprimés du dossier. Cette action est définitive."
+    "cleanupMessage_other": "{{count}} fichiers audio que plus aucun élément n'utilise seront supprimés du dossier. Cette action est définitive.",
+    "quitTitle": "Quitter Régie Son ?",
+    "quitMessage": "Une piste est en cours ou le mode spectacle est actif. Quitter arrêtera la musique.",
+    "quit": "Quitter"
   },
   "undo": {
     "undo": "Annuler",
