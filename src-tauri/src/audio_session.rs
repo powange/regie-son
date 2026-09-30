@@ -41,10 +41,14 @@ pub fn start_session_namer() {
             .map(|exe| wide(&format!("{},0", exe.display())));
 
         let mut known = std::collections::HashMap::new();
-        for poll in 0u32.. {
+        // Runs for the life of the process; the counter wraps rather than
+        // overflowing, which only matters for clearing the cache on schedule.
+        let mut poll: u32 = 0;
+        loop {
             if poll % FORGET_EVERY == 0 {
                 known.clear();
             }
+            poll = poll.wrapping_add(1);
             let _ = name_own_sessions(&display, icon.as_deref(), &mut known);
             std::thread::sleep(POLL);
         }
