@@ -247,6 +247,18 @@ jobs:
           mkdir -p orig patched
           gh api "repos/$REPO/releases/assets/$asset_id" \
             -H "Accept: application/octet-stream" > orig/latest.json
+
+          # The four build jobs each read latest.json, add their platform and
+          # upload it again, in parallel: one can overwrite another's entry.
+          # A platform missing here would stop receiving updates without any
+          # error, so refuse to publish and leave the release as a draft.
+          missing=$(jq -r '["linux-x86_64","windows-x86_64","darwin-x86_64","darwin-aarch64"]
+                           - (.platforms | keys) | .[]' orig/latest.json)
+          if [ -n "$missing" ]; then
+            echo "::error::Plateformes absentes de latest.json : $(echo $missing)"
+            echo "Relancer les jobs de build concernés, puis finalize." >&2
+            exit 1
+          fi
           sed -E "/\"url\"/ s/[_-]${escaped}//" orig/latest.json > patched/latest.json
           python3 -c "import json,sys; json.load(open('patched/latest.json'))"
 
