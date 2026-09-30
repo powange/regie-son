@@ -307,6 +307,19 @@ fn delete_audio_file(project_path: String, filename: String) -> AppResult<()> {
     Ok(())
 }
 
+// A download in progress (<id>.webm.part, <id>.ytdl…), or one just finished
+// and not yet in the project, looks like an orphan. Nothing written this
+// recently is treated as one; a real orphan shows up on a later check.
+const ORPHAN_MIN_AGE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+fn settled(path: &Path, now: std::time::SystemTime) -> bool {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| now.duration_since(t).ok())
+        .is_some_and(|age| age >= ORPHAN_MIN_AGE)
+}
+
 #[tauri::command(async)]
 fn verify_project(project: Project) -> AppResult<VerifyResult> {
     let musiques_dir = PathBuf::from(&project.path).join("musiques");
@@ -326,13 +339,14 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
     missing.sort();
 
     let mut orphans: Vec<String> = Vec::new();
+    let now = std::time::SystemTime::now();
     if let Ok(entries) = fs::read_dir(&musiques_dir) {
         for e in entries.filter_map(|e| e.ok()) {
             if !e.file_type().map(|t| t.is_file()).unwrap_or(false) {
                 continue;
             }
             let name = e.file_name().to_string_lossy().to_string();
-            if !referenced.contains(&name) {
+            if !referenced.contains(&name) && settled(&e.path(), now) {
                 orphans.push(name);
             }
         }
@@ -345,12 +359,14 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
 fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResult<u32> {
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let mut deleted = 0u32;
+    // Checked again: the list comes from a verification that may be old.
+    let now = std::time::SystemTime::now();
     for name in filenames {
         if safe_filename(&name).is_err() {
             continue;
         }
         let p = musiques_dir.join(&name);
-        if p.exists() && fs::remove_file(&p).is_ok() {
+        if p.exists() && settled(&p, now) && fs::remove_file(&p).is_ok() {
             deleted += 1;
         }
     }
@@ -749,6 +765,32 @@ mod tests {
         save_project_to_disk(&project).unwrap();
         assert!(!show.join("numero.json").exists());
         take_granted();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_file_being_downloaded_is_not_an_orphan() {
+        let dir = scratch_dir();
+        let musiques = dir.join("musiques");
+        fs::create_dir_all(&musiques).unwrap();
+        let old = std::time::SystemTime::now() - ORPHAN_MIN_AGE * 2;
+        for name in ["old.mp3", "new.webm.part"] {
+            fs::write(musiques.join(name), b"x").unwrap();
+        }
+        fs::OpenOptions::new()
+            .write(true)
+            .open(musiques.join("old.mp3"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        let result = verify_project(show(&dir, "s")).unwrap();
+        assert_eq!(result.orphans, vec!["old.mp3".to_string()]);
+
+        let folder = dir.to_string_lossy().to_string();
+        let names = vec!["old.mp3".to_string(), "new.webm.part".to_string()];
+        assert_eq!(cleanup_orphan_files(folder, names).unwrap(), 1);
+        assert!(musiques.join("new.webm.part").exists());
         fs::remove_dir_all(&dir).unwrap();
     }
 
