@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getNextContext, findItemPosition, itemAtOrAfter } from "./playerNav";
+import { getNextContext, findItemPosition, itemAtOrAfter, prevItemPosition } from "./playerNav";
 import { Project, AudioFile, PauseItem } from "./types";
 import { PlayerState } from "./usePlayer";
 
@@ -176,5 +176,25 @@ describe("itemAtOrAfter", () => {
 
   it("returns null past the end of the show", () => {
     expect(itemAtOrAfter(p, { numeroIndex: 2, audioIndex: 1 })).toBeNull();
+  });
+});
+
+describe("prevItemPosition", () => {
+  const p = makeProject([
+    { name: "N1", items: [audio("a1"), pause("p1")] },
+    { name: "N2", items: [] },
+    { name: "N3", items: [audio("a2")] },
+  ]);
+
+  it("steps back within an act", () => {
+    expect(prevItemPosition(p, { numeroIndex: 0, audioIndex: 1 })).toEqual({ numeroIndex: 0, audioIndex: 0 });
+  });
+
+  it("goes to the last item of the previous non-empty act", () => {
+    expect(prevItemPosition(p, { numeroIndex: 2, audioIndex: 0 })).toEqual({ numeroIndex: 0, audioIndex: 1 });
+  });
+
+  it("returns null at the very start", () => {
+    expect(prevItemPosition(p, { numeroIndex: 0, audioIndex: 0 })).toBeNull();
   });
 });

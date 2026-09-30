@@ -1,16 +1,22 @@
-import { Play, Pause, SkipForward, Square, AlertTriangle, PauseCircle } from "lucide-react";
-import { PlayerState } from "../usePlayer";
+import { Play, Pause, SkipForward, SkipBack, Square, AlertTriangle, PauseCircle, History } from "lucide-react";
+import { PlayerState, ResumeOffer } from "../usePlayer";
 import { Project } from "../types";
 import { Trans, useTranslation } from "react-i18next";
-import { getNextContext } from "../playerNav";
+import { findItemPosition, getNextContext } from "../playerNav";
 
 interface Props {
   state: PlayerState;
   project: Project;
   onTogglePlay: () => void;
   onNext: () => void;
+  onPrevious: () => void;
   onStop: () => void;
   onSeek: (position: number) => void;
+  // Stop was pressed once with "protect Stop" on: a second press stops.
+  stopArmed: boolean;
+  resumeOffer: ResumeOffer | null;
+  onResume: () => void;
+  onDismissResume: () => void;
 }
 
 function formatTime(secs: number): string {
@@ -20,7 +26,10 @@ function formatTime(secs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop, onSeek }: Props) {
+export default function PlayerBar({
+  state, project, onTogglePlay, onNext, onPrevious, onStop, onSeek,
+  stopArmed, resumeOffer, onResume, onDismissResume,
+}: Props) {
   const { t } = useTranslation(["audio"]);
   const { position, isPlaying, progress, audioError, outputError } = state;
 
@@ -38,6 +47,12 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
   const { position: pos, duration: dur } = progress;
   const progressPct = dur > 0 ? Math.min((pos / dur) * 100, 100) : 0;
   const pauseRemaining = isTimedPause ? Math.max(0, pauseDuration - pos) : 0;
+
+  const resumePos = resumeOffer ? findItemPosition(project, resumeOffer.itemId) : null;
+  const resumeItem = resumePos ? project.numeros[resumePos.numeroIndex].items[resumePos.audioIndex] : null;
+  const resumeLabel = resumeItem
+    ? (resumeItem.type === "audio" ? resumeItem.original_name : project.numeros[resumePos!.numeroIndex].name)
+    : null;
 
   function handleSeekClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!position || dur <= 0 || onPause) return;
@@ -75,6 +90,9 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
         <div className="player-controls">
           <button className="player-btn player-btn--stop" onClick={onStop} disabled={!position} title={t("audio:player.stop")}>
             <Square size={16} />
+          </button>
+          <button className="player-btn player-btn--prev" onClick={onPrevious} disabled={!position} title={t("audio:player.previous")}>
+            <SkipBack size={16} />
           </button>
           <button className="player-btn player-btn--play" onClick={onTogglePlay} disabled={!hasAudio} title={isPlaying ? t("audio:player.pause") : t("audio:player.play")}>
             {isPlaying ? <Pause size={22} /> : <Play size={22} />}
@@ -133,6 +151,22 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
           <span className="player-time" title={dur > 0 ? formatTime(dur) : undefined}>
             {onPause ? (isTimedPause ? formatTime(dur) : "--:--") : dur > 0 ? `−${formatTime(dur - pos)}` : "--:--"}
           </span>
+        </div>
+      )}
+
+      {stopArmed && (
+        <div className="player-error">
+          <Square size={13} />
+          {t("audio:player.stopArmed")}
+        </div>
+      )}
+
+      {resumeOffer && resumeLabel && !position && (
+        <div className="player-resume">
+          <History size={14} />
+          <span>{t("audio:player.resumeOffer", { track: resumeLabel, time: formatTime(resumeOffer.time) })}</span>
+          <button className="btn-primary" onClick={onResume}>{t("audio:player.resume")}</button>
+          <button className="btn-ghost" onClick={onDismissResume}>{t("audio:player.dismissResume")}</button>
         </div>
       )}
 

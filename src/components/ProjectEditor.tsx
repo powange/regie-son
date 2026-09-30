@@ -70,6 +70,8 @@ function newNumero(type: NumeroType, index: number): Numero {
   return { id: crypto.randomUUID(), type, name: names[type], items: [] };
 }
 
+const STOP_CONFIRM_MS = 1000;
+
 interface VerifyResult { missing: string[]; orphans: string[] }
 
 function sameList(a: string[], b: string[]): boolean {
@@ -183,7 +185,15 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
-  const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
+  const {
+    state: playerState, playAt, togglePlay, next, previous, stop, panicFade, seek,
+    resumeOffer, resume, dismissResume,
+  } = usePlayer(project, settings.audioOutputDeviceId, { crossfadeSeconds: settings.crossfadeSeconds });
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  // With "protect Stop" on, a first press only arms Stop for a moment.
+  const [stopArmed, setStopArmed] = useState(false);
+  const stopArmedAtRef = useRef(0);
   const audioDurations = useAudioDurations(project);
   const battery = useBattery();
 
@@ -329,7 +339,22 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       switch (action) {
         case "playPause": togglePlay(); break;
         case "next": next(); break;
-        case "stop": stop(); break;
+        case "previous": previous(); break;
+        case "panicFade": panicFade(); break;
+        case "stop": {
+          if (!settingsRef.current.protectStop) { stop(); break; }
+          const now = performance.now();
+          if (now - stopArmedAtRef.current < STOP_CONFIRM_MS) {
+            stopArmedAtRef.current = 0;
+            setStopArmed(false);
+            stop();
+          } else {
+            stopArmedAtRef.current = now;
+            setStopArmed(true);
+            window.setTimeout(() => setStopArmed(false), STOP_CONFIRM_MS);
+          }
+          break;
+        }
         case "seekForward": {
           const { position: p, duration: d } = playerStateRef.current.progress;
           seek(Math.min(p + 5, d));
@@ -344,7 +369,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [togglePlay, next, stop, seek]);
+  }, [togglePlay, next, previous, stop, panicFade, seek]);
 
   async function applyShowMode(active: boolean) {
     try {
@@ -712,8 +737,13 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         project={project}
         onTogglePlay={togglePlay}
         onNext={next}
+        onPrevious={previous}
         onStop={stop}
         onSeek={seek}
+        stopArmed={stopArmed}
+        resumeOffer={resumeOffer}
+        onResume={resume}
+        onDismissResume={dismissResume}
       />
 
       <div className="editor-body">

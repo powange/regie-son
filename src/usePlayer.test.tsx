@@ -165,3 +165,123 @@ describe("usePlayer", () => {
     expect(el().src).toBe("asset:///show/musiques/b.mp3");
   });
 });
+
+describe("usePlayer — transport extras", () => {
+  it("goes back to the start of a track that has been playing a while, else to the previous item", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a"), audio("b", { startTime: 10 })]), null));
+    await settle(() => result.current.playAt(0, 1));
+    await settle(() => el().pending[0].resolve());
+
+    el().currentTime = 25;
+    await settle(() => result.current.previous());
+    expect(el().currentTime).toBe(10);
+    expect(el().src).toBe("asset:///show/musiques/b.mp3");
+
+    el().currentTime = 11;
+    await settle(() => result.current.previous());
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+    expect(result.current.state.position).toEqual({ numeroIndex: 0, audioIndex: 0 });
+  });
+
+  it("fades out over two seconds on the emergency fade, then stops", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+
+    await settle(() => result.current.panicFade());
+    expect(result.current.state.fade?.total).toBe(2);
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(result.current.state.position).not.toBeNull();
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(result.current.state.position).toBeNull();
+    expect(el().paused).toBe(true);
+  });
+
+  it("crossfades into the next track on a second element when enabled", async () => {
+    const { result } = renderHook(() =>
+      usePlayer(project([audio("a"), audio("b")]), null, { crossfadeSeconds: 3 }),
+    );
+    await settle(() => result.current.playAt(0, 0));
+    const first = el();
+    await settle(() => first.pending[0].resolve());
+
+    await settle(() => result.current.next());
+    const second = el();
+    expect(second).not.toBe(first);
+    expect(second.src).toBe("asset:///show/musiques/b.mp3");
+    expect(first.src).toBe("asset:///show/musiques/a.mp3");
+
+    await settle(() => second.pending[0].resolve());
+    await act(async () => { vi.advanceTimersByTime(3100); });
+    expect(first.getAttribute("src")).toBeNull();
+    expect(result.current.state.position).toEqual({ numeroIndex: 0, audioIndex: 1 });
+  });
+
+  it("keeps a single element and a plain fade when crossfade is off", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a", { fadeOut: 1 }), audio("b")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    const first = el();
+    await settle(() => first.pending[0].resolve());
+    await settle(() => result.current.next());
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(el()).toBe(first);
+    expect(first.src).toBe("asset:///show/musiques/b.mp3");
+  });
+
+  it("ends a fade-in on the volume set during the fade", async () => {
+    let p = project([audio("a", { fadeIn: 2, volume: 100 })]);
+    const { result, rerender } = renderHook(({ proj }) => usePlayer(proj, null), { initialProps: { proj: p } });
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+
+    p = project([audio("a", { fadeIn: 2, volume: 40 })]);
+    rerender({ proj: p });
+    await act(async () => { vi.advanceTimersByTime(2100); });
+    expect(el().volume).toBeCloseTo(0.4);
+  });
+});
+
+describe("usePlayer — resume after a crash", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("offers to resume where playback stood, and resumes there", async () => {
+    const p = project([audio("a"), audio("b")]);
+    localStorage.setItem("regie-son:resume", JSON.stringify({
+      projectPath: "/show", itemId: "b", time: 42, savedAt: Date.now(),
+    }));
+    const { result } = renderHook(() => usePlayer(p, null));
+    expect(result.current.resumeOffer).toEqual({ itemId: "b", time: 42 });
+
+    await settle(() => result.current.resume());
+    expect(el().src).toBe("asset:///show/musiques/b.mp3");
+    expect(el().currentTime).toBe(42);
+    expect(result.current.resumeOffer).toBeNull();
+  });
+
+  it("ignores an entry for another show, an old one or a deleted item", () => {
+    const p = project([audio("a")]);
+    for (const entry of [
+      { projectPath: "/other", itemId: "a", time: 1, savedAt: Date.now() },
+      { projectPath: "/show", itemId: "a", time: 1, savedAt: Date.now() - 13 * 3600 * 1000 },
+      { projectPath: "/show", itemId: "gone", time: 1, savedAt: Date.now() },
+    ]) {
+      localStorage.setItem("regie-son:resume", JSON.stringify(entry));
+      const { result, unmount } = renderHook(() => usePlayer(p, null));
+      expect(result.current.resumeOffer).toBeNull();
+      unmount();
+    }
+  });
+
+  it("forgets the position on Stop and when the editor closes normally", async () => {
+    const { result, unmount } = renderHook(() => usePlayer(project([audio("a")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    expect(localStorage.getItem("regie-son:resume")).not.toBeNull();
+    await settle(() => result.current.stop());
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(localStorage.getItem("regie-son:resume")).toBeNull();
+
+    await settle(() => result.current.playAt(0, 0));
+    unmount();
+    expect(localStorage.getItem("regie-son:resume")).toBeNull();
+  });
+});

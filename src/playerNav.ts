@@ -26,6 +26,15 @@ export function nextItemPosition(project: Project, pos: PlayerPosition): PlayerP
   return null;
 }
 
+export function prevItemPosition(project: Project, pos: PlayerPosition): PlayerPosition | null {
+  if (pos.audioIndex > 0) return { numeroIndex: pos.numeroIndex, audioIndex: pos.audioIndex - 1 };
+  for (let ni = pos.numeroIndex - 1; ni >= 0; ni--) {
+    const n = project.numeros[ni].items.length;
+    if (n > 0) return { numeroIndex: ni, audioIndex: n - 1 };
+  }
+  return null;
+}
+
 function contextAt(project: Project, pos: PlayerPosition | null): NextContext | null {
   if (!pos) return null;
   const numero = project.numeros[pos.numeroIndex];

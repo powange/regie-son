@@ -9,13 +9,17 @@
     "refresh": "Actualiser la liste",
     "systemDefault": "Défaut du système",
     "unnamedDevice": "Périphérique audio",
-    "missingDevice": "Périphérique introuvable (débranché ?)"
+    "missingDevice": "Périphérique introuvable (débranché ?)",
+    "previewTitle": "Sortie de pré-écoute",
+    "previewHint": "Utilisée pour écouter une piste dans ses réglages, par exemple un casque, pour que la pré-écoute ne parte jamais dans la sono."
   },
   "keyBindings": {
     "title": "Commandes",
     "playPause": "Lecture / Pause",
     "next": "Piste suivante",
+    "previous": "Élément précédent / retour au début de la piste",
     "stop": "Stop",
+    "panicFade": "Fondu d'urgence (2 s) puis arrêt",
     "seekForward": "Avancer de 5 s",
     "seekBackward": "Reculer de 5 s",
     "pressAKey": "Appuyez sur une touche…",
@@ -47,5 +51,12 @@
     "updating": "Mise à jour…",
     "update": "Mettre à jour",
     "autoUpdate": "Mettre à jour automatiquement au démarrage"
+  },
+  "playback": {
+    "title": "Lecture",
+    "crossfade": "Fondu enchaîné entre deux pistes (secondes)",
+    "crossfadeHint": "0 pour désactiver. La piste suivante démarre pendant que la précédente s'éteint ; une pause garde son silence.",
+    "protectStop": "Protéger Stop : appuyer deux fois pour arrêter",
+    "protectStopHint": "Évite qu'un appui réflexe sur la touche Stop coupe le spectacle. Le fondu d'urgence reste disponible en un seul appui."
   }
 }

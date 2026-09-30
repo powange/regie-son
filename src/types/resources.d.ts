@@ -50,6 +50,7 @@ export default interface Resources {
       "seekHere": "Se positionner sur cette étape"
     },
     "player": {
+      "dismissResume": "Ignorer",
       "fadeIn": "Fade in",
       "fadeOut": "Fade out",
       "next": "Piste suivante",
@@ -58,7 +59,11 @@ export default interface Resources {
       "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> restantes",
       "play": "Lecture",
       "playbackError": "Lecture impossible : le fichier est introuvable ou dans un format non pris en charge.",
+      "previous": "Précédent (ou retour au début de la piste)",
+      "resume": "Reprendre",
+      "resumeOffer": "La lecture s'est interrompue sur « {{track}} » à {{time}}.",
       "stop": "Stop",
+      "stopArmed": "Appuyez de nouveau sur Stop pour arrêter",
       "waiting": "En attente — appuyez sur Play pour continuer"
     },
     "settings": {
@@ -385,6 +390,8 @@ export default interface Resources {
     "audioOutput": {
       "loading": "Chargement des périphériques…",
       "missingDevice": "Périphérique introuvable (débranché ?)",
+      "previewHint": "Utilisée pour écouter une piste dans ses réglages, par exemple un casque, pour que la pré-écoute ne parte jamais dans la sono.",
+      "previewTitle": "Sortie de pré-écoute",
       "refresh": "Actualiser la liste",
       "systemDefault": "Défaut du système",
       "title": "Sortie audio",
@@ -401,8 +408,10 @@ export default interface Resources {
       },
       "next": "Piste suivante",
       "none": "Aucune touche",
+      "panicFade": "Fondu d'urgence (2 s) puis arrêt",
       "playPause": "Lecture / Pause",
       "pressAKey": "Appuyez sur une touche…",
+      "previous": "Élément précédent / retour au début de la piste",
       "reset": "Réinitialiser au défaut",
       "seekBackward": "Reculer de 5 s",
       "seekForward": "Avancer de 5 s",
@@ -412,6 +421,13 @@ export default interface Resources {
     "language": {
       "systemDefault": "Langue du système",
       "title": "Langue"
+    },
+    "playback": {
+      "crossfade": "Fondu enchaîné entre deux pistes (secondes)",
+      "crossfadeHint": "0 pour désactiver. La piste suivante démarre pendant que la précédente s'éteint ; une pause garde son silence.",
+      "protectStop": "Protéger Stop : appuyer deux fois pour arrêter",
+      "protectStopHint": "Évite qu'un appui réflexe sur la touche Stop coupe le spectacle. Le fondu d'urgence reste disponible en un seul appui.",
+      "title": "Lecture"
     },
     "updates": {
       "blockedDuringShow": "Installation impossible pendant le mode spectacle ou une lecture.",
