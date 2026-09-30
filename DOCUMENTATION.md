@@ -142,7 +142,7 @@ Créer ou importer dans un dossier qui contient déjà `projet.json` ou `numero.
 ### 3.5 Téléchargements
 
 - **URL directe** : une page web ou un JSON est refusé, et rien n'est écrit tant que les premiers octets ne sont pas reconnus comme de l'audio. Le nom de fichier est décodé en UTF-8 et l'extension passe par une liste blanche.
-- **yt-dlp** : l'URL est passée après `--` et doit être en http(s). La phase de téléchargement s'annule par `cancel_download` (`CancelToken` + `DownloadGuard`), et la progression part dans l'événement `yt-dlp-progress`.
+- **yt-dlp** : l'URL est passée après `--` et doit être en http(s). Un seul appel donne le titre (`--print before_dl`), le fichier écrit (`--print after_move:filepath`) et la progression (`--progress-template`), repérés par un préfixe `regieson-` sur stdout comme sur stderr. L'événement `yt-dlp-progress` porte `step`, `title` et, une fois la taille connue, `percent`. `cancel_download` (`CancelToken` + `DownloadGuard`) vaut aussi pour une annulation reçue avant le démarrage ; il arrête toute l'arborescence de yt-dlp (`taskkill /T` sous Windows, SIGTERM relayé par le bootloader PyInstaller ailleurs) avant d'effacer les fichiers partiels.
 - **Délais** : un transfert échoue s'il est bloqué (15 s pour se connecter, 60 s sans données), pas s'il est lent.
 - **Mise à jour de yt-dlp** : `update_yt_dlp` compare la dernière version publiée à la version installée. Si elle est plus récente, il télécharge le binaire et `SHA2-256SUMS` du même tag, vérifie l'empreinte, puis l'installe. Un verrou global empêche deux mises à jour simultanées.
 - **Sidecar embarqué** : sa version est fixée par `YTDLP_VERSION` dans le workflow de release. Sous Linux, c'est la version Python de yt-dlp : elle demande `python3` sur la machine.

@@ -155,7 +155,13 @@ struct YtDlpProgress {
     step: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     title: Option<String>,
+    // 0-100, once yt-dlp knows the size of what it downloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    percent: Option<f64>,
 }
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
     #[allow(unused_mut)]
@@ -163,8 +169,17 @@ fn silent_command(path: impl AsRef<std::ffi::OsStr>) -> Command {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    cmd
+}
+
+// The same for tokio, whose Command has creation_flags built in.
+fn silent_async_command(path: impl AsRef<std::ffi::OsStr>) -> tokio::process::Command {
+    #[allow(unused_mut)]
+    let mut cmd = tokio::process::Command::new(path);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
     cmd
 }
 
@@ -236,23 +251,38 @@ impl CancelToken {
         }
     }
     fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Relaxed)
+        self.cancelled.load(Ordering::SeqCst)
     }
     fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Relaxed);
+        self.cancelled.store(true, Ordering::SeqCst);
         self.notify.notify_waiters();
     }
     async fn wait(&self) {
+        // Registered before the flag is read: a cancel landing between the
+        // two would otherwise wake nobody and be lost.
+        let notified = self.notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
         if self.is_cancelled() {
             return;
         }
-        self.notify.notified().await;
+        notified.await;
     }
 }
 
-fn cancel_registry() -> &'static Mutex<HashMap<String, Arc<CancelToken>>> {
-    static R: OnceLock<Mutex<HashMap<String, Arc<CancelToken>>>> = OnceLock::new();
-    R.get_or_init(|| Mutex::new(HashMap::new()))
+// A cancel can reach us before the download command has registered its id
+// (both are IPC calls in flight): it is kept a while for the guard to find.
+const EARLY_CANCEL_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+#[derive(Default)]
+struct CancelRegistry {
+    active: HashMap<String, Arc<CancelToken>>,
+    early: HashMap<String, std::time::Instant>,
+}
+
+fn cancel_registry() -> &'static Mutex<CancelRegistry> {
+    static R: OnceLock<Mutex<CancelRegistry>> = OnceLock::new();
+    R.get_or_init(Default::default)
 }
 
 struct DownloadGuard {
@@ -263,33 +293,202 @@ struct DownloadGuard {
 impl DownloadGuard {
     fn new(id: String) -> Self {
         let token = Arc::new(CancelToken::new());
-        cancel_registry()
-            .lock()
-            .unwrap()
-            .insert(id.clone(), token.clone());
+        let mut registry = cancel_registry().lock().unwrap();
+        if registry.early.remove(&id).is_some() {
+            token.cancel();
+        }
+        registry.active.insert(id.clone(), token.clone());
         Self { id, token }
     }
 }
 
 impl Drop for DownloadGuard {
     fn drop(&mut self) {
-        cancel_registry().lock().unwrap().remove(&self.id);
+        cancel_registry().lock().unwrap().active.remove(&self.id);
     }
 }
 
 #[tauri::command]
 pub fn cancel_download(id: String) {
-    if let Some(token) = cancel_registry().lock().unwrap().get(&id) {
+    let mut registry = cancel_registry().lock().unwrap();
+    if let Some(token) = registry.active.get(&id) {
         token.cancel();
+        return;
+    }
+    let now = std::time::Instant::now();
+    registry
+        .early
+        .retain(|_, at| now.duration_since(*at) < EARLY_CANCEL_TTL);
+    registry.early.insert(id, now);
+}
+
+// Partial files are named after the download id: <id>.webm.part, <id>.ytdl…
+// Windows keeps a file open by a dying process for a moment, hence the
+// retries.
+async fn cleanup_partial_files(musiques_dir: &Path, id: &str) {
+    for _ in 0..10 {
+        let mut left = false;
+        if let Ok(entries) = fs::read_dir(musiques_dir) {
+            for entry in entries.flatten() {
+                if entry.file_name().to_string_lossy().starts_with(id)
+                    && fs::remove_file(entry.path()).is_err()
+                {
+                    left = true;
+                }
+            }
+        }
+        if !left {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     }
 }
 
-fn cleanup_partial_files(musiques_dir: &Path, id: &str) {
-    if let Ok(entries) = fs::read_dir(musiques_dir) {
-        for entry in entries.flatten() {
-            if entry.file_name().to_string_lossy().starts_with(id) {
-                let _ = fs::remove_file(entry.path());
+// kill_on_drop only kills the process we spawned, without waiting. The
+// yt-dlp builds for Windows and macOS are PyInstaller bundles: that process
+// is a bootloader, and the Python child that writes the file outlives it.
+async fn stop_yt_dlp(child: &mut tokio::process::Child) {
+    if let Some(pid) = child.id() {
+        let pid = pid.to_string();
+        // /T takes the whole tree down.
+        #[cfg(target_os = "windows")]
+        let _ = silent_async_command("taskkill")
+            .args(["/F", "/T", "/PID", &pid])
+            .status()
+            .await;
+        // The bootloader forwards SIGTERM to its child and exits with it,
+        // which SIGKILL would not let it do.
+        #[cfg(unix)]
+        {
+            let _ = tokio::process::Command::new("kill")
+                .args(["-TERM", &pid])
+                .status()
+                .await;
+            let grace = std::time::Duration::from_secs(3);
+            if tokio::time::timeout(grace, child.wait()).await.is_ok() {
+                return;
             }
+        }
+    }
+    let _ = child.kill().await;
+}
+
+// Markers put in front of what we ask yt-dlp to print, so that its own
+// messages can never be mistaken for them.
+const TITLE_MARK: &str = "regieson-title:";
+const FILE_MARK: &str = "regieson-file:";
+const PROGRESS_MARK: &str = "regieson-progress:";
+
+#[derive(Debug, PartialEq)]
+enum YtDlpLine {
+    Title(String),
+    File(String),
+    // Percentage, when the total size is known.
+    Progress(Option<f64>),
+    Other(String),
+}
+
+fn parse_yt_dlp_line(line: &str) -> YtDlpLine {
+    let line = line.trim_end_matches(['\r', '\n']);
+    if let Some(title) = line.strip_prefix(TITLE_MARK) {
+        return YtDlpLine::Title(title.trim().to_string());
+    }
+    if let Some(file) = line.strip_prefix(FILE_MARK) {
+        return YtDlpLine::File(file.trim().to_string());
+    }
+    if let Some(progress) = line.trim_start().strip_prefix(PROGRESS_MARK) {
+        // "<downloaded> <total> <estimate>", each possibly "NA".
+        let n: Vec<Option<f64>> = progress
+            .split_whitespace()
+            .map(|v| v.parse::<f64>().ok())
+            .collect();
+        let done = n.first().copied().flatten();
+        let total = n
+            .get(1)
+            .copied()
+            .flatten()
+            .or(n.get(2).copied().flatten())
+            .filter(|t| *t > 0.0);
+        let percent = done
+            .zip(total)
+            .map(|(d, t)| (d / t * 100.0).clamp(0.0, 100.0));
+        return YtDlpLine::Progress(percent);
+    }
+    YtDlpLine::Other(line.trim().to_string())
+}
+
+/// The file yt-dlp reports having written, if it is where it should be;
+/// otherwise the first one bearing the download id. Only the name of the
+/// printed path is used: yt-dlp may print it in the console's code page,
+/// which would garble an accented folder name.
+fn downloaded_file(musiques_dir: &Path, id: &str, printed: Option<&str>) -> Option<String> {
+    let usable = |name: &str| {
+        name.starts_with(id)
+            && !name.ends_with(".part")
+            && !name.ends_with(".ytdl")
+            && crate::safe_filename(name).is_ok()
+            && musiques_dir.join(name).is_file()
+    };
+    if let Some(name) = printed.and_then(|p| p.rsplit(['/', '\\']).next()) {
+        if usable(name) {
+            return Some(name.to_string());
+        }
+    }
+    fs::read_dir(musiques_dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .find(|name| usable(name))
+}
+
+/// What one yt-dlp run has told us so far.
+struct YtDlpRun<'a> {
+    app: &'a tauri::AppHandle,
+    title: Option<String>,
+    file: Option<String>,
+    error: Option<String>,
+    last_line: Option<String>,
+    percent: Option<u8>,
+}
+
+impl YtDlpRun<'_> {
+    fn display_title(&self) -> String {
+        self.title
+            .clone()
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| "YouTube audio".to_string())
+    }
+
+    fn emit(&self, percent: Option<f64>) {
+        let _ = self.app.emit(
+            "yt-dlp-progress",
+            YtDlpProgress {
+                step: "downloading",
+                title: Some(self.display_title()),
+                percent,
+            },
+        );
+    }
+
+    fn feed(&mut self, raw: &[u8]) {
+        match parse_yt_dlp_line(&String::from_utf8_lossy(raw)) {
+            YtDlpLine::Title(title) => {
+                self.title = Some(title);
+                self.emit(None);
+            }
+            YtDlpLine::File(file) => self.file = Some(file),
+            YtDlpLine::Progress(Some(p)) => {
+                // One event per percent, not one per network read.
+                let whole = p as u8;
+                if self.percent != Some(whole) {
+                    self.percent = Some(whole);
+                    self.emit(Some(p));
+                }
+            }
+            YtDlpLine::Progress(None) => {}
+            YtDlpLine::Other(line) if line.starts_with("ERROR:") => self.error = Some(line),
+            YtDlpLine::Other(line) if !line.is_empty() => self.last_line = Some(line),
+            YtDlpLine::Other(_) => {}
         }
     }
 }
@@ -301,12 +500,18 @@ pub async fn download_youtube_audio(
     download_id: String,
     app: tauri::AppHandle,
 ) -> AppResult<AudioFile> {
+    use tokio::io::AsyncBufReadExt;
+
     let url = validate_http_url(&url)?;
     let guard = DownloadGuard::new(download_id);
     let yt_dlp = find_yt_dlp_with_app(&app);
 
-    let check = silent_command(&yt_dlp).arg("--version").output();
-    if check.is_err() || !check.unwrap().status.success() {
+    let check = silent_async_command(&yt_dlp)
+        .arg("--version")
+        .kill_on_drop(true)
+        .output()
+        .await;
+    if !check.is_ok_and(|out| out.status.success()) {
         return Err(AppError::new("download.ytDlpMissing"));
     }
 
@@ -315,43 +520,7 @@ pub async fn download_youtube_audio(
         YtDlpProgress {
             step: "fetchingInfo",
             title: None,
-        },
-    );
-
-    let title_out = silent_command(&yt_dlp)
-        .args([
-            "--print",
-            "%(title)s",
-            "--skip-download",
-            "--no-warnings",
-            "--no-playlist",
-            "--",
-            &url,
-        ])
-        .output()
-        .map_err(fail("download.ytDlpFailed"))?;
-
-    let title = if title_out.status.success() {
-        String::from_utf8_lossy(&title_out.stdout)
-            .lines()
-            .map(|l| l.trim())
-            .rfind(|l| !l.is_empty() && !l.starts_with("WARNING:") && !l.starts_with("ERROR:"))
-            .unwrap_or("")
-            .to_string()
-    } else {
-        String::new()
-    };
-    let title_display = if title.is_empty() {
-        "YouTube audio".to_string()
-    } else {
-        title.clone()
-    };
-
-    let _ = app.emit(
-        "yt-dlp-progress",
-        YtDlpProgress {
-            step: "downloading",
-            title: Some(title_display.clone()),
+            percent: None,
         },
     );
 
@@ -362,57 +531,97 @@ pub async fn download_youtube_audio(
         .to_string_lossy()
         .to_string();
 
-    let mut cmd = tokio::process::Command::new(&yt_dlp);
-    // tokio's Command has creation_flags built in, no CommandExt needed.
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
-    cmd.args([
-        "-f",
-        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
-        "-o",
-        &output_template,
-        "--no-playlist",
-        "--",
-        &url,
-    ])
-    .kill_on_drop(true);
+    // One run for the title, the file and the progress: the title used to
+    // cost a second request to the site, and the file was found by listing
+    // the folder.
+    let title_print = format!("before_dl:{TITLE_MARK}%(title)s");
+    let file_print = format!("after_move:{FILE_MARK}%(filepath)s");
+    let progress_template = format!(
+        "download:{PROGRESS_MARK}%(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s"
+    );
+    let mut child = silent_async_command(&yt_dlp)
+        .args([
+            "-f",
+            "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+            "-o",
+            &output_template,
+            "--no-playlist",
+            "--no-simulate",
+            "--print",
+            &title_print,
+            "--print",
+            &file_print,
+            "--progress",
+            "--newline",
+            "--progress-template",
+            &progress_template,
+            "--",
+            &url,
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(fail("download.failed"))?;
 
-    let download_result = tokio::select! {
-        r = cmd.output() => r,
-        _ = guard.token.wait() => {
-            cleanup_partial_files(&musiques_dir, &id);
-            return Err(AppError::new("download.cancelled"));
+    // --print sends its lines to stdout and the progress to stderr: both are
+    // read to the end, or a full pipe would stall yt-dlp.
+    let mut stdout = child
+        .stdout
+        .take()
+        .map(|s| tokio::io::BufReader::new(s).split(b'\n'));
+    let mut stderr = child
+        .stderr
+        .take()
+        .map(|s| tokio::io::BufReader::new(s).split(b'\n'));
+    let mut run = YtDlpRun {
+        app: &app,
+        title: None,
+        file: None,
+        error: None,
+        last_line: None,
+        percent: None,
+    };
+
+    let status = loop {
+        tokio::select! {
+            line = async { stdout.as_mut().unwrap().next_segment().await }, if stdout.is_some() => {
+                match line {
+                    Ok(Some(line)) => run.feed(&line),
+                    _ => stdout = None,
+                }
+            }
+            line = async { stderr.as_mut().unwrap().next_segment().await }, if stderr.is_some() => {
+                match line {
+                    Ok(Some(line)) => run.feed(&line),
+                    _ => stderr = None,
+                }
+            }
+            status = child.wait(), if stdout.is_none() && stderr.is_none() => {
+                break status.map_err(fail("download.failed"))?;
+            }
+            _ = guard.token.wait() => {
+                stop_yt_dlp(&mut child).await;
+                cleanup_partial_files(&musiques_dir, &id).await;
+                return Err(AppError::new("download.cancelled"));
+            }
         }
     };
 
-    let download = download_result.map_err(fail("download.failed"))?;
-
-    if !download.status.success() {
-        let stderr = String::from_utf8_lossy(&download.stderr).to_string();
-        cleanup_partial_files(&musiques_dir, &id);
-        return Err(
-            AppError::new("download.ytDlpFailed").detail(stderr.lines().last().unwrap_or(&stderr))
-        );
+    if !status.success() {
+        cleanup_partial_files(&musiques_dir, &id).await;
+        let detail = run.error.or(run.last_line).unwrap_or_default();
+        return Err(AppError::new("download.ytDlpFailed").detail(detail));
     }
 
-    // Trouver le fichier créé (l'extension peut varier si ffmpeg est absent)
-    let entry = fs::read_dir(&musiques_dir)
-        .map_err(fail("download.unexpected"))?
-        .filter_map(|e| e.ok())
-        .find(|e| e.file_name().to_string_lossy().starts_with(&id))
+    let filename = downloaded_file(&musiques_dir, &id, run.file.as_deref())
         .ok_or_else(missing("download.fileNotFoundAfter"))?;
-
-    let filename = entry.file_name().to_string_lossy().to_string();
     let ext = Path::new(&filename)
         .extension()
         .unwrap_or_default()
         .to_string_lossy();
-    let display_title = if title.is_empty() {
-        "YouTube audio".to_string()
-    } else {
-        title
-    };
-    let original_name = format!("{}.{}", display_title, ext);
+    let original_name = format!("{}.{}", run.display_title(), ext);
 
     Ok(AudioFile::new(id, filename, original_name))
 }
@@ -839,6 +1048,85 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_cancel_sent_before_the_download_starts_is_not_lost() {
+        let id = uuid::Uuid::new_v4().to_string();
+        cancel_download(id.clone());
+        let guard = DownloadGuard::new(id.clone());
+        assert!(guard.token.is_cancelled());
+        tauri::async_runtime::block_on(guard.token.wait());
+        drop(guard);
+        // Used once: the next download under that id starts clean.
+        assert!(!DownloadGuard::new(id).token.is_cancelled());
+    }
+
+    #[test]
+    fn a_cancel_wakes_a_waiting_download() {
+        let token = Arc::new(CancelToken::new());
+        let waiter = token.clone();
+        tauri::async_runtime::block_on(async move {
+            let task = tauri::async_runtime::spawn(async move { waiter.wait().await });
+            token.cancel();
+            task.await.unwrap();
+        });
+    }
+
+    #[test]
+    fn yt_dlp_output_is_read_by_its_markers() {
+        assert_eq!(
+            parse_yt_dlp_line("regieson-title:Ma chanson: live"),
+            YtDlpLine::Title("Ma chanson: live".into())
+        );
+        assert_eq!(
+            parse_yt_dlp_line("regieson-title:Song\r"),
+            YtDlpLine::Title("Song".into())
+        );
+        assert_eq!(
+            parse_yt_dlp_line("regieson-file:/m/musiques/abc.m4a"),
+            YtDlpLine::File("/m/musiques/abc.m4a".into())
+        );
+        assert_eq!(
+            parse_yt_dlp_line("regieson-progress:512 2048 NA"),
+            YtDlpLine::Progress(Some(25.0))
+        );
+        assert_eq!(
+            parse_yt_dlp_line("  regieson-progress:100 NA 400.0"),
+            YtDlpLine::Progress(Some(25.0))
+        );
+        assert_eq!(
+            parse_yt_dlp_line("regieson-progress:100 NA NA"),
+            YtDlpLine::Progress(None)
+        );
+        assert_eq!(
+            parse_yt_dlp_line("regieson-progress:900 800 NA"),
+            YtDlpLine::Progress(Some(100.0))
+        );
+        assert_eq!(
+            parse_yt_dlp_line("ERROR: [youtube] x: Private video"),
+            YtDlpLine::Other("ERROR: [youtube] x: Private video".into())
+        );
+    }
+
+    #[test]
+    fn the_downloaded_file_is_found_in_musiques_only() {
+        let dir = std::env::temp_dir().join(format!("regie-son-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("id1.m4a"), b"a").unwrap();
+        fs::write(dir.join("id2.webm.part"), b"a").unwrap();
+        let printed = "C:\\Users\\x\\Num\u{fffd}ros\\musiques\\id1.m4a";
+        assert_eq!(
+            downloaded_file(&dir, "id1", Some(printed)),
+            Some("id1.m4a".into())
+        );
+        assert_eq!(downloaded_file(&dir, "id1", None), Some("id1.m4a".into()));
+        assert_eq!(
+            downloaded_file(&dir, "id1", Some("/etc/passwd")),
+            Some("id1.m4a".into())
+        );
+        assert_eq!(downloaded_file(&dir, "id2", None), None);
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

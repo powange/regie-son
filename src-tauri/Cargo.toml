@@ -23,7 +23,7 @@ uuid = { version = "1", features = ["v4"] }
 dirs = "6.0.0"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
-tokio = { version = "1", features = ["process", "sync", "time", "macros", "fs"] }
+tokio = { version = "1", features = ["process", "sync", "time", "macros", "fs", "io-util"] }
 starship-battery = "0.11"
 sha2 = "0.10"
 bytes = "1"
