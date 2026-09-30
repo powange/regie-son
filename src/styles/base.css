@@ -10,6 +10,7 @@
   --bg3: #0f3460;
   --accent: #e94560;
   --accent2: #533483;
+  --primary: var(--accent);
   --text: #eaeaea;
   --text2: #a0a0b0;
   --border: #2a2a4a;
