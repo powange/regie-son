@@ -1,13 +1,15 @@
-import { memo, useState, useRef, useEffect } from "react";
+import { lazy, memo, Suspense, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
-import AudioSettingsModal from "./AudioSettingsModal";
 import { formatTime } from "../trackTimes";
 import { useTranslation } from "react-i18next";
 import { useFollowActive } from "../useFollowActive";
+
+// Loaded on first use: it brings wavesurfer.js, which nothing else needs.
+const AudioSettingsModal = lazy(() => import("./AudioSettingsModal"));
 
 
 interface Props {
@@ -199,12 +201,14 @@ function AudioItemInner({
       )}
 
       {showSettings && (
-        <AudioSettingsModal
-          audio={audio}
-          projectPath={projectPath}
-          onSave={(updated) => onChange(updated)}
-          onClose={() => setShowSettings(false)}
-        />
+        <Suspense fallback={null}>
+          <AudioSettingsModal
+            audio={audio}
+            projectPath={projectPath}
+            onSave={(updated) => onChange(updated)}
+            onClose={() => setShowSettings(false)}
+          />
+        </Suspense>
       )}
     </div>
   );
