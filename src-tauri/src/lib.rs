@@ -13,7 +13,6 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::error::{fail, missing, AppError, AppResult};
@@ -400,14 +399,9 @@ pub fn run() {
     // Hot start: focus existing window + forward file via event
     #[cfg(desktop)]
     {
-        use tauri::Manager;
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(file) = file_assoc::extract_file_from_args(&args) {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                    let _ = window.emit("open-file", file);
-                }
+                file_assoc::deliver_open_file(app, file);
             }
         }));
     }
@@ -458,8 +452,23 @@ pub fn run() {
             show_mode::set_show_mode,
             battery::get_battery_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS passes double-clicked files as an Apple Event, not argv,
+            // both at cold start and while running.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let file = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(|path| path.to_string_lossy().to_string())
+                    .find(|path| file_assoc::is_openable(path));
+                if let Some(file) = file {
+                    file_assoc::deliver_open_file(_app, file);
+                }
+            }
+        });
 }
 
 #[cfg(test)]
