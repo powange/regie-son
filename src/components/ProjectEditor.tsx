@@ -33,11 +33,12 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, Maximize2, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
 import PlayerBar from "./PlayerBar";
+import ShowView from "./ShowView";
 import { FadeState, usePlayer } from "../usePlayer";
 
 // What App needs from the open editor when a file is opened from the OS.
@@ -109,6 +110,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [showAddPart, setShowAddPart] = useState(false);
   const [editMode, setEditMode] = useState(readEditModePref);
   const [showMode, setShowMode] = useState(false);
+  const [showViewOpen, setShowViewOpen] = useState(false);
   const [confirm, setConfirm] = useState<"close" | "showModeOff" | "cleanup" | null>(null);
   // The show mode locks the running order: no edit, drag, delete or undo in
   // front of the audience, whatever the edit switch says.
@@ -209,6 +211,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
 
   const showModeRef = useRef(showMode);
   showModeRef.current = showMode;
+  // The show view has no editing: undo and redo stay out of it too.
+  const showViewOpenRef = useRef(showViewOpen);
+  showViewOpenRef.current = showViewOpen;
   const undoRef = useRef(undo);
   undoRef.current = undo;
   const redoRef = useRef(redo);
@@ -225,7 +230,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       // moves a part or a track with the keyboard.
       if (target?.closest?.('[aria-roledescription="sortable"]')) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current && !showViewOpenRef.current) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
         if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); redoRef.current(); return; }
       }
@@ -281,6 +286,12 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     } catch (err) {
       setShowMode(active);
       setShowModeError(translateError(err));
+    }
+    if (active && !showViewOpen) {
+      setToast(makeToast("info", t("editor:showView.offer"), {
+        label: t("editor:showView.open"),
+        run: () => setShowViewOpen(true),
+      }));
     }
   }
 
@@ -600,6 +611,15 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
 
         <button
           className="btn-icon"
+          onClick={() => setShowViewOpen(true)}
+          title={t("editor:showView.openTitle")}
+          aria-label={t("editor:showView.openTitle")}
+        >
+          <Maximize2 size={18} />
+        </button>
+
+        <button
+          className="btn-icon"
           onClick={() => setShowExport(true)}
           title={isSingle ? t("editor:exportAct") : t("editor:exportShow")}
         >
@@ -786,6 +806,17 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
           code={share.code}
           error={share.error}
           onClose={closeShare}
+        />
+      )}
+
+      {showViewOpen && (
+        <ShowView
+          state={playerState}
+          project={project}
+          onTogglePlay={togglePlay}
+          onNext={next}
+          onStop={stop}
+          onClose={() => setShowViewOpen(false)}
         />
       )}
 

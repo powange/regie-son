@@ -59,5 +59,16 @@
     "redoTitle": "Redo the undone change (Ctrl+Y)",
     "partDeleted": "“{{name}}” deleted",
     "stepDeleted": "Step deleted"
+  },
+  "showView": {
+    "title": "Show view",
+    "open": "Show view",
+    "openTitle": "Open the show view: full screen, large type, no editing",
+    "close": "Leave show view",
+    "now": "Now",
+    "upNext": "Up next",
+    "idle": "Nothing playing",
+    "endOfShow": "End of the show",
+    "offer": "Show mode on. Switch to the show view?"
   }
 }

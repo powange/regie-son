@@ -1,0 +1,180 @@
+/* ===== SHOW VIEW =====
+   Full-screen live view, read from a distance in a dark wing: near-black
+   background, large type, sizes that follow the window. Below toasts (90) and
+   modals (100), so that a confirmation or an error still shows above it. */
+.show-view {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.8rem, 2.5vh, 2rem);
+  padding: clamp(0.8rem, 2.5vh, 2rem) clamp(1rem, 4vw, 3rem);
+  background: #07070d;
+  color: #ffffff;
+  overflow: auto;
+}
+
+.show-view-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.show-view-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9a9ab0;
+}
+.show-view-close {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  background: transparent;
+  color: #d0d0e0;
+  border: 1px solid #44445a;
+  border-radius: var(--radius);
+}
+.show-view-close:hover { border-color: #9a9ab0; color: #fff; opacity: 1; }
+
+.show-view-label {
+  font-size: clamp(0.85rem, 1.6vh, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9a9ab0;
+  margin-bottom: 0.3rem;
+}
+
+.show-view-now,
+.show-view-next {
+  padding: clamp(0.8rem, 2vh, 1.6rem) clamp(1rem, 2.5vw, 2rem);
+  border-radius: 12px;
+  background: #11111c;
+  border: 1px solid #26263a;
+}
+.show-view--playing .show-view-now { border-color: var(--accent); }
+
+.show-view-act {
+  font-size: clamp(1.1rem, 3vh, 2rem);
+  font-weight: 600;
+  color: #c8c8dc;
+}
+.show-view-item {
+  font-size: clamp(1.6rem, 5.5vh, 3.6rem);
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.show-view-cue {
+  margin-top: 0.4rem;
+  font-size: clamp(1.2rem, 3.5vh, 2.4rem);
+  font-weight: 600;
+  color: #ffd166;
+  overflow-wrap: anywhere;
+}
+.show-view-muted { color: #9a9ab0; font-size: clamp(1.2rem, 3.5vh, 2rem); }
+
+.show-view-clock-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin-top: clamp(0.5rem, 2vh, 1.5rem);
+}
+.show-view-clock {
+  font-size: clamp(3rem, 14vh, 9rem);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.show-view-clock--waiting {
+  font-size: clamp(1.4rem, 4vh, 2.6rem);
+  color: #ffd166;
+}
+
+.show-view-fade {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  font-size: clamp(1.1rem, 3vh, 2rem);
+  font-weight: 600;
+}
+.show-view-fade strong { font-variant-numeric: tabular-nums; }
+.show-view-fade--in { background: #10351a; color: #7ee08a; }
+.show-view-fade--out { background: #3a2410; color: #ffb366; }
+
+.show-view-progress {
+  margin-top: 0.8rem;
+  height: 10px;
+  border-radius: 5px;
+  background: #26263a;
+  overflow: hidden;
+}
+.show-view-progress-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.show-view-error {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  background: #3a1216;
+  color: #ffb0b6;
+  font-size: clamp(1rem, 2.5vh, 1.4rem);
+}
+
+.show-view-next-cue {
+  font-size: clamp(1.4rem, 5vh, 3.2rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: #ffd166;
+  overflow-wrap: anywhere;
+}
+.show-view-next-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.5rem;
+  margin-top: 0.3rem;
+  font-size: clamp(1rem, 2.6vh, 1.6rem);
+  color: #c8c8dc;
+}
+
+.show-view-controls {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(1rem, 4vw, 3rem);
+  padding-bottom: 0.5rem;
+}
+.show-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(5rem, 14vh, 8rem);
+  height: clamp(5rem, 14vh, 8rem);
+  border-radius: 50%;
+  background: #1c1c2c;
+  color: #ffffff;
+  border: 2px solid #44445a;
+}
+.show-view-btn:hover:not(:disabled) { border-color: #ffffff; opacity: 1; }
+.show-view-btn:disabled { opacity: 0.35; cursor: default; }
+.show-view-btn--play {
+  width: clamp(6.5rem, 18vh, 10rem);
+  height: clamp(6.5rem, 18vh, 10rem);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.show-view-btn--stop { color: #ff8a95; }

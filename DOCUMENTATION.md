@@ -167,6 +167,7 @@ Le réglage d'avant est relu à l'activation et restauré à la désactivation, 
   - **Sauvegarde** ([useAutosave](src/useAutosave.ts)) : `flushSave` sérialise les écritures (différées de 600 ms). Elle est appelée à la fermeture, au démontage, à la fermeture de la fenêtre, et avant un export ou un import.
   - **Historique** ([useProjectHistory](src/useProjectHistory.ts)) : toute modification passe par `update`. Annuler et rétablir sur 50 niveaux, avec des boutons dans l'en-tête et une notification « Annuler » après une suppression.
   - **Mode spectacle** : il verrouille l'édition (`editable = editMode && !showMode`), mais laisse le volume réglable.
+  - **Vue spectacle** ([ShowView](src/components/ShowView.tsx), modèle dans [showView.ts](src/showView.ts)) : superposition plein écran, sans édition, ouverte depuis l'en-tête et proposée à l'activation du mode spectacle. Ce n'est pas une modale : les raccourcis restent actifs, Échap compris (Stop). Seul son bouton la ferme.
 
 ### 4.2 Hooks et modules
 

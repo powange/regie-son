@@ -156,6 +156,17 @@ export default interface Resources {
       "inactive": "Mode spectacle",
       "inactiveTitle": "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
     },
+    "showView": {
+      "close": "Quitter la vue spectacle",
+      "endOfShow": "Fin du spectacle",
+      "idle": "Rien n'est en cours",
+      "now": "En cours",
+      "offer": "Mode spectacle activé. Passer en vue spectacle ?",
+      "open": "Vue spectacle",
+      "openTitle": "Ouvrir la vue spectacle : plein écran, gros caractères, sans édition",
+      "title": "Vue spectacle",
+      "upNext": "À suivre"
+    },
     "undo": {
       "partDeleted": "« {{name}} » supprimé",
       "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",

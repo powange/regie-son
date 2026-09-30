@@ -59,5 +59,16 @@
     "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
     "partDeleted": "« {{name}} » supprimé",
     "stepDeleted": "Étape supprimée"
+  },
+  "showView": {
+    "title": "Vue spectacle",
+    "open": "Vue spectacle",
+    "openTitle": "Ouvrir la vue spectacle : plein écran, gros caractères, sans édition",
+    "close": "Quitter la vue spectacle",
+    "now": "En cours",
+    "upNext": "À suivre",
+    "idle": "Rien n'est en cours",
+    "endOfShow": "Fin du spectacle",
+    "offer": "Mode spectacle activé. Passer en vue spectacle ?"
   }
 }
