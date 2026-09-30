@@ -38,7 +38,9 @@
     "missingNumeroJson": "Invalid archive: numero.json is missing",
     "noAct": "Invalid archive: no act inside",
     "fileMissingInArchive": "File missing from the archive: {{name}}",
-    "corrupt": "Corrupt archive: {{name}} is unreadable."
+    "corrupt": "Corrupt archive: {{name}} is unreadable.",
+    "entryTooLarge": "Archive refused: {{name}} exceeds {{limit}} MB once unpacked.",
+    "tooLarge": "Archive refused: its content exceeds {{limit}} MB once unpacked."
   },
   "cloud": {
     "httpClientFailed": "HTTP client error: {{detail}}",

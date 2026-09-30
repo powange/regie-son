@@ -128,7 +128,6 @@ fn temp_archive_path(ext: &str) -> PathBuf {
 // pollute the target folder, and guides the user when the code is for the
 // other Régie Son share kind.
 fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
-    use std::io::Read;
     let file = fs::File::open(zip_path).map_err(fail("cloud.readDownloadedFailed"))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|_| AppError::new("cloud.notAnArchive"))?;
@@ -162,10 +161,7 @@ fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
     let mut entry = archive
         .by_name(expected_json)
         .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
-    let mut content = String::new();
-    entry
-        .read_to_string(&mut content)
-        .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
+    let content = crate::archive::read_json_entry(&mut entry, expected_json)?;
     migrate_project(&content, String::new()).map_err(fail("archive.invalid"))?;
     Ok(())
 }

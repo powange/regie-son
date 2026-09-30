@@ -38,7 +38,9 @@
     "missingNumeroJson": "Archive invalide : numero.json manquant",
     "noAct": "Archive invalide : aucun numéro",
     "fileMissingInArchive": "Fichier manquant dans l'archive : {{name}}",
-    "corrupt": "Archive corrompue : {{name}} illisible."
+    "corrupt": "Archive corrompue : {{name}} illisible.",
+    "entryTooLarge": "Archive refusée : {{name}} dépasse {{limit}} Mo une fois décompressé.",
+    "tooLarge": "Archive refusée : son contenu dépasse {{limit}} Mo une fois décompressé."
   },
   "cloud": {
     "httpClientFailed": "Erreur client HTTP : {{detail}}",

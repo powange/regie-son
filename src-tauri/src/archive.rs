@@ -131,8 +131,90 @@ fn entry_target(name: &str) -> Result<Option<PathBuf>, ()> {
     }
 }
 
+const MB: u64 = 1024 * 1024;
+const MAX_JSON_SIZE: u64 = 16 * MB;
+
+/// Caps on what an archive may unpack to. The sizes a zip declares can lie,
+/// so they are only a first check: the copy itself stops one byte past the
+/// cap. Without them a 1 GB cloud share can inflate to hundreds of GB and
+/// fill the system disk.
+#[derive(Clone, Copy)]
+pub(crate) struct ExtractLimits {
+    pub per_file: u64,
+    pub total: u64,
+}
+
+// Per file, the same cap as a downloaded file (read_audio_file refuses more).
+pub(crate) const EXTRACT_LIMITS: ExtractLimits = ExtractLimits {
+    per_file: crate::download::MAX_AUDIO_FILE_SIZE,
+    total: 16 * 1024 * MB,
+};
+
+/// Copies one archive entry into `out`, charging it to `budget` (what is
+/// left of the total allowance).
+fn copy_capped(
+    entry: &mut impl Read,
+    declared: u64,
+    out: &mut impl Write,
+    name: &str,
+    per_file: u64,
+    budget: &mut u64,
+) -> AppResult<()> {
+    let cap = per_file.min(*budget);
+    let too_large = || {
+        if cap < per_file {
+            AppError::new("archive.tooLarge").with("limit", EXTRACT_LIMITS.total / MB)
+        } else {
+            AppError::new("archive.entryTooLarge")
+                .with("name", name)
+                .with("limit", per_file / MB)
+        }
+    };
+    if declared > cap {
+        return Err(too_large());
+    }
+    let copied = std::io::copy(&mut entry.take(cap + 1), out).map_err(|e| {
+        AppError::new("archive.extractNamedFailed")
+            .with("name", name)
+            .detail(e)
+    })?;
+    if copied > cap {
+        return Err(too_large());
+    }
+    *budget -= copied;
+    Ok(())
+}
+
+/// Reads a projet.json / numero.json entry, which is never legitimately big.
+pub(crate) fn read_json_entry(entry: &mut impl Read, name: &str) -> AppResult<String> {
+    let mut content = String::new();
+    entry
+        .take(MAX_JSON_SIZE + 1)
+        .read_to_string(&mut content)
+        .map_err(|e| {
+            AppError::new("archive.readNamedFailed")
+                .with("name", name)
+                .detail(e)
+        })?;
+    if content.len() as u64 > MAX_JSON_SIZE {
+        return Err(AppError::new("archive.entryTooLarge")
+            .with("name", name)
+            .with("limit", MAX_JSON_SIZE / MB));
+    }
+    Ok(content)
+}
+
 pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()> {
+    extract_zip_with_limits(src_file, dest_folder, EXTRACT_LIMITS)
+}
+
+fn extract_zip_with_limits(
+    src_file: &str,
+    dest_folder: &Path,
+    limits: ExtractLimits,
+) -> AppResult<()> {
     fs::create_dir_all(dest_folder).map_err(fail("io.createDirFailed"))?;
+    let mut budget = limits.total;
 
     let file = fs::File::open(src_file).map_err(fail("archive.openFailed"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(fail("archive.invalid"))?;
@@ -153,15 +235,25 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
         if entry.is_dir() {
             continue;
         }
-        let out_path = dest_folder.join(relative);
+        let out_path = dest_folder.join(&relative);
         if !out_path.starts_with(dest_folder) {
             return Err(unsafe_path());
         }
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent).map_err(fail("io.createDirFailed"))?;
         }
+        let per_file = if relative.starts_with("musiques") {
+            limits.per_file
+        } else {
+            MAX_JSON_SIZE
+        };
+        let declared = entry.size();
         let mut out = fs::File::create(&out_path).map_err(fail("archive.createEntryFailed"))?;
-        std::io::copy(&mut entry, &mut out).map_err(fail("archive.extractFailed"))?;
+        if let Err(e) = copy_capped(&mut entry, declared, &mut out, &name, per_file, &mut budget) {
+            drop(out);
+            let _ = fs::remove_file(&out_path);
+            return Err(e);
+        }
     }
     Ok(())
 }
@@ -198,13 +290,7 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
         let mut entry = archive
             .by_name("numero.json")
             .map_err(|_| AppError::new("archive.missingNumeroJson"))?;
-        let mut s = String::new();
-        entry.read_to_string(&mut s).map_err(|e| {
-            AppError::new("archive.readNamedFailed")
-                .with("name", "numero.json")
-                .detail(e)
-        })?;
-        s
+        read_json_entry(&mut entry, "numero.json")?
     };
 
     let src_project = migrate_project(&raw_numero_json, String::new())?;
@@ -217,6 +303,7 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
     let dest_musiques = PathBuf::from(&project_path).join("musiques");
     fs::create_dir_all(&dest_musiques).map_err(fail("io.createDirFailed"))?;
 
+    let mut budget = EXTRACT_LIMITS.total;
     for item in numero.items.iter_mut() {
         if let PlaylistItem::Audio(audio) = item {
             safe_filename(&audio.filename)?;
@@ -236,11 +323,19 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
                     .with("name", &new_filename)
                     .detail(e)
             })?;
-            std::io::copy(&mut entry, &mut out).map_err(|e| {
-                AppError::new("archive.extractNamedFailed")
-                    .with("name", &new_filename)
-                    .detail(e)
-            })?;
+            let declared = entry.size();
+            if let Err(e) = copy_capped(
+                &mut entry,
+                declared,
+                &mut out,
+                &audio.filename,
+                EXTRACT_LIMITS.per_file,
+                &mut budget,
+            ) {
+                drop(out);
+                let _ = fs::remove_file(&out_path);
+                return Err(e);
+            }
             audio.id = new_id;
             audio.filename = new_filename;
         } else if let PlaylistItem::Pause(pause) = item {
@@ -385,6 +480,74 @@ mod tests {
         // The player streams through the asset protocol: see grant_audio_access.
         assert_eq!(crate::take_granted(), vec![dest.join("musiques")]);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn extract_refuses_an_entry_over_the_file_cap() {
+        let dir = scratch_dir();
+        let src = dir.join("big.regieson");
+        write_zip(
+            &src,
+            &[("projet.json", b"{}"), ("musiques/a.mp3", &[0u8; 2048])],
+        );
+        let dest = dir.join("out");
+        let limits = ExtractLimits {
+            per_file: 1024,
+            total: 1 << 20,
+        };
+        let err = extract_zip_with_limits(src.to_str().unwrap(), &dest, limits).unwrap_err();
+        assert_eq!(err.code, "archive.entryTooLarge");
+        assert!(!dest.join("musiques").join("a.mp3").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn extract_refuses_an_archive_over_the_total_cap() {
+        let dir = scratch_dir();
+        let src = dir.join("big.regieson");
+        write_zip(
+            &src,
+            &[
+                ("projet.json", b"{}"),
+                ("musiques/a.mp3", &[0u8; 800]),
+                ("musiques/b.mp3", &[0u8; 800]),
+            ],
+        );
+        let dest = dir.join("out");
+        let limits = ExtractLimits {
+            per_file: 1024,
+            total: 1500,
+        };
+        let err = extract_zip_with_limits(src.to_str().unwrap(), &dest, limits).unwrap_err();
+        assert_eq!(err.code, "archive.tooLarge");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn copy_stops_at_the_cap_whatever_the_entry_declares() {
+        let data = [1u8; 100];
+        let mut out = Vec::new();
+        let mut budget = 1000;
+        // Declares 10 bytes, holds 100: the header lies.
+        let err = copy_capped(&mut &data[..], 10, &mut out, "a.mp3", 50, &mut budget).unwrap_err();
+        assert_eq!(err.code, "archive.entryTooLarge");
+        assert!(out.len() <= 51);
+
+        let mut out = Vec::new();
+        copy_capped(&mut &data[..], 100, &mut out, "a.mp3", 100, &mut budget).unwrap();
+        assert_eq!(out.len(), 100);
+        assert_eq!(budget, 900);
+    }
+
+    #[test]
+    fn json_entries_are_capped() {
+        let big = vec![b' '; (MAX_JSON_SIZE + 1) as usize];
+        let err = read_json_entry(&mut &big[..], "projet.json").unwrap_err();
+        assert_eq!(err.code, "archive.entryTooLarge");
+        assert_eq!(
+            read_json_entry(&mut &b"{}"[..], "projet.json").unwrap(),
+            "{}"
+        );
     }
 
     #[test]

@@ -174,6 +174,7 @@ export default interface Resources {
       "createEntryFailed": "Création : {{detail}}",
       "createFailed": "Impossible de créer l'archive : {{detail}}",
       "createNamedFailed": "Création {{name}} : {{detail}}",
+      "entryTooLarge": "Archive refusée : {{name}} dépasse {{limit}} Mo une fois décompressé.",
       "extractFailed": "Extraction : {{detail}}",
       "extractNamedFailed": "Extraction {{name}} : {{detail}}",
       "fileMissingInArchive": "Fichier manquant dans l'archive : {{name}}",
@@ -187,6 +188,7 @@ export default interface Resources {
       "readEntryFailed": "Lecture entrée : {{detail}}",
       "readNamedFailed": "Lecture {{name}} : {{detail}}",
       "targetProjectInvalid": "Projet cible invalide : {{detail}}",
+      "tooLarge": "Archive refusée : son contenu dépasse {{limit}} Mo une fois décompressé.",
       "unsafePath": "Chemin invalide dans l'archive : {{name}}",
       "zipFailed": "Zip : {{detail}}"
     },
