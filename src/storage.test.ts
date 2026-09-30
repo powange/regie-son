@@ -74,3 +74,19 @@ describe("parseSettings", () => {
       .toEqual({ audioOutputDeviceId: "dev1", language: null, futureOption: 1 });
   });
 });
+
+describe("parseSettings — playback settings", () => {
+  it("keeps valid playback settings", () => {
+    expect(parseSettings(JSON.stringify({ protectStop: true, crossfadeSeconds: 3, previewDeviceId: "hp" })))
+      .toMatchObject({ protectStop: true, crossfadeSeconds: 3, previewDeviceId: "hp" });
+  });
+
+  it("drops or clamps invalid ones instead of handing them to the player", () => {
+    const s = parseSettings(JSON.stringify({ protectStop: "yes", crossfadeSeconds: "5", previewDeviceId: 3 }));
+    expect(s.protectStop).toBeUndefined();
+    expect(s.crossfadeSeconds).toBeUndefined();
+    expect(s.previewDeviceId).toBeUndefined();
+    expect(parseSettings(JSON.stringify({ crossfadeSeconds: 99 })).crossfadeSeconds).toBe(10);
+    expect(parseSettings(JSON.stringify({ crossfadeSeconds: -2 })).crossfadeSeconds).toBe(0);
+  });
+});

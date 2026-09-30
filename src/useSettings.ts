@@ -36,10 +36,21 @@ export function parseSettings(raw: string | null): Settings {
   delete settings.keyBindings;
   delete settings.autoUpdateYtDlp;
   delete settings.language;
+  delete settings.protectStop;
+  delete settings.crossfadeSeconds;
+  delete settings.previewDeviceId;
   const keyBindings = parseKeyBindings(d.keyBindings);
   if (keyBindings) settings.keyBindings = keyBindings;
   if (typeof d.autoUpdateYtDlp === "boolean") settings.autoUpdateYtDlp = d.autoUpdateYtDlp;
   if (typeof d.language === "string" || d.language === null) settings.language = d.language;
+  if (typeof d.protectStop === "boolean") settings.protectStop = d.protectStop;
+  // The player compares and adds this value: it must be a number in range.
+  if (typeof d.crossfadeSeconds === "number" && isFinite(d.crossfadeSeconds)) {
+    settings.crossfadeSeconds = Math.max(0, Math.min(10, d.crossfadeSeconds));
+  }
+  if ((typeof d.previewDeviceId === "string" && d.previewDeviceId !== "") || d.previewDeviceId === null) {
+    settings.previewDeviceId = d.previewDeviceId;
+  }
   return settings;
 }
 
