@@ -9,6 +9,7 @@ export interface AudioFile {
   fadeIn?: number;    // secondes
   fadeOut?: number;   // secondes
   cue?: string;       // top de départ (indication pour le régisseur)
+  loop?: boolean;     // rejoue l'extrait en boucle jusqu'à Suivant
 }
 
 export interface PauseItem {

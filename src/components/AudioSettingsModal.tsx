@@ -24,6 +24,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
   const [endRaw, setEndRaw] = useState(formatTime(audio.endTime));
   const [fadeInRaw, setFadeInRaw] = useState(audio.fadeIn !== undefined ? String(audio.fadeIn) : "");
   const [fadeOutRaw, setFadeOutRaw] = useState(audio.fadeOut !== undefined ? String(audio.fadeOut) : "");
+  const [loop, setLoop] = useState(audio.loop === true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [waveformReady, setWaveformReady] = useState(false);
@@ -166,7 +167,7 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
       setError(errorMessage(result.error));
       return;
     }
-    onSave({ ...audio, ...result.value });
+    onSave({ ...audio, ...result.value, loop: loop || undefined });
     onClose();
   }
 
@@ -236,6 +237,12 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
             />
           </div>
         </div>
+
+        <label className="settings-checkbox">
+          <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
+          {t("audio:settings.loop")}
+        </label>
+        <p className="settings-hint">{t("audio:settings.loopHint")}</p>
 
         {error && <p className="modal-error">{error}</p>}
 

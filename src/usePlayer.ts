@@ -161,6 +161,9 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
   const stopRef = useRef<() => void>(() => {});
   const fadeTimerRef = useRef<number | null>(null);
   const fadingOutRef = useRef(false);
+  // Set while a fade-out leads to the next item: a second Next skips the rest
+  // of the fade instead of being ignored, so a long fade never traps the show.
+  const pendingAdvanceRef = useRef<(() => void) | null>(null);
   const ignoreSrcErrorRef = useRef(false);
   const lastResumeSaveRef = useRef(0);
   const [resumeOffer, setResumeOffer] = useState<ResumeOffer | null>(() => readResume(project));
@@ -190,6 +193,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
       fadeTimerRef.current = null;
     }
     fadingOutRef.current = false;
+    pendingAdvanceRef.current = null;
     setState((s) => (s.fade === null ? s : { ...s, fade: null }));
   }
 
@@ -421,7 +425,12 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
         const item = itemAt(pos);
         if (item?.type !== "audio") return;
 
-        if (!fadingOutRef.current) {
+        // A looping track goes back to its start at its end point, and only
+        // Next (with its usual fade-out) moves on.
+        if (item.loop && !fadingOutRef.current) {
+          const { start, end } = playWindow(item, audio.duration);
+          if (item.endTime !== undefined && audio.currentTime >= end) audio.currentTime = start;
+        } else if (!fadingOutRef.current) {
           const end = item.endTime ?? (isFinite(audio.duration) ? audio.duration : null);
           if (end !== null) {
             const left = end - audio.currentTime;
@@ -453,7 +462,14 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
 
       audio.addEventListener("ended", () => {
         if (audio !== audioRef.current) return;
-        if (!fadingOutRef.current) advanceRef.current(0);
+        if (fadingOutRef.current) return;
+        const item = itemAt(findItemPosition(projectRef.current, itemIdRef.current ?? ""));
+        if (item?.type === "audio" && item.loop && loadedItemIdRef.current === item.id) {
+          audio.currentTime = item.startTime ?? 0;
+          audio.play().catch(() => setState((s) => ({ ...s, isPlaying: false, audioError: playbackError() })));
+          return;
+        }
+        advanceRef.current(0);
       });
 
       audio.addEventListener("error", () => {
@@ -570,7 +586,17 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
       return;
     }
 
-    if (loadingRef.current) return;
+    // Still starting (the file is being opened): Space holds it there. The
+    // pending start is invalidated, and the next Space resumes from where the
+    // element stands.
+    if (loadingRef.current) {
+      loadVersionRef.current++;
+      loadingRef.current = false;
+      cancelFade();
+      audio.pause();
+      setState((s) => ({ ...s, isPlaying: false }));
+      return;
+    }
 
     // Nothing of this item in the <audio> element (its load failed): load it
     // again rather than resume whatever played before.
@@ -621,7 +647,16 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
   // audible. `fadeSeconds` overrides the item's own fadeOut: 0 when the track
   // has already ended, the time left when an automatic fade starts late.
   const advance = useCallback((fadeSeconds?: number): void => {
-    if (fadingOutRef.current) return;
+    if (fadingOutRef.current) {
+      // A manual Next during the fade towards the next item goes there now.
+      // Automatic calls (end of track) and a Stop in progress are left alone.
+      const pending = pendingAdvanceRef.current;
+      if (fadeSeconds === undefined && pending) {
+        cancelFade();
+        pending();
+      }
+      return;
+    }
 
     const id = itemIdRef.current;
     if (id === null) {
@@ -672,6 +707,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
       // A fade-in still running would fight this one for the volume.
       cancelFade();
       fadingOutRef.current = true;
+      pendingAdvanceRef.current = doAdvance;
       const startVolume = audio.volume;
       runFade(
         "out",
@@ -679,6 +715,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null, option
         (t) => { const r = 1 - t; audio.volume = startVolume * r * r; }, // courbe quadratique descendante
         () => {
           fadingOutRef.current = false;
+          pendingAdvanceRef.current = null;
           setState((s) => ({ ...s, fade: null }));
           doAdvance();
         },

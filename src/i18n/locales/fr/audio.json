@@ -37,7 +37,9 @@
     "invalidFadeOut": "Durée de fade out invalide (en secondes, ex : 3)",
     "startBeyondFile": "Le début dépasse la durée du fichier ({{duration}})",
     "endBeyondFile": "La fin dépasse la durée du fichier ({{duration}})",
-    "fadesTooLong": "Le fade in et le fade out cumulés dépassent la durée jouée ({{length}})"
+    "fadesTooLong": "Le fade in et le fade out cumulés dépassent la durée jouée ({{length}})",
+    "loop": "Répéter jusqu'à Suivant",
+    "loopHint": "L'extrait reprend à son début à chaque fin, et Suivant enchaîne avec le fondu de sortie habituel. Utile pour une musique d'attente de durée inconnue."
   },
   "item": {
     "duration": "Durée",
@@ -48,7 +50,8 @@
     "missingFile": "Fichier introuvable : {{filename}}",
     "play": "Lire",
     "clickToRename": "Cliquer pour renommer",
-    "moveTo": "Déplacer vers une autre partie"
+    "moveTo": "Déplacer vers une autre partie",
+    "loop": "Répétée jusqu'à Suivant"
   },
   "pause": {
     "label": "Pause",

@@ -251,3 +251,10 @@ describe("track bounds against the file length", () => {
     expect(codes({ startTime: 200, endTime: 900 })).toEqual([]);
   });
 });
+
+describe("looping tracks", () => {
+  it("count one pass as a minimum only", () => {
+    const p = makeProject([audio("a", { loop: true })]);
+    expect(estimateShowDuration(p, new Map([["a.mp3", 60]]))).toEqual({ seconds: 60, complete: false });
+  });
+});
