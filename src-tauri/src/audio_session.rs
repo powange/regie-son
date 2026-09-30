@@ -45,7 +45,7 @@ pub fn start_session_namer() {
         // overflowing, which only matters for clearing the cache on schedule.
         let mut poll: u32 = 0;
         loop {
-            if poll % FORGET_EVERY == 0 {
+            if poll.is_multiple_of(FORGET_EVERY) {
                 known.clear();
             }
             poll = poll.wrapping_add(1);
