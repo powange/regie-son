@@ -382,6 +382,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(project.name, "imported");
+        // The player streams through the asset protocol: see grant_audio_access.
+        assert_eq!(crate::take_granted(), vec![dest.join("musiques")]);
         fs::remove_dir_all(&dir).unwrap();
     }
 

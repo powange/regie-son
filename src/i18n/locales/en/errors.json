@@ -11,7 +11,8 @@
     "saveFailed": "Could not save: {{detail}}",
     "serializeFailed": "Serialisation error: {{detail}}",
     "writeFailed": "Write error: {{detail}}",
-    "readFailed": "Read error: {{detail}}"
+    "readFailed": "Read error: {{detail}}",
+    "pathNotAllowed": "Access denied: this file does not belong to an open show or act."
   },
   "project": {
     "invalidFile": "Invalid project file: {{detail}}",

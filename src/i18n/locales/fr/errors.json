@@ -11,7 +11,8 @@
     "saveFailed": "Impossible de sauvegarder : {{detail}}",
     "serializeFailed": "Erreur de sérialisation : {{detail}}",
     "writeFailed": "Erreur d'écriture : {{detail}}",
-    "readFailed": "Erreur de lecture : {{detail}}"
+    "readFailed": "Erreur de lecture : {{detail}}",
+    "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert."
   },
   "project": {
     "invalidFile": "Fichier projet invalide : {{detail}}",

@@ -260,6 +260,7 @@ export default interface Resources {
       "createDirFailed": "Impossible de créer le dossier : {{detail}}",
       "deleteFailed": "Impossible de supprimer : {{detail}}",
       "invalidFilename": "Nom de fichier invalide",
+      "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert.",
       "readFailed": "Erreur de lecture : {{detail}}",
       "readFileFailed": "Impossible de lire le fichier : {{detail}}",
       "readProjectFailed": "Impossible de lire le projet : {{detail}}",

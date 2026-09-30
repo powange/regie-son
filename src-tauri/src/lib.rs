@@ -12,6 +12,7 @@ mod types;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use tauri_plugin_dialog::DialogExt;
 
@@ -28,6 +29,53 @@ pub(crate) fn safe_filename(filename: &str) -> AppResult<()> {
         Ok(())
     } else {
         Err(AppError::new("io.invalidFilename"))
+    }
+}
+
+// ===== Asset protocol scope =====
+
+// The asset protocol starts with an empty scope (tauri.conf.json). The player
+// and the duration probe stream `<project>/musiques/<file>` through it, so
+// every project or act handed to the frontend must go through
+// grant_audio_access, or nothing plays. Today that is open_project_from_file
+// (open, import, auto-import, cloud import) and the two create commands; the
+// tests below check each of them. Only musiques/ is granted, never the
+// project folder: a path forged by the webview can at worst expose audio.
+static ASSET_SCOPE: OnceLock<tauri::scope::fs::Scope> = OnceLock::new();
+
+#[cfg(test)]
+thread_local! {
+    static GRANTED: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_granted() -> Vec<PathBuf> {
+    GRANTED.with(|g| g.borrow_mut().drain(..).collect())
+}
+
+pub(crate) fn grant_audio_access(project_dir: &Path) {
+    let musiques = project_dir.join("musiques");
+    #[cfg(test)]
+    GRANTED.with(|g| g.borrow_mut().push(musiques.clone()));
+    if let Some(scope) = ASSET_SCOPE.get() {
+        let _ = scope.allow_directory(&musiques, false);
+    }
+}
+
+// read_audio_file takes a path from the webview: it must name a file directly
+// inside a musiques/ folder the asset scope allows, symlinks resolved.
+fn check_audio_path(path: &Path, allowed: impl Fn(&Path) -> bool) -> AppResult<()> {
+    let in_musiques = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "musiques");
+    let named = path
+        .file_name()
+        .is_some_and(|n| safe_filename(&n.to_string_lossy()).is_ok());
+    if in_musiques && named && allowed(path) {
+        Ok(())
+    } else {
+        Err(AppError::new("io.pathNotAllowed"))
     }
 }
 
@@ -172,6 +220,7 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
         single_numero: None,
     };
     save_project_to_disk(&project)?;
+    grant_audio_access(&project_dir);
     Ok(project)
 }
 
@@ -185,8 +234,10 @@ fn read_project_file(folder: &Path, filename: &str) -> AppResult<Project> {
 // interrupted save never loses the show. The original error wins if the
 // backup is no better.
 pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
-    read_project_file(folder, filename)
-        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))
+    let project = read_project_file(folder, filename)
+        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))?;
+    grant_audio_access(folder);
+    Ok(project)
 }
 
 #[tauri::command]
@@ -217,6 +268,7 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
         single_numero: Some(true),
     };
     save_project_to_disk(&project)?;
+    grant_audio_access(&numero_dir);
     Ok(project)
 }
 
@@ -325,6 +377,9 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResu
 
 #[tauri::command(async)]
 fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
+    check_audio_path(Path::new(&path), |p| {
+        ASSET_SCOPE.get().is_some_and(|scope| scope.is_allowed(p))
+    })?;
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
         return Err(AppError::new("download.fileTooLarge")
@@ -417,6 +472,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            use tauri::Manager;
+            let _ = ASSET_SCOPE.set(app.asset_protocol_scope());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_default_projects_dir,
             get_default_numeros_dir,
@@ -561,6 +621,52 @@ mod tests {
         assert_eq!(project.name, "new");
         assert!(dir.join("musiques").is_dir());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn every_project_handed_to_the_frontend_is_granted_to_the_player() {
+        let dir = scratch_dir();
+        take_granted();
+
+        let show = dir.join("show");
+        create_project("s".into(), show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![show.join("musiques")]);
+
+        let act = dir.join("act");
+        create_numero("a".into(), act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![act.join("musiques")]);
+
+        open_project(show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![show.join("musiques")]);
+
+        open_numero(act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![act.join("musiques")]);
+
+        // A failed open grants nothing.
+        assert!(open_project(dir.join("none").to_string_lossy().to_string()).is_err());
+        assert!(take_granted().is_empty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn read_audio_file_only_reads_granted_musiques_files() {
+        let yes = |_: &Path| true;
+        let no = |_: &Path| false;
+        assert!(check_audio_path(Path::new("/show/musiques/a.mp3"), yes).is_ok());
+        assert!(check_audio_path(Path::new("/show/musiques/a.mp3"), no).is_err());
+        for path in [
+            "/home/u/.ssh/id_rsa",
+            "/show/musiques",
+            "/show/musiques/sub/a.mp3",
+            "/show/musiques/..",
+            "/show/projet.json",
+        ] {
+            assert_eq!(
+                check_audio_path(Path::new(path), yes).unwrap_err().code,
+                "io.pathNotAllowed",
+                "{path:?}"
+            );
+        }
     }
 
     #[test]
