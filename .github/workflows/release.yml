@@ -10,6 +10,10 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # yt-dlp release bundled as the sidecar. Pinned so that a build is
+  # reproducible and the cache is invalidated by bumping it; the app updates
+  # its copy on its own afterwards.
+  YTDLP_VERSION: "2026.08.19"
 
 jobs:
   # The release is created once, up front, as a draft. Letting each matrix job
@@ -162,27 +166,54 @@ jobs:
         uses: actions/cache@v4
         with:
           path: src-tauri/binaries
-          key: ytdlp-${{ matrix.target }}-${{ hashFiles('.github/workflows/release.yml') }}
+          key: ytdlp-${{ env.YTDLP_VERSION }}-${{ matrix.target }}
 
+      # -f so that an HTTP error fails the step instead of saving the error
+      # page as the binary, and the checksum published with the release so
+      # that a truncated or tampered download never reaches the cache.
       - name: Download yt-dlp sidecar
         if: steps.ytdlp-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          mkdir -p src-tauri/binaries
+          set -euo pipefail
           TARGET="${{ matrix.target }}"
           case "$TARGET" in
-            x86_64-pc-windows-msvc)
-              curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -o "src-tauri/binaries/yt-dlp-${TARGET}.exe"
-              ;;
-            x86_64-unknown-linux-gnu)
-              curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "src-tauri/binaries/yt-dlp-${TARGET}"
-              chmod +x "src-tauri/binaries/yt-dlp-${TARGET}"
-              ;;
-            x86_64-apple-darwin|aarch64-apple-darwin)
-              curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos" -o "src-tauri/binaries/yt-dlp-${TARGET}"
-              chmod +x "src-tauri/binaries/yt-dlp-${TARGET}"
-              ;;
+            x86_64-pc-windows-msvc)                    ASSET=yt-dlp.exe;   OUT="yt-dlp-${TARGET}.exe" ;;
+            x86_64-unknown-linux-gnu)                  ASSET=yt-dlp;       OUT="yt-dlp-${TARGET}" ;;
+            x86_64-apple-darwin|aarch64-apple-darwin)  ASSET=yt-dlp_macos; OUT="yt-dlp-${TARGET}" ;;
+            *) echo "::error::No yt-dlp asset for $TARGET"; exit 1 ;;
           esac
+          BASE="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}"
+          mkdir -p src-tauri/binaries
+          cd src-tauri/binaries
+          curl -fsSL --retry 3 "$BASE/$ASSET" -o "$OUT"
+          curl -fsSL --retry 3 "$BASE/SHA2-256SUMS" -o SHA2-256SUMS
+          expected=$(awk -v f="$ASSET" '$2 == f { print $1 }' SHA2-256SUMS)
+          rm SHA2-256SUMS
+          if command -v sha256sum >/dev/null; then
+            actual=$(sha256sum "$OUT" | cut -d' ' -f1)
+          else
+            actual=$(shasum -a 256 "$OUT" | cut -d' ' -f1)
+          fi
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "::error::Checksum mismatch for $ASSET: expected '$expected', got '$actual'"
+            rm -f "$OUT"
+            exit 1
+          fi
+          chmod +x "$OUT"
+
+      # Also runs on a cache hit: a binary that does not start must not ship.
+      # On Windows the checksum stands in for it.
+      - name: Check yt-dlp sidecar
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="src-tauri/binaries/yt-dlp-${{ matrix.target }}"
+          version=$("$bin" --version)
+          echo "yt-dlp $version"
+          [ "$version" = "$YTDLP_VERSION" ] \
+            || { echo "::error::Bundled yt-dlp is $version, expected $YTDLP_VERSION"; exit 1; }
 
       - name: Install frontend dependencies
         run: npm ci

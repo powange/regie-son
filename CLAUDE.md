@@ -159,7 +159,7 @@ Sur Windows, utiliser `silent_command(path)` (helper dans lib.rs) qui ajoute `CR
 - Tag `v*` déclenche [.github/workflows/release.yml](.github/workflows/release.yml)
 - Matrice : Linux x86_64, Windows x86_64, macOS x86_64/aarch64
 - Patch automatique de la version dans `tauri.conf.json` ET `Cargo.toml` depuis le tag
-- yt-dlp téléchargé par plateforme avant le build (sidecar via `externalBin`)
+- yt-dlp téléchargé par plateforme avant le build (sidecar via `externalBin`), à la version épinglée par `YTDLP_VERSION` en tête du workflow et vérifié contre le `SHA2-256SUMS` de la release. Pour l'actualiser, changer cette seule variable : elle fait aussi partie de la clé de cache.
 - Signature minisign via secrets GitHub (`TAURI_SIGNING_PRIVATE_KEY` + password)
 - Pas de CI sur push — juste sur tag
 
