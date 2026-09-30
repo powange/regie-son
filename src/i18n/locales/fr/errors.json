@@ -11,7 +11,8 @@
     "saveFailed": "Impossible de sauvegarder : {{detail}}",
     "serializeFailed": "Erreur de sérialisation : {{detail}}",
     "writeFailed": "Erreur d'écriture : {{detail}}",
-    "readFailed": "Erreur de lecture : {{detail}}"
+    "readFailed": "Erreur de lecture : {{detail}}",
+    "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert."
   },
   "project": {
     "invalidFile": "Fichier projet invalide : {{detail}}",
@@ -37,7 +38,9 @@
     "missingNumeroJson": "Archive invalide : numero.json manquant",
     "noAct": "Archive invalide : aucun numéro",
     "fileMissingInArchive": "Fichier manquant dans l'archive : {{name}}",
-    "corrupt": "Archive corrompue : {{name}} illisible."
+    "corrupt": "Archive corrompue : {{name}} illisible.",
+    "entryTooLarge": "Archive refusée : {{name}} dépasse {{limit}} Mo une fois décompressé.",
+    "tooLarge": "Archive refusée : son contenu dépasse {{limit}} Mo une fois décompressé."
   },
   "cloud": {
     "httpClientFailed": "Erreur client HTTP : {{detail}}",
@@ -76,7 +79,12 @@
     "metadataFailed": "metadata : {{detail}}",
     "chmodFailed": "chmod : {{detail}}",
     "notExecutable": "Le binaire téléchargé n'est pas exécutable sur ce système.",
-    "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}"
+    "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}",
+    "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://.",
+    "releaseInfoInvalid": "Impossible de lire la dernière version de yt-dlp : {{detail}}",
+    "checksumMissing": "La somme de contrôle de yt-dlp est absente de la publication : mise à jour abandonnée.",
+    "checksumMismatch": "Le yt-dlp téléchargé ne correspond pas à sa somme de contrôle : mise à jour abandonnée.",
+    "notAudio": "Ce lien ne mène pas à un fichier audio (le serveur a renvoyé une page ou un autre type de fichier). Utilisez un lien de téléchargement direct."
   },
   "battery": {
     "accessFailed": "Accès à la batterie : {{detail}}",
@@ -90,7 +98,8 @@
     "macosManual": "Activez manuellement le mode Ne pas déranger dans Réglages Système > Notifications.",
     "gsettingsMissing": "gsettings non disponible. Activez manuellement le mode Ne pas déranger.",
     "gnomeFailed": "Impossible de modifier les notifications GNOME. Activez manuellement le mode Ne pas déranger.",
-    "unsupportedOs": "Mode spectacle non supporté sur cet OS."
+    "unsupportedOs": "Mode spectacle non supporté sur cet OS.",
+    "desktopUnsupported": "Couper les notifications n'est possible que sous GNOME (bureau détecté : {{desktop}}). Activez manuellement le mode Ne pas déranger."
   },
   "sleep": {
     "windowsFailed": "Impossible d'empêcher la mise en veille (SetThreadExecutionState a échoué).",

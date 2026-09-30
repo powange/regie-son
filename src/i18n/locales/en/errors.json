@@ -11,7 +11,8 @@
     "saveFailed": "Could not save: {{detail}}",
     "serializeFailed": "Serialisation error: {{detail}}",
     "writeFailed": "Write error: {{detail}}",
-    "readFailed": "Read error: {{detail}}"
+    "readFailed": "Read error: {{detail}}",
+    "pathNotAllowed": "Access denied: this file does not belong to an open show or act."
   },
   "project": {
     "invalidFile": "Invalid project file: {{detail}}",
@@ -37,7 +38,9 @@
     "missingNumeroJson": "Invalid archive: numero.json is missing",
     "noAct": "Invalid archive: no act inside",
     "fileMissingInArchive": "File missing from the archive: {{name}}",
-    "corrupt": "Corrupt archive: {{name}} is unreadable."
+    "corrupt": "Corrupt archive: {{name}} is unreadable.",
+    "entryTooLarge": "Archive refused: {{name}} exceeds {{limit}} MB once unpacked.",
+    "tooLarge": "Archive refused: its content exceeds {{limit}} MB once unpacked."
   },
   "cloud": {
     "httpClientFailed": "HTTP client error: {{detail}}",
@@ -76,7 +79,12 @@
     "metadataFailed": "metadata: {{detail}}",
     "chmodFailed": "chmod: {{detail}}",
     "notExecutable": "The downloaded binary is not executable on this system.",
-    "replaceBinaryFailed": "Could not replace the old binary: {{detail}}"
+    "replaceBinaryFailed": "Could not replace the old binary: {{detail}}",
+    "invalidUrl": "Invalid link: paste an address that starts with http:// or https://.",
+    "releaseInfoInvalid": "Could not read the latest yt-dlp release: {{detail}}",
+    "checksumMissing": "The yt-dlp checksum is missing from the release: update abandoned.",
+    "checksumMismatch": "The downloaded yt-dlp does not match its checksum: update abandoned.",
+    "notAudio": "This link does not lead to an audio file (the server sent a page or another kind of file). Use a direct download link."
   },
   "battery": {
     "accessFailed": "Reaching the battery: {{detail}}",
@@ -90,7 +98,8 @@
     "macosManual": "Turn on Do Not Disturb by hand in System Settings > Notifications.",
     "gsettingsMissing": "gsettings is unavailable. Turn on Do Not Disturb by hand.",
     "gnomeFailed": "Could not change the GNOME notification setting. Turn on Do Not Disturb by hand.",
-    "unsupportedOs": "Show mode is not supported on this OS."
+    "unsupportedOs": "Show mode is not supported on this OS.",
+    "desktopUnsupported": "Muting notifications is only possible under GNOME (desktop detected: {{desktop}}). Turn on Do Not Disturb by hand."
   },
   "sleep": {
     "windowsFailed": "Could not block sleep (SetThreadExecutionState failed).",

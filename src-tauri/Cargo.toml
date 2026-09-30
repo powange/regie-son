@@ -1,6 +1,6 @@
 [package]
 name = "regie-son"
-version = "0.4.8"
+version = "0.4.9"
 description = "Régie son pour spectacles cabaret"
 authors = ["pcomble"]
 edition = "2021"
@@ -22,10 +22,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6.0.0"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-tokio = { version = "1", features = ["process", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["process", "sync", "time", "macros", "fs"] }
 starship-battery = "0.11"
+sha2 = "0.10"
+bytes = "1"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = "2"

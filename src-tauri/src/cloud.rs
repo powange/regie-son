@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
+use crate::download::download_client;
 use crate::error::{fail, missing, AppError, AppResult};
 use crate::file_assoc::pick_unique_path;
 use crate::types::{migrate_project, Project};
@@ -14,9 +15,16 @@ const DOWNLOAD_BASE: &str = "https://litter.catbox.moe";
 const RETENTION: &str = "72h";
 const MAX_CLOUD_FILE_SIZE: u64 = 1024 * 1024 * 1024; // 1 GB (Litterbox limit per file)
 
-fn http_client() -> AppResult<reqwest::Client> {
+// reqwest's read timeout also bounds the wait for the response headers,
+// which only come once the whole body is sent: an upload cannot use it. It
+// gets a deadline that grows with the file instead, at a floor of 64 KB/s.
+fn upload_timeout(len: u64) -> std::time::Duration {
+    std::time::Duration::from_secs(120 + len / (64 * 1024))
+}
+
+fn upload_client() -> AppResult<reqwest::Client> {
     reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(crate::download::CONNECT_TIMEOUT)
         .build()
         .map_err(fail("cloud.httpClientFailed"))
 }
@@ -30,22 +38,27 @@ async fn upload_file(path: &Path) -> AppResult<String> {
             .with("limit", MAX_CLOUD_FILE_SIZE / (1024 * 1024)));
     }
 
-    let bytes = fs::read(path).map_err(fail("io.readFileFailed"))?;
     let filename = path
         .file_name()
         .ok_or_else(missing("io.invalidFilename"))?
         .to_string_lossy()
         .to_string();
 
-    let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+    // Streamed from disk: a 1 GB share must not be held in memory whole.
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(fail("io.readFileFailed"))?;
+    let part =
+        reqwest::multipart::Part::stream_with_length(file, metadata.len()).file_name(filename);
     let form = reqwest::multipart::Form::new()
         .text("reqtype", "fileupload")
         .text("time", RETENTION)
         .part("fileToUpload", part);
 
-    let client = http_client()?;
+    let client = upload_client()?;
     let resp = client
         .post(UPLOAD_URL)
+        .timeout(upload_timeout(metadata.len()))
         .multipart(form)
         .send()
         .await
@@ -83,9 +96,9 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
         return Err(AppError::new("cloud.invalidCode"));
     }
 
-    let client = http_client()?;
+    let client = download_client()?;
     let url = format!("{}/{}.zip", DOWNLOAD_BASE, trimmed);
-    let resp = client
+    let mut resp = client
         .get(&url)
         .send()
         .await
@@ -104,8 +117,19 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
         }
     }
 
-    let bytes = resp.bytes().await.map_err(fail("io.readFailed"))?;
-    fs::write(dest, &bytes).map_err(fail("io.writeFailed"))?;
+    // Written as it arrives, and capped whatever Content-Length claimed.
+    use std::io::Write;
+    let mut file = fs::File::create(dest).map_err(fail("io.writeFailed"))?;
+    let mut total: u64 = 0;
+    while let Some(chunk) = resp.chunk().await.map_err(fail("io.readFailed"))? {
+        total += chunk.len() as u64;
+        if total > MAX_CLOUD_FILE_SIZE {
+            return Err(
+                AppError::new("cloud.remoteFileTooLarge").with("size", total / (1024 * 1024))
+            );
+        }
+        file.write_all(&chunk).map_err(fail("io.writeFailed"))?;
+    }
     Ok(())
 }
 
@@ -119,7 +143,6 @@ fn temp_archive_path(ext: &str) -> PathBuf {
 // pollute the target folder, and guides the user when the code is for the
 // other Régie Son share kind.
 fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
-    use std::io::Read;
     let file = fs::File::open(zip_path).map_err(fail("cloud.readDownloadedFailed"))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|_| AppError::new("cloud.notAnArchive"))?;
@@ -153,10 +176,7 @@ fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
     let mut entry = archive
         .by_name(expected_json)
         .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
-    let mut content = String::new();
-    entry
-        .read_to_string(&mut content)
-        .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
+    let content = crate::archive::read_json_entry(&mut entry, expected_json)?;
     migrate_project(&content, String::new()).map_err(fail("archive.invalid"))?;
     Ok(())
 }
@@ -241,4 +261,16 @@ pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> AppR
     .await;
     let _ = fs::remove_file(&tmp);
     outcome
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_deadline_grows_with_the_file() {
+        assert_eq!(upload_timeout(0).as_secs(), 120);
+        // A full 1 GB share at 64 KB/s: a little over four and a half hours.
+        assert_eq!(upload_timeout(MAX_CLOUD_FILE_SIZE).as_secs(), 120 + 16384);
+    }
 }

@@ -11,7 +11,7 @@ mod types;
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::sync::OnceLock;
 
 use tauri_plugin_dialog::DialogExt;
 
@@ -31,55 +31,81 @@ pub(crate) fn safe_filename(filename: &str) -> AppResult<()> {
     }
 }
 
-// ===== File system helpers =====
+// ===== Asset protocol scope =====
 
-fn pick_folder_zenity() -> Option<String> {
-    let out = Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--directory",
-            "--title",
-            "Choisir un dossier",
-        ])
-        .output()
-        .ok()?;
-    if out.status.success() {
-        let path = String::from_utf8(out.stdout).ok()?.trim().to_string();
-        if path.is_empty() {
-            None
-        } else {
-            Some(path)
-        }
-    } else {
-        None
+// The asset protocol starts with an empty scope (tauri.conf.json). The player
+// and the duration probe stream `<project>/musiques/<file>` through it, so
+// every project or act handed to the frontend must go through
+// grant_audio_access, or nothing plays. Today that is open_project_from_file
+// (open, import, auto-import, cloud import) and the two create commands; the
+// tests below check each of them. Only musiques/ is granted, never the
+// project folder: a path forged by the webview can at worst expose audio.
+static ASSET_SCOPE: OnceLock<tauri::scope::fs::Scope> = OnceLock::new();
+
+#[cfg(test)]
+thread_local! {
+    static GRANTED: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_granted() -> Vec<PathBuf> {
+    GRANTED.with(|g| g.borrow_mut().drain(..).collect())
+}
+
+pub(crate) fn grant_audio_access(project_dir: &Path) {
+    let musiques = project_dir.join("musiques");
+    #[cfg(test)]
+    GRANTED.with(|g| g.borrow_mut().push(musiques.clone()));
+    if let Some(scope) = ASSET_SCOPE.get() {
+        let _ = scope.allow_directory(&musiques, false);
     }
 }
 
-fn pick_audio_files_zenity() -> Vec<String> {
-    let out = match Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--multiple",
-            "--title",
-            "Choisir des fichiers audio",
-            "--file-filter",
-            "Fichiers audio (mp3, ogg, wav...) | *.mp3 *.ogg *.wav *.flac *.aac *.m4a *.wma *.opus",
-            "--separator",
-            "|",
-        ])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return vec![],
-    };
-    if !out.status.success() {
-        return vec![];
+// read_audio_file takes a path from the webview: it must name a file directly
+// inside a musiques/ folder the asset scope allows, symlinks resolved.
+fn check_audio_path(path: &Path, allowed: impl Fn(&Path) -> bool) -> AppResult<()> {
+    let in_musiques = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "musiques");
+    let named = path
+        .file_name()
+        .is_some_and(|n| safe_filename(&n.to_string_lossy()).is_ok());
+    if in_musiques && named && allowed(path) {
+        Ok(())
+    } else {
+        Err(AppError::new("io.pathNotAllowed"))
     }
-    let raw = String::from_utf8(out.stdout).unwrap_or_default();
-    raw.trim()
-        .split('|')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+}
+
+// ===== File system helpers =====
+
+// zenity gives a native GTK picker where the portal dialog is poor. None
+// means "use the Tauri dialog instead": zenity is missing or could not run
+// (no display). Exit code 1 is a cancel, an empty selection. No --title:
+// zenity's own default is already in the desktop's language.
+#[cfg(target_os = "linux")]
+fn zenity_pick(extra: &[&str]) -> Option<Vec<String>> {
+    let out = std::process::Command::new("zenity")
+        .args(["--file-selection", "--separator", "\n"])
+        .args(extra)
+        .output()
+        .ok()?;
+    match out.status.code() {
+        Some(0) => Some(parse_zenity_selection(&out.stdout)),
+        Some(1) => Some(vec![]),
+        _ => None,
+    }
+}
+
+// One path per line: "|", the old separator, is legal in file names.
+#[cfg(any(target_os = "linux", test))]
+fn parse_zenity_selection(stdout: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(stdout)
+        .split('\n')
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| !l.is_empty())
+        .map(String::from)
         .collect()
 }
 
@@ -109,13 +135,9 @@ fn get_default_numeros_dir() -> String {
 
 #[tauri::command(async)]
 fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
-    if Command::new("which")
-        .arg("zenity")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return Ok(pick_folder_zenity());
+    #[cfg(target_os = "linux")]
+    if let Some(picked) = zenity_pick(&["--directory"]) {
+        return Ok(picked.into_iter().next());
     }
     let result = app.dialog().file().blocking_pick_folder();
     Ok(result.map(|p| p.to_string()))
@@ -123,13 +145,13 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
 
 #[tauri::command(async)]
 fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
-    if Command::new("which")
-        .arg("zenity")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return pick_audio_files_zenity();
+    #[cfg(target_os = "linux")]
+    if let Some(picked) = zenity_pick(&[
+        "--multiple",
+        "--file-filter",
+        "Fichiers audio (mp3, ogg, wav...) | *.mp3 *.ogg *.wav *.flac *.aac *.m4a *.wma *.opus",
+    ]) {
+        return picked;
     }
     let files = app
         .dialog()
@@ -172,6 +194,7 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
         single_numero: None,
     };
     save_project_to_disk(&project)?;
+    grant_audio_access(&project_dir);
     Ok(project)
 }
 
@@ -185,8 +208,10 @@ fn read_project_file(folder: &Path, filename: &str) -> AppResult<Project> {
 // interrupted save never loses the show. The original error wins if the
 // backup is no better.
 pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
-    read_project_file(folder, filename)
-        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))
+    let project = read_project_file(folder, filename)
+        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))?;
+    grant_audio_access(folder);
+    Ok(project)
 }
 
 #[tauri::command]
@@ -217,6 +242,7 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
         single_numero: Some(true),
     };
     save_project_to_disk(&project)?;
+    grant_audio_access(&numero_dir);
     Ok(project)
 }
 
@@ -325,6 +351,9 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResu
 
 #[tauri::command(async)]
 fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
+    check_audio_path(Path::new(&path), |p| {
+        ASSET_SCOPE.get().is_some_and(|scope| scope.is_allowed(p))
+    })?;
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
         return Err(AppError::new("download.fileTooLarge")
@@ -343,16 +372,33 @@ fn project_json_filename(project: &Project) -> &'static str {
     }
 }
 
+// Rotating on every save left .bak1 to .bak3 a few seconds apart after a
+// burst of edits, all equally recent. A new generation is only started once
+// .bak1 is this old; saves in between leave the backups alone.
+const BACKUP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
 fn rotate_backups(dir: &Path, filename: &str) {
     let bak = |n: u8| dir.join(format!("{}.bak{}", filename, n));
+    let now = std::time::SystemTime::now();
+    let recent = fs::metadata(bak(1))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| now.duration_since(t).ok())
+        .is_some_and(|age| age < BACKUP_INTERVAL);
+    if recent {
+        return;
+    }
     let _ = fs::remove_file(bak(3));
     let _ = fs::rename(bak(2), bak(3));
     let _ = fs::rename(bak(1), bak(2));
     // Copied, not renamed: the target must exist at every instant, in case
     // the final rename fails (file held by an antivirus, disk full).
     let current = dir.join(filename);
-    if current.exists() {
-        let _ = fs::copy(&current, bak(1));
+    if current.exists() && fs::copy(&current, bak(1)).is_ok() {
+        // The copy may keep the source's mtime (macOS, Windows): date it now.
+        if let Ok(f) = fs::OpenOptions::new().write(true).open(bak(1)) {
+            let _ = f.set_modified(now);
+        }
     }
 }
 
@@ -417,6 +463,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            use tauri::Manager;
+            let _ = ASSET_SCOPE.set(app.asset_protocol_scope());
+            if let Ok(dir) = app.path().app_data_dir() {
+                show_mode::init(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_default_projects_dir,
             get_default_numeros_dir,
@@ -460,11 +514,14 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                show_mode::release_on_exit();
+            }
             // macOS passes double-clicked files as an Apple Event, not argv,
             // both at cold start and while running.
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = _event {
+            if let tauri::RunEvent::Opened { urls } = event {
                 let file = urls
                     .iter()
                     .filter_map(|url| url.to_file_path().ok())
@@ -510,6 +567,38 @@ mod tests {
             "v1"
         );
         assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn backups_rotate_at_most_every_interval() {
+        let dir = scratch_dir();
+        for name in ["v1", "v2", "v3"] {
+            save_project_to_disk(&show(&dir, name)).unwrap();
+        }
+        // A burst of saves keeps the first backup instead of cycling.
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v1"
+        );
+        assert!(!dir.join("projet.json.bak2").exists());
+
+        let old = std::time::SystemTime::now() - BACKUP_INTERVAL * 2;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(dir.join("projet.json.bak1"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        save_project_to_disk(&show(&dir, "v4")).unwrap();
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v3"
+        );
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak2").unwrap().name,
+            "v1"
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -561,6 +650,61 @@ mod tests {
         assert_eq!(project.name, "new");
         assert!(dir.join("musiques").is_dir());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn every_project_handed_to_the_frontend_is_granted_to_the_player() {
+        let dir = scratch_dir();
+        take_granted();
+
+        let show = dir.join("show");
+        create_project("s".into(), show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![show.join("musiques")]);
+
+        let act = dir.join("act");
+        create_numero("a".into(), act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![act.join("musiques")]);
+
+        open_project(show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![show.join("musiques")]);
+
+        open_numero(act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(take_granted(), vec![act.join("musiques")]);
+
+        // A failed open grants nothing.
+        assert!(open_project(dir.join("none").to_string_lossy().to_string()).is_err());
+        assert!(take_granted().is_empty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn zenity_selection_is_one_path_per_line() {
+        assert_eq!(
+            parse_zenity_selection(b"/m/a|b.mp3\n/m/c.mp3\n"),
+            vec!["/m/a|b.mp3".to_string(), "/m/c.mp3".to_string()]
+        );
+        assert!(parse_zenity_selection(b"\n").is_empty());
+    }
+
+    #[test]
+    fn read_audio_file_only_reads_granted_musiques_files() {
+        let yes = |_: &Path| true;
+        let no = |_: &Path| false;
+        assert!(check_audio_path(Path::new("/show/musiques/a.mp3"), yes).is_ok());
+        assert!(check_audio_path(Path::new("/show/musiques/a.mp3"), no).is_err());
+        for path in [
+            "/home/u/.ssh/id_rsa",
+            "/show/musiques",
+            "/show/musiques/sub/a.mp3",
+            "/show/musiques/..",
+            "/show/projet.json",
+        ] {
+            assert_eq!(
+                check_audio_path(Path::new(path), yes).unwrap_err().code,
+                "io.pathNotAllowed",
+                "{path:?}"
+            );
+        }
     }
 
     #[test]
