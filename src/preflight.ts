@@ -18,6 +18,7 @@ interface IssueLocation {
 // sentence, not the fragments to glue together.
 export type PreflightIssue = IssueLocation & { severity: PreflightSeverity } & (
   | { code: "audioDeviceMissing" }
+  | { code: "outputRoutingUnsupported" }
   | { code: "batteryLowNoEstimate"; percent: number }
   | { code: "batteryShorterThanShow"; left: number; total: number }
   | { code: "batteryShorterThanShowAtLeast"; left: number; total: number }
@@ -71,6 +72,12 @@ export function estimateShowDuration(
 interface PreflightContext {
   missingFiles: Set<string>;
   availableDeviceIds: Set<string>;
+  // Without the media permission Chromium lists outputs with empty ids: the
+  // chosen one cannot be looked up, which says nothing about its presence.
+  deviceListReliable: boolean;
+  // setSinkId only exists in Chromium (WebView2); elsewhere the chosen
+  // output is ignored and sound goes to the default one.
+  outputRoutingSupported: boolean;
   selectedDeviceId: string | null;
   battery: BatteryStatus | null;
   showDuration: ShowDuration;
@@ -89,7 +96,13 @@ function batteryShortfallCode(
 export function runPreflight(project: Project, ctx: PreflightContext): PreflightIssue[] {
   const issues: PreflightIssue[] = [];
 
-  if (ctx.selectedDeviceId && !ctx.availableDeviceIds.has(ctx.selectedDeviceId)) {
+  if (ctx.selectedDeviceId && !ctx.outputRoutingSupported) {
+    issues.push({ severity: "warning", code: "outputRoutingUnsupported" });
+  } else if (
+    ctx.selectedDeviceId &&
+    ctx.deviceListReliable &&
+    !ctx.availableDeviceIds.has(ctx.selectedDeviceId)
+  ) {
     issues.push({ severity: "error", code: "audioDeviceMissing" });
   }
 
@@ -159,12 +172,13 @@ export async function gatherPreflight(
   showDuration: ShowDuration,
 ): Promise<PreflightIssue[]> {
   const availableDeviceIds = new Set<string>();
+  let deviceListReliable = false;
   try {
     if (navigator.mediaDevices?.enumerateDevices) {
       const all = await navigator.mediaDevices.enumerateDevices();
-      for (const d of all) {
-        if (d.kind === "audiooutput") availableDeviceIds.add(d.deviceId);
-      }
+      const outputs = all.filter((d) => d.kind === "audiooutput");
+      for (const d of outputs) availableDeviceIds.add(d.deviceId);
+      deviceListReliable = outputs.length > 0 && outputs.every((d) => d.deviceId !== "");
     }
   } catch {
     /* ignore; absence of enumerateDevices is not a failure */
@@ -172,6 +186,8 @@ export async function gatherPreflight(
   return runPreflight(project, {
     missingFiles,
     availableDeviceIds,
+    deviceListReliable,
+    outputRoutingSupported: "setSinkId" in HTMLMediaElement.prototype,
     selectedDeviceId,
     battery,
     showDuration,

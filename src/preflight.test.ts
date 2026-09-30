@@ -22,7 +22,9 @@ function makeProject(items: Array<AudioFile | PauseItem>, singleNumero = false):
 const baseCtx = {
   missingFiles: new Set<string>(),
   availableDeviceIds: new Set<string>(),
-  selectedDeviceId: null,
+  deviceListReliable: true,
+  outputRoutingSupported: true,
+  selectedDeviceId: null as string | null,
   battery: null as BatteryStatus | null,
   showDuration: { seconds: 0, complete: true } as ShowDuration,
 };
@@ -188,5 +190,35 @@ describe("battery preflight rule", () => {
       showDuration: twoHours,
     }).filter((i) => isBatteryIssue(i.code));
     expect(issues[0].code).toBe("batteryShorterThanAct");
+  });
+});
+
+describe("audio output preflight rule", () => {
+  const project = makeProject([audio("a")]);
+  const outputCodes = (over: Partial<typeof baseCtx>) =>
+    runPreflight(project, { ...baseCtx, ...over })
+      .map((i) => i.code)
+      .filter((c) => c === "audioDeviceMissing" || c === "outputRoutingUnsupported");
+
+  it("reports a chosen output that is no longer listed", () => {
+    expect(outputCodes({ selectedDeviceId: "usb", availableDeviceIds: new Set(["default"]) }))
+      .toEqual(["audioDeviceMissing"]);
+  });
+
+  it("does not report it when the list cannot be trusted (ids hidden without permission)", () => {
+    expect(outputCodes({
+      selectedDeviceId: "usb",
+      availableDeviceIds: new Set([""]),
+      deviceListReliable: false,
+    })).toEqual([]);
+  });
+
+  it("warns that the choice is ignored where outputs cannot be routed", () => {
+    expect(outputCodes({ selectedDeviceId: "usb", outputRoutingSupported: false }))
+      .toEqual(["outputRoutingUnsupported"]);
+  });
+
+  it("says nothing when the default output is used", () => {
+    expect(outputCodes({ outputRoutingSupported: false, deviceListReliable: false })).toEqual([]);
   });
 });
