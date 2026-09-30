@@ -40,6 +40,7 @@ interface Props {
   playAt: (numeroIndex: number, audioIndex: number) => void;
   togglePlay: () => void;
   onAppendItems: (numeroId: string, items: PlaylistItem[]) => void;
+  onError: (message: string) => void;
   onChange: (updated: Numero, tag?: string) => void;
   onDelete: () => void;
   canDelete?: boolean;
@@ -49,7 +50,7 @@ interface Props {
 
 function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode, volumeEditable,
-  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems,
+  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems, onError,
   onChange, onDelete,
   canDelete = true,
   canChangeType = true,
@@ -123,7 +124,7 @@ function NumeroCardInner({
         onAppendItems(numero.id, [{ type: "audio", volume: 100, ...af }]);
       }
     } catch (err) {
-      alert(t("audio:errors.add", { detail: translateError(err) }));
+      onError(t("audio:errors.add", { detail: translateError(err) }));
     }
   }
 

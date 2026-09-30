@@ -9,6 +9,7 @@ import HomePage from "./components/HomePage";
 import ProjectEditor from "./components/ProjectEditor";
 import SettingsModal from "./components/SettingsModal";
 import UpdateBanner from "./components/UpdateBanner";
+import Toast, { ToastData, makeToast } from "./components/Toast";
 import { useRecentProjects } from "./useRecentProjects";
 import { useRecentNumeros } from "./useRecentNumeros";
 import { useSettings } from "./useSettings";
@@ -19,6 +20,7 @@ function App() {
   const { t } = useTranslation(["app"]);
   const [project, setProject] = useState<Project | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const { recents, add: addRecent, remove: removeRecent } = useRecentProjects();
   const {
     recents: numeroRecents,
@@ -58,7 +60,7 @@ function App() {
         });
         setProject(updated);
       } catch (err) {
-        alert(t("app:errors.import", { detail: translateError(err) }));
+        setToast(makeToast("error", t("app:errors.import", { detail: translateError(err) })));
       }
       return;
     }
@@ -83,7 +85,7 @@ function App() {
         handleNumeroOpen(p);
       }
     } catch (err) {
-      alert(t("app:errors.open", { detail: translateError(err) }));
+      setToast(makeToast("error", t("app:errors.open", { detail: translateError(err) })));
     }
   }
 
@@ -139,6 +141,8 @@ function App() {
           onInstallUpdate={install}
         />
       )}
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

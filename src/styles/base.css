@@ -82,3 +82,34 @@ html, body, #root {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.2rem;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  max-width: min(640px, calc(100vw - 2rem));
+  padding: 0.6rem 0.8rem 0.6rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.toast > span { flex: 1; }
+.toast--info { background: var(--card2); border: 1px solid var(--border); color: var(--text); }
+.toast--error { background: #2a1215; border: 1px solid #6b2a2f; color: #f1a6ac; }
+.toast-action {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.toast-action:hover { background: #e9456020; opacity: 1; }

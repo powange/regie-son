@@ -5,6 +5,7 @@ import ExportModal from "./ExportModal";
 import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
 import ConfirmModal from "./ConfirmModal";
+import Toast, { ToastData, makeToast } from "./Toast";
 import { PreflightIssue, gatherPreflight, estimateShowDuration } from "../preflight";
 import { useBattery, LOW_BATTERY_PERCENT } from "../useBattery";
 import i18next from "i18next";
@@ -91,6 +92,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [showImportNumeroCloud, setShowImportNumeroCloud] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
@@ -125,7 +128,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: cleanableOrphans });
       setVerify((v) => ({ ...v, orphans: v.orphans.filter((f) => !cleanableOrphans.includes(f)) }));
     } catch (err) {
-      alert(t("editor:errors.cleanup", { detail: translateError(err) }));
+      showError(t("editor:errors.cleanup", { detail: translateError(err) }));
     }
   }
 
@@ -334,7 +337,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         await invoke("export_project", { projectPath: project.path, destFile });
       }
     } catch (err) {
-      alert(t("editor:errors.export", { detail: translateError(err) }));
+      showError(t("editor:errors.export", { detail: translateError(err) }));
     }
   }
 
@@ -367,7 +370,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       });
       update(updated);
     } catch (err) {
-      alert(t("editor:errors.import", { detail: translateError(err) }));
+      showError(t("editor:errors.import", { detail: translateError(err) }));
     }
   }
 
@@ -612,6 +615,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 playAt={playAt}
                 togglePlay={togglePlay}
                 onAppendItems={appendItems}
+                onError={showError}
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
@@ -705,6 +709,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClose={() => { setShareStatus(null); setShareCode(null); setShareError(null); }}
         />
       )}
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }
