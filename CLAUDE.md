@@ -83,7 +83,7 @@ Terminée. **323 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `er
 
 Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i18n:check`, `tsc` et les tests avant les quatre builds.
 
-**Attention aux branches `#[cfg]`** : sous Linux, `cargo check` ne compile ni le code Windows ni le code macOS de [show_mode.rs](src-tauri/src/show_mode.rs) et [sleep_guard.rs](src-tauri/src/sleep_guard.rs), et le toolchain MSVC n'est pas installable sous WSL. Une modification de ces branches n'est réellement vérifiée que par le build de release.
+**Attention aux branches `#[cfg]`** : sous Linux, `cargo check` ne compile ni le code Windows ni le code macOS de [show_mode.rs](src-tauri/src/show_mode.rs) et [sleep_guard.rs](src-tauri/src/sleep_guard.rs), et le toolchain MSVC n'est pas installable sous WSL. Une modification de ces branches n'est vérifiée que par la CI (job `rust`, matrice des trois OS) ou le build de release.
 
 ## Stack
 
@@ -161,7 +161,7 @@ Sur Windows, utiliser `silent_command(path)` (helper dans lib.rs) qui ajoute `CR
 - Patch automatique de la version dans `tauri.conf.json` ET `Cargo.toml` depuis le tag
 - yt-dlp téléchargé par plateforme avant le build (sidecar via `externalBin`), à la version épinglée par `YTDLP_VERSION` en tête du workflow et vérifié contre le `SHA2-256SUMS` de la release. Pour l'actualiser, changer cette seule variable : elle fait aussi partie de la clé de cache.
 - Signature minisign via secrets GitHub (`TAURI_SIGNING_PRIVATE_KEY` + password)
-- Pas de CI sur push — juste sur tag
+- CI sur chaque push et PR ([ci.yml](.github/workflows/ci.yml)) : i18n, types i18n, ESLint, tests, build Vite, puis rustfmt, clippy `-D warnings` et `cargo test` sous Linux, Windows et macOS
 
 ### Clé de signature
 
