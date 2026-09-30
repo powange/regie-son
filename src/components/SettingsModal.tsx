@@ -19,7 +19,12 @@ import {
   isModifierKey,
   mergeWithDefaults,
 } from "../keyBindings";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
+
+// Device labels are only given once the page may use the microphone. Asking
+// for it means an OS prompt and a recording indicator: done once per session,
+// and only when the labels come back empty.
+let micProbed = false;
 
 interface AudioDevice {
   deviceId: string;
@@ -33,11 +38,11 @@ interface Props {
   updaterState: UpdaterState;
   onCheckUpdate: () => void;
   onInstallUpdate: () => void;
+  installBlocked: boolean;
 }
 
-export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
+export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate, installBlocked }: Props) {
   const { t } = useTranslation(["settings", "common"]);
-  useModal(onClose);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
@@ -57,11 +62,15 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
         setDevices(fallback);
         return;
       }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-      } catch { /* some platforms (WebKit2GTK) don't support it — continue anyway */ }
-      const all = await navigator.mediaDevices.enumerateDevices();
+      let all = await navigator.mediaDevices.enumerateDevices();
+      if (!micProbed && all.some((d) => d.kind === "audiooutput" && !d.label)) {
+        micProbed = true;
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((t) => t.stop());
+          all = await navigator.mediaDevices.enumerateDevices();
+        } catch { /* some platforms (WebKit2GTK) don't support it — continue anyway */ }
+      }
       const outputs = all
         .filter((d) => d.kind === "audiooutput")
         .map((d) => ({ deviceId: d.deviceId, label: d.label || t("settings:audioOutput.unnamedDevice") }));
@@ -168,6 +177,11 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   }
 
   const selectedId = settings.audioOutputDeviceId ?? "default";
+  // A chosen output that is unplugged stays chosen: say so, rather than
+  // showing the first entry as if it were selected.
+  const shownDevices = selectedId === "default" || devices.some((d) => d.deviceId === selectedId)
+    ? devices
+    : [{ deviceId: selectedId, label: t("settings:audioOutput.missingDevice") }, ...devices];
 
   function changeLanguage(value: string) {
     const language = value === "system" ? null : value;
@@ -176,12 +190,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title-row">
-          <h2>{t("common:settings")}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
-        </div>
+    <Modal title={t("common:settings")} onClose={onClose}>
 
         <div className="settings-section">
           <div className="settings-section-title">
@@ -217,7 +226,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
               value={selectedId}
               onChange={(e) => onUpdate({ audioOutputDeviceId: e.target.value === "default" ? null : e.target.value })}
             >
-              {devices.map((d) => (
+              {shownDevices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
               ))}
             </select>
@@ -293,12 +302,16 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             </button>
 
             {!updaterState.checking && updaterState.update && (
-              <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing}>
+              <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing || installBlocked}>
                 <ArrowDownCircle size={14} />
                 {updaterState.installing
                   ? updaterState.progress !== null ? `${updaterState.progress}%` : t("settings:updates.installing")
                   : t("settings:updates.install", { version: updaterState.update.version })}
               </button>
+            )}
+
+            {!updaterState.checking && updaterState.update && installBlocked && !updaterState.installing && (
+              <span className="settings-update-status">{t("settings:updates.blockedDuringShow")}</span>
             )}
 
             {!updaterState.checking && !updaterState.update && !updaterState.error && (
@@ -355,7 +368,6 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           {version && <span style={{ fontSize: "0.8rem", color: "var(--text2)" }}>v{version}</span>}
           <button className="btn-primary" onClick={onClose}>{t("common:actions.close")}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

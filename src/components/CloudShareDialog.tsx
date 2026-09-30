@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { X, Copy, Check, AlertCircle, Loader2 } from "lucide-react";
+import { Copy, Check, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 
 interface Props {
@@ -13,7 +13,6 @@ interface Props {
 
 export default function CloudShareDialog({ status, code, error, onClose }: Props) {
   const { t } = useTranslation(["share", "common"]);
-  useModal(onClose, status !== "uploading");
   const [copied, setCopied] = useState(false);
 
   async function copyCode() {
@@ -28,14 +27,7 @@ export default function CloudShareDialog({ status, code, error, onClose }: Props
   }
 
   return (
-    <div className="modal-overlay" onClick={status !== "uploading" ? onClose : undefined}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{t("share:cloudShare.title")}</h2>
-          {status !== "uploading" && (
-            <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-          )}
-        </div>
+    <Modal title={t("share:cloudShare.title")} onClose={onClose} canClose={status !== "uploading"} style={{ maxWidth: 440 }}>
 
         {status === "uploading" && (
           <div className="cloud-status">
@@ -73,7 +65,6 @@ export default function CloudShareDialog({ status, code, error, onClose }: Props
             <button className="btn-primary" onClick={onClose}>{t("common:actions.close")}</button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

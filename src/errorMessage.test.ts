@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import i18next from "i18next";
 import { initI18n, FALLBACK_LNG } from "./i18n";
-import { translateError } from "./errorMessage";
+import { isNotFoundError, translateError } from "./errorMessage";
 
 beforeAll(async () => {
   initI18n(FALLBACK_LNG);
@@ -106,5 +106,18 @@ describe("translateError", () => {
     await i18next.changeLanguage("en");
     expect(translateError({ code: "download.cancelled" })).toBe("Download cancelled.");
     await i18next.changeLanguage("fr");
+  });
+});
+
+describe("isNotFoundError", () => {
+  it("recognises a missing project folder on every platform", () => {
+    expect(isNotFoundError({ code: "io.readProjectFailed", detail: "No such file or directory (os error 2)" })).toBe(true);
+    expect(isNotFoundError({ code: "io.readProjectFailed", detail: "Le chemin d'accès spécifié est introuvable. (os error 3)" })).toBe(true);
+  });
+
+  it("leaves the other failures alone", () => {
+    expect(isNotFoundError({ code: "io.readProjectFailed", detail: "Permission denied (os error 13)" })).toBe(false);
+    expect(isNotFoundError({ code: "project.invalidFile", detail: "expected value at line 1 column 1" })).toBe(false);
+    expect(isNotFoundError("boom")).toBe(false);
   });
 });

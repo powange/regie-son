@@ -132,14 +132,27 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.65rem 0.9rem;
-  cursor: pointer;
+  padding-right: 0.9rem;
   transition: border-color 0.15s, background 0.15s;
 }
-.recent-item:hover {
+.recent-item:hover,
+.recent-item:focus-within {
   border-color: var(--accent);
   background: var(--card2);
 }
+.recent-item-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.65rem 0 0.65rem 0.9rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.recent-item-open:hover { opacity: 1; }
+.recent-item-open:active { transform: none; }
 
 .recent-item-info {
   flex: 1;
@@ -185,5 +198,6 @@
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
 }
-.recent-item:hover .recent-item-remove { opacity: 1; }
+.recent-item:hover .recent-item-remove,
+.recent-item:focus-within .recent-item-remove { opacity: 1; }
 .recent-item-remove:hover { color: var(--accent); opacity: 1; }

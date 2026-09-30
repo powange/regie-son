@@ -1,6 +1,6 @@
-import { FileOutput, Cloud, X } from "lucide-react";
+import { FileOutput, Cloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 
 export type ExportKind = "project" | "numero";
@@ -14,7 +14,6 @@ interface Props {
 
 export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose }: Props) {
   const { t } = useTranslation(["share"]);
-  useModal(onClose);
   const isProject = kind === "project";
   const title = isProject ? t("share:export.showTitle") : t("share:export.actTitle");
   const extLabel = isProject ? ".regieson" : ".regiesonnumero";
@@ -25,12 +24,7 @@ export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{title}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
+    <Modal title={title} onClose={onClose} style={{ maxWidth: 440 }}>
 
         <div className="source-list">
           <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
@@ -48,7 +42,6 @@ export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose
             </div>
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

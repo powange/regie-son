@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
 import ExportModal from "./ExportModal";
 import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
 import ConfirmModal from "./ConfirmModal";
+import Toast, { ToastData, makeToast } from "./Toast";
 import { PreflightIssue, gatherPreflight, estimateShowDuration } from "../preflight";
 import { useBattery, LOW_BATTERY_PERCENT } from "../useBattery";
 import i18next from "i18next";
@@ -17,6 +18,7 @@ import { isModalOpen } from "../useModal";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -26,22 +28,37 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
 import PlayerBar from "./PlayerBar";
-import { usePlayer } from "../usePlayer";
+import { FadeState, usePlayer } from "../usePlayer";
+
+// What App needs from the open editor when a file is opened from the OS.
+export interface EditorHandle {
+  /** Writes pending edits now; false when the write failed. */
+  flushSave: () => Promise<boolean>;
+  /** Turns the show mode off before the editor goes away. */
+  leaveShowMode: () => Promise<void>;
+  /** Imports a .regiesonnumero into the open show, as one undoable step. */
+  importNumeroFile: (srcFile: string) => Promise<void>;
+}
 
 interface Props {
+  ref?: Ref<EditorHandle>;
   project: Project;
   settings: AppSettings;
   onProjectChange: (p: Project) => void;
   onClose: () => void;
   onOpenSettings: () => void;
+  // True while the show mode is on or a track plays: App then keeps the
+  // update installer, which restarts the app, out of reach.
+  onLiveChange?: (live: boolean) => void;
 }
 
 function newNumero(type: NumeroType, index: number): Numero {
@@ -54,6 +71,14 @@ function newNumero(type: NumeroType, index: number): Numero {
 }
 
 interface VerifyResult { missing: string[]; orphans: string[] }
+
+function sameList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+// Space or Enter on a focused drag handle picks the part up, the arrows move
+// it, Space drops it and Escape cancels.
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
 
 const EDIT_MODE_KEY = "regieson.editMode";
 
@@ -69,7 +94,7 @@ function filenamesIn(projects: Project[]): Set<string> {
   return names;
 }
 
-export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
+export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings, onLiveChange }: Props) {
   const { t } = useTranslation(["editor", "common"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
@@ -91,9 +116,20 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [showImportNumeroCloud, setShowImportNumeroCloud] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
+  // Mirrors the stack sizes for the Undo / Redo buttons.
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const syncHistory = useCallback(() => {
+    const undo = undoStackRef.current.length;
+    const redo = redoStackRef.current.length;
+    setHistory((h) => (h.undo === undo && h.redo === redo ? h : { undo, redo }));
+    // An "Undo" offered by a toast only makes sense until the next change.
+    setToast((cur) => (cur?.action ? null : cur));
+  }, []);
   const UNDO_LIMIT = 50;
   const COALESCE_WINDOW_MS = 1500;
   const lastUpdateTagRef = useRef<string | null>(null);
@@ -101,16 +137,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const projectRef = useRef(project);
   projectRef.current = project;
 
-  async function runVerify() {
-    try {
-      const result = await invoke<VerifyResult>("verify_project", { project });
-      setVerify(result);
-    } catch (err) {
-      console.error("verify_project:", err);
-    }
-  }
-
-  useEffect(() => { runVerify(); }, [project]);
+  // verify_project checks every file on disk: only a change in the set of
+  // audio files calls for it, not a keystroke in a cue or a slider step. The
+  // version guard drops a slow answer overtaken by a newer one, and an
+  // unchanged answer keeps the same object so that the cards do not re-render.
+  const filenamesKey = useMemo(() => [...filenamesIn([project])].sort().join("\n"), [project]);
+  const verifyVersionRef = useRef(0);
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const version = ++verifyVersionRef.current;
+      try {
+        const result = await invoke<VerifyResult>("verify_project", { project: projectRef.current });
+        if (version !== verifyVersionRef.current) return;
+        setVerify((prev) => (sameList(prev.missing, result.missing) && sameList(prev.orphans, result.orphans) ? prev : result));
+      } catch (err) {
+        console.error("verify_project:", err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filenamesKey, project.path]);
 
   // Deleting a track keeps its file, so that undo can bring it back. Such a
   // file is only an orphan once no undo or redo step refers to it any more.
@@ -125,12 +170,18 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: cleanableOrphans });
       setVerify((v) => ({ ...v, orphans: v.orphans.filter((f) => !cleanableOrphans.includes(f)) }));
     } catch (err) {
-      alert(t("editor:errors.cleanup", { detail: translateError(err) }));
+      showError(t("editor:errors.cleanup", { detail: translateError(err) }));
     }
   }
 
   const missingSet = useMemo(() => new Set(verify.missing), [verify.missing]);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editable ? 5 : 99999 } }));
+  // Memoised: a new options object at each render would rebuild the sensors
+  // and re-render every sortable card.
+  const pointerOptions = useMemo(() => ({ activationConstraint: { distance: editable ? 5 : 99999 } }), [editable]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, pointerOptions),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
+  );
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
   const audioDurations = useAudioDurations(project);
@@ -192,7 +243,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = updated;
     onProjectChangeRef.current(updated);
     scheduleSave(updated);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   const undo = useCallback(() => {
     const prev = undoStackRef.current.pop();
@@ -202,7 +254,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = prev;
     onProjectChangeRef.current(prev);
     scheduleSave(prev);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   const redo = useCallback(() => {
     const nxt = redoStackRef.current.pop();
@@ -212,7 +265,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     projectRef.current = nxt;
     onProjectChangeRef.current(nxt);
     scheduleSave(nxt);
-  }, [scheduleSave]);
+    syncHistory();
+  }, [scheduleSave, syncHistory]);
 
   // Leaving the editor writes what the 600 ms debounce still held.
   useEffect(() => () => { void flushSave(); }, [flushSave]);
@@ -255,6 +309,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       if (isModalOpen()) return;
       const target = e.target as HTMLElement | null;
       if (target && isTextEntry(target)) return;
+      // A focused drag handle owns Space, the arrows and Escape while it
+      // moves a part or a track with the keyboard.
+      if (target?.closest?.('[aria-roledescription="sortable"]')) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
@@ -334,7 +391,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         await invoke("export_project", { projectPath: project.path, destFile });
       }
     } catch (err) {
-      alert(t("editor:errors.export", { detail: translateError(err) }));
+      showError(t("editor:errors.export", { detail: translateError(err) }));
     }
   }
 
@@ -355,21 +412,41 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
   }
 
-  async function handleImportNumero() {
+  const importNumeroFile = useCallback(async (srcFile: string) => {
+    // The import starts from projet.json on disk: flush first, or it would
+    // drop pending edits, and a pending save would then drop the import.
+    if (!(await flushSave())) return;
     try {
-      const srcFile = await invoke<string | null>("pick_regiesonnumero_file");
-      if (!srcFile) return;
-      // The import starts from projet.json on disk: flush first, or it would
-      // drop pending edits, and a pending save would then drop the import.
-      if (!(await flushSave())) return;
       const updated = await invoke<Project>("import_numero_into_project", {
-        srcFile, projectPath: project.path,
+        srcFile, projectPath: projectRef.current.path,
       });
       update(updated);
     } catch (err) {
-      alert(t("editor:errors.import", { detail: translateError(err) }));
+      showError(i18next.t("editor:errors.import", { detail: translateError(err) }));
+    }
+  }, [flushSave, update, showError]);
+
+  async function handleImportNumero() {
+    try {
+      const srcFile = await invoke<string | null>("pick_regiesonnumero_file");
+      if (srcFile) await importNumeroFile(srcFile);
+    } catch (err) {
+      showError(t("editor:errors.import", { detail: translateError(err) }));
     }
   }
+
+  const leaveShowMode = useCallback(async () => {
+    if (!showModeRef.current) return;
+    try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
+  }, []);
+
+  const onLiveChangeRef = useRef(onLiveChange);
+  onLiveChangeRef.current = onLiveChange;
+  const live = showMode || playerState.isPlaying;
+  useEffect(() => { onLiveChangeRef.current?.(live); }, [live]);
+  useEffect(() => () => { onLiveChangeRef.current?.(false); }, []);
+
+  useImperativeHandle(ref, () => ({ flushSave, leaveShowMode, importNumeroFile }), [flushSave, leaveShowMode, importNumeroFile]);
 
   async function handleImportNumeroCloudSubmit(code: string) {
     if (!(await flushSave())) return;
@@ -408,23 +485,38 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     update({ ...cur, numeros: cur.numeros.map((n) => (n.id === updated.id ? updated : n)) }, tag);
   }, [update]);
 
+  // A deletion is one click away from a mistake: it says so, with an Undo.
+  const offerUndo = useCallback((message: string) => {
+    setToast(makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() }));
+  }, []);
+
   const deleteNumero = useCallback((id: string) => {
     const cur = projectRef.current;
+    const name = cur.numeros.find((n) => n.id === id)?.name ?? "";
     update({ ...cur, numeros: cur.numeros.filter((n) => n.id !== id) });
+    offerUndo(i18next.t("editor:undo.partDeleted", { name }));
+  }, [update, offerUndo]);
+
+  const updateItem = useCallback((numeroId: string, item: PlaylistItem, tag?: string) => {
+    const cur = projectRef.current;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => (n.id === numeroId
+        ? { ...n, items: n.items.map((i) => (i.id === item.id ? item : i)) }
+        : n)),
+    }, tag);
   }, [update]);
 
-  const deleteNumeroById = useMemo(() => {
-    // Stable closures per-id so NumeroCard's onDelete prop keeps identity across renders.
-    const cache = new Map<string, () => void>();
-    return (id: string) => {
-      let fn = cache.get(id);
-      if (!fn) {
-        fn = () => deleteNumero(id);
-        cache.set(id, fn);
-      }
-      return fn;
-    };
-  }, [deleteNumero]);
+  // The file stays on disk so that undo can bring the track back; it is
+  // cleaned up later as an orphan, once no undo step refers to it.
+  const deleteItem = useCallback((numeroId: string, itemId: string) => {
+    const cur = projectRef.current;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => (n.id === numeroId ? { ...n, items: n.items.filter((i) => i.id !== itemId) } : n)),
+    });
+    offerUndo(i18next.t("editor:undo.stepDeleted"));
+  }, [update, offerUndo]);
 
   // Items added by a long operation (copies, downloads) are appended to the
   // act as it is when they arrive, not as it was when the operation started.
@@ -445,6 +537,21 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     const newIdx = cur.numeros.findIndex((n) => n.id === over.id);
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
   }, [editable, update]);
+
+  const numeroIds = useMemo(() => project.numeros.map((n) => n.id), [project.numeros]);
+
+  // The player updates its state every 25 ms during a fade. Cards only see a
+  // fade rounded to the tenth they display, so they re-render at 10 Hz, and
+  // only the active card receives it at all.
+  const activeNumeroIndex = playerState.position?.numeroIndex ?? -1;
+  const activeItemIndex = playerState.position?.audioIndex ?? null;
+  const fadeType = playerState.fade?.type ?? null;
+  const fadeTenths = playerState.fade ? Math.round(playerState.fade.remaining * 10) : 0;
+  const fadeTotal = playerState.fade?.total ?? 0;
+  const displayFade = useMemo<FadeState | null>(
+    () => (fadeType ? { type: fadeType, remaining: fadeTenths / 10, total: fadeTotal } : null),
+    [fadeType, fadeTenths, fadeTotal],
+  );
 
   // Header battery readout. The autonomy is only shown when the OS provides
   // one; a missing estimate is normal and better left blank than faked.
@@ -470,20 +577,44 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         <h1>{project.name}</h1>
         {saved && <span className="saved-badge">{t("editor:saved")}</span>}
 
-        <label
+        <button
+          type="button"
+          role="switch"
+          aria-checked={editable}
+          disabled={showMode}
           className="edit-mode-toggle"
           title={showMode ? t("editor:editMode.lockedByShow") : editMode ? t("editor:editMode.on") : t("editor:editMode.off")}
-          style={showMode ? { opacity: 0.5 } : undefined}
+          onClick={() => setEditMode((v) => !v)}
         >
           <Pencil size={14} />
           <span>{t("editor:editMode.label")}</span>
-          <div
-            className={`toggle-switch${editable ? " toggle-switch--on" : ""}`}
-            onClick={() => { if (!showMode) setEditMode((v) => !v); }}
-          >
-            <div className="toggle-thumb" />
+          <span className={`toggle-switch${editable ? " toggle-switch--on" : ""}`} aria-hidden="true">
+            <span className="toggle-thumb" />
+          </span>
+        </button>
+
+        {editable && (
+          <div className="undo-buttons">
+            <button
+              className="btn-icon"
+              onClick={undo}
+              disabled={history.undo === 0}
+              title={t("editor:undo.undoTitle")}
+              aria-label={t("editor:undo.undoTitle")}
+            >
+              <Undo2 size={17} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={redo}
+              disabled={history.redo === 0}
+              title={t("editor:undo.redoTitle")}
+              aria-label={t("editor:undo.redoTitle")}
+            >
+              <Redo2 size={17} />
+            </button>
           </div>
-        </label>
+        )}
 
         {battery && (
           <div
@@ -549,7 +680,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       {showModeError && (
         <div className="show-mode-warning">
           <span>{showModeError}</span>
-          <button className="btn-icon" onClick={() => setShowModeError(null)}><X size={13} /></button>
+          <button className="btn-icon" onClick={() => setShowModeError(null)} title={t("common:actions.close")} aria-label={t("common:actions.close")}><X size={13} /></button>
         </div>
       )}
 
@@ -593,7 +724,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={project.numeros.map((n) => n.id)}
+            items={numeroIds}
             strategy={verticalListSortingStrategy}
           >
             {project.numeros.map((n, nIdx) => (
@@ -604,16 +735,19 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 projectPath={project.path}
                 editMode={editable}
                 volumeEditable={editMode}
-                playerPosition={playerState.position}
-                isPlaying={playerState.isPlaying}
-                playerFade={playerState.fade}
+                activeItemIndex={nIdx === activeNumeroIndex ? activeItemIndex : null}
+                isPlaying={nIdx === activeNumeroIndex && playerState.isPlaying}
+                fade={nIdx === activeNumeroIndex ? displayFade : null}
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
                 playAt={playAt}
                 togglePlay={togglePlay}
                 onAppendItems={appendItems}
+                onError={showError}
                 onChange={updateNumero}
-                onDelete={deleteNumeroById(n.id)}
+                onChangeItem={updateItem}
+                onDeleteItem={deleteItem}
+                onDelete={deleteNumero}
                 canDelete={!isSingle}
                 canChangeType={!isSingle}
                 showDragHandle={!isSingle}
@@ -705,6 +839,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClose={() => { setShareStatus(null); setShareCode(null); setShareError(null); }}
         />
       )}
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

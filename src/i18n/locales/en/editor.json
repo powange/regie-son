@@ -52,5 +52,12 @@
     "showModeOff": "Turn off",
     "cleanupMessage_one": "{{count}} audio file no longer used by any item will be deleted from the folder. This cannot be undone.",
     "cleanupMessage_other": "{{count}} audio files no longer used by any item will be deleted from the folder. This cannot be undone."
+  },
+  "undo": {
+    "undo": "Undo",
+    "undoTitle": "Undo the last change (Ctrl+Z)",
+    "redoTitle": "Redo the undone change (Ctrl+Y)",
+    "partDeleted": "“{{name}}” deleted",
+    "stepDeleted": "Step deleted"
   }
 }

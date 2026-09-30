@@ -8,14 +8,19 @@ import { useTranslation } from "react-i18next";
 
 interface Props {
   pause: PauseItem;
+  numeroId: string;
+  numeroIndex: number;
+  itemIndex: number;
   editMode: boolean;
   isActive: boolean;
-  onPlay: () => void;
-  onChange: (updated: PauseItem, tag?: string) => void;
-  onDelete: () => void;
+  playAt: (numeroIndex: number, itemIndex: number) => void;
+  onChange: (numeroId: string, updated: PauseItem, tag?: string) => void;
+  onDelete: (numeroId: string, itemId: string) => void;
 }
 
-function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete }: Props) {
+function PauseTrackInner({
+  pause, numeroId, numeroIndex, itemIndex, editMode, isActive, playAt, onChange: onChangeItem, onDelete: onDeleteItem,
+}: Props) {
   const { t } = useTranslation(["audio", "common"]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: pause.id });
@@ -30,6 +35,10 @@ function PauseTrackInner({ pause, editMode, isActive, onPlay, onChange, onDelete
       rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [isActive]);
+
+  const onChange = (updated: PauseItem, tag?: string) => onChangeItem(numeroId, updated, tag);
+  const onDelete = () => onDeleteItem(numeroId, pause.id);
+  const onPlay = () => playAt(numeroIndex, itemIndex);
 
   const style = {
     transform: CSS.Transform.toString(transform),

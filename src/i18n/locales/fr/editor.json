@@ -52,5 +52,12 @@
     "showModeOff": "Désactiver",
     "cleanupMessage_one": "{{count}} fichier audio que plus aucun élément n'utilise sera supprimé du dossier. Cette action est définitive.",
     "cleanupMessage_other": "{{count}} fichiers audio que plus aucun élément n'utilise seront supprimés du dossier. Cette action est définitive."
+  },
+  "undo": {
+    "undo": "Annuler",
+    "undoTitle": "Annuler la dernière modification (Ctrl+Z)",
+    "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
+    "partDeleted": "« {{name}} » supprimé",
+    "stepDeleted": "Étape supprimée"
   }
 }

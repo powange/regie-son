@@ -34,9 +34,13 @@ export default interface Resources {
     },
     "fromUrl": "Depuis une URL",
     "item": {
+      "clickToRename": "Cliquer pour renommer",
       "cue": "Top de départ",
       "cuePlaceholder": "Top de départ…",
       "duration": "Durée",
+      "missing": "Fichier introuvable",
+      "missingFile": "Fichier introuvable : {{filename}}",
+      "play": "Lire",
       "volume": "Volume : {{percent}} %"
     },
     "pause": {
@@ -59,18 +63,21 @@ export default interface Resources {
     },
     "settings": {
       "endBeforeStart": "L'heure de fin doit être supérieure à l'heure de début",
+      "endBeyondFile": "La fin dépasse la durée du fichier ({{duration}})",
       "endLabel": "Fin (optionnel)",
       "endPlaceholder": "ex : 2:45 ou 165",
       "fadeInLabel": "Fade in — durée en secondes",
       "fadeOutLabel": "Fade out — durée en secondes",
-      "invalidEnd": "Heure de fin invalide (format : mm:ss ou secondes)",
+      "fadesTooLong": "Le fade in et le fade out cumulés dépassent la durée jouée ({{length}})",
+      "invalidEnd": "Heure de fin invalide (format : m:ss.d ou secondes)",
       "invalidFadeIn": "Durée de fade in invalide (en secondes, ex : 3)",
       "invalidFadeOut": "Durée de fade out invalide (en secondes, ex : 3)",
-      "invalidStart": "Heure de début invalide (format : mm:ss ou secondes)",
+      "invalidStart": "Heure de début invalide (format : m:ss.d ou secondes)",
       "playPreview": "Lire l'aperçu",
       "secondsPlaceholder": "ex : 3",
+      "startBeyondFile": "Le début dépasse la durée du fichier ({{duration}})",
       "startLabel": "Début (optionnel)",
-      "startPlaceholder": "ex : 0:30 ou 30",
+      "startPlaceholder": "ex : 0:30.5 ou 30",
       "title": "Paramètres — {{name}}",
       "waveformError": "Impossible de charger la forme d'onde."
     },
@@ -143,6 +150,13 @@ export default interface Resources {
       "activeTitle": "Mode spectacle actif : notifications coupées, veille bloquée — cliquer pour désactiver",
       "inactive": "Mode spectacle",
       "inactiveTitle": "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
+    },
+    "undo": {
+      "partDeleted": "« {{name}} » supprimé",
+      "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
+      "stepDeleted": "Étape supprimée",
+      "undo": "Annuler",
+      "undoTitle": "Annuler la dernière modification (Ctrl+Z)"
     },
     "verify": {
       "cleanup": "Nettoyer",
@@ -359,6 +373,7 @@ export default interface Resources {
   "settings": {
     "audioOutput": {
       "loading": "Chargement des périphériques…",
+      "missingDevice": "Périphérique introuvable (débranché ?)",
       "refresh": "Actualiser la liste",
       "systemDefault": "Défaut du système",
       "title": "Sortie audio",
@@ -388,6 +403,7 @@ export default interface Resources {
       "title": "Langue"
     },
     "updates": {
+      "blockedDuringShow": "Installation impossible pendant le mode spectacle ou une lecture.",
       "check": "Chercher les mises à jour",
       "checkError": "Erreur de vérification",
       "checking": "Vérification…",
@@ -446,6 +462,9 @@ export default interface Resources {
   },
   "updater": {
     "available": "Mise à jour disponible — version {{version}}",
+    "confirmInstall": "Installer et redémarrer",
+    "confirmMessage": "Régie Son va se fermer pour installer la version {{version}}, puis redémarrer.",
+    "confirmTitle": "Installer la mise à jour ?",
     "dismiss": "Ignorer",
     "install": "Installer",
     "installing": "Installation…",

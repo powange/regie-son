@@ -1,8 +1,8 @@
-import { CheckCircle2, AlertTriangle, AlertCircle, X, MonitorPlay } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle, MonitorPlay } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PreflightIssue } from "../preflight";
 import { preflightMessage } from "../preflightMessage";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 interface Props {
   issues: PreflightIssue[];
@@ -13,18 +13,12 @@ interface Props {
 
 export default function PreflightModal({ issues, onClose, onConfirm, confirmLabel }: Props) {
   const { t } = useTranslation(["preflight", "common"]);
-  useModal(onClose);
   const errors = issues.filter((i) => i.severity === "error");
   const warnings = issues.filter((i) => i.severity === "warning");
   const hasErrors = errors.length > 0;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{t("preflight:title")}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
+    <Modal title={t("preflight:title")} onClose={onClose} style={{ maxWidth: 560 }}>
 
         {issues.length === 0 ? (
           <div className="preflight-ok">
@@ -57,7 +51,6 @@ export default function PreflightModal({ issues, onClose, onConfirm, confirmLabe
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

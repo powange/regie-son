@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { X, Cloud, AlertCircle, Loader2 } from "lucide-react";
+import { Cloud, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { translateError } from "../errorMessage";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 
 interface Props {
@@ -15,7 +15,6 @@ export default function CloudImportDialog({ kind, onSubmit, onClose }: Props) {
   const { t } = useTranslation(["share", "common"]);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  useModal(onClose, !busy);
   const [error, setError] = useState<string | null>(null);
 
   const title = kind === "project" ? t("share:import.showTitle") : t("share:import.actTitle");
@@ -36,12 +35,7 @@ export default function CloudImportDialog({ kind, onSubmit, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={busy ? undefined : onClose}>
-      <div className="modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{title}</h2>
-          {!busy && <button className="btn-icon" onClick={onClose}><X size={16} /></button>}
-        </div>
+    <Modal title={title} onClose={onClose} canClose={!busy} closeOnBackdrop={code.trim() === ""} style={{ maxWidth: 440 }}>
 
         <div className="modal-field">
           <label>{t("share:import.codeLabel")}</label>
@@ -77,7 +71,6 @@ export default function CloudImportDialog({ kind, onSubmit, onClose }: Props) {
             {t("share:import.submit")}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

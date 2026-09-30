@@ -8,7 +8,8 @@
     "loading": "Loading devices…",
     "refresh": "Refresh the list",
     "systemDefault": "System default",
-    "unnamedDevice": "Audio device"
+    "unnamedDevice": "Audio device",
+    "missingDevice": "Device not found (unplugged?)"
   },
   "keyBindings": {
     "title": "Controls",
@@ -36,7 +37,8 @@
     "install": "Install v{{version}}",
     "installing": "Installing…",
     "upToDate": "Up to date",
-    "checkError": "Check failed"
+    "checkError": "Check failed",
+    "blockedDuringShow": "Can't install while show mode is on or a track is playing."
   },
   "ytDlp": {
     "title": "yt-dlp (YouTube downloads)",

@@ -16,8 +16,14 @@
   padding: 1.8rem;
   width: 440px;
   max-width: calc(100vw - 2rem);
+  /* body does not scroll: a modal taller than the window must scroll itself,
+     or its bottom (and its Close button) is out of reach. */
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   box-shadow: var(--shadow);
 }
+
+.modal:focus { outline: none; }
 
 .modal-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.4rem; }
 .modal-title-row h2 { font-size: 1.2rem; }

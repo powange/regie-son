@@ -1,10 +1,11 @@
-import { memo, useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect, useMemo, RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -14,15 +15,17 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
 import { GripVertical, Pencil, Trash2, Plus, ListMusic, Coffee, MicVocal, Check, ChevronDown } from "lucide-react";
 import { Numero, NumeroType, AudioFile, PauseItem, PlaylistItem } from "../types";
-import { PlayerPosition, FadeState } from "../usePlayer";
+import { FadeState } from "../usePlayer";
 import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
 import PauseTrack from "./PauseTrack";
 import { useTranslation } from "react-i18next";
+import { useModal } from "../useModal";
 import { translateError } from "../errorMessage";
 
 
@@ -32,16 +35,21 @@ interface Props {
   projectPath: string;
   editMode: boolean;
   volumeEditable: boolean;
-  playerPosition: PlayerPosition | null;
+  // Player state is narrowed to this card: every card but the active one
+  // gets null / false / null and skips the re-renders of the progress.
+  activeItemIndex: number | null;
   isPlaying: boolean;
-  playerFade: FadeState | null;
+  fade: FadeState | null;
   missingFiles: Set<string>;
   audioDurations: Map<string, number>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
   togglePlay: () => void;
   onAppendItems: (numeroId: string, items: PlaylistItem[]) => void;
+  onError: (message: string) => void;
   onChange: (updated: Numero, tag?: string) => void;
-  onDelete: () => void;
+  onChangeItem: (numeroId: string, updated: PlaylistItem, tag?: string) => void;
+  onDeleteItem: (numeroId: string, itemId: string) => void;
+  onDelete: (numeroId: string) => void;
   canDelete?: boolean;
   canChangeType?: boolean;
   showDragHandle?: boolean;
@@ -49,8 +57,8 @@ interface Props {
 
 function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode, volumeEditable,
-  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems,
-  onChange, onDelete,
+  activeItemIndex, isPlaying, fade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems, onError,
+  onChange, onChangeItem, onDeleteItem, onDelete,
   canDelete = true,
   canChangeType = true,
   showDragHandle = true,
@@ -63,7 +71,6 @@ function NumeroCardInner({
   const [typeMenuPos, setTypeMenuPos] = useState<{ top: number; left: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const typeBtnRef = useRef<HTMLButtonElement | null>(null);
-  const typeMenuRef = useRef<HTMLDivElement | null>(null);
 
   function openTypeMenu() {
     const btn = typeBtnRef.current;
@@ -72,17 +79,6 @@ function NumeroCardInner({
     setTypeMenuPos({ top: rect.bottom + 4, left: rect.left });
     setShowTypeMenu(true);
   }
-
-  useEffect(() => {
-    if (!showTypeMenu) return;
-    function onDocMouseDown(e: MouseEvent) {
-      const inBtn = typeBtnRef.current?.contains(e.target as Node);
-      const inMenu = typeMenuRef.current?.contains(e.target as Node);
-      if (!inBtn && !inMenu) setShowTypeMenu(false);
-    }
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [showTypeMenu]);
 
   function changeType(type: NumeroType) {
     setShowTypeMenu(false);
@@ -99,7 +95,8 @@ function NumeroCardInner({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isActiveNumero = playerPosition?.numeroIndex === numeroIndex;
+  const isActiveNumero = activeItemIndex !== null;
+  const itemIds = useMemo(() => numero.items.map((i) => i.id), [numero.items]);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -123,7 +120,7 @@ function NumeroCardInner({
         onAppendItems(numero.id, [{ type: "audio", volume: 100, ...af }]);
       }
     } catch (err) {
-      alert(t("audio:errors.add", { detail: translateError(err) }));
+      onError(t("audio:errors.add", { detail: translateError(err) }));
     }
   }
 
@@ -137,26 +134,12 @@ function NumeroCardInner({
     onAppendItems(numero.id, [{ ...af, type: "audio" as const, volume: af.volume ?? 100 }]);
   }
 
-  function updateAudio(updated: AudioFile, iIdx: number, tag?: string) {
-    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
-  }
-
-  function updatePause(updated: PauseItem, iIdx: number, tag?: string) {
-    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
-  }
-
   function addPause() {
     const pause: PauseItem = { type: "pause", id: crypto.randomUUID() };
     onChange({ ...numero, items: [...numero.items, pause] });
   }
 
-  // The file stays on disk so that undo can bring the track back; it is
-  // cleaned up later as an orphan, once no undo step refers to it.
-  function deleteItem(item: PlaylistItem) {
-    onChange({ ...numero, items: numero.items.filter((i) => i.id !== item.id) });
-  }
-
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS));
 
   function handleItemDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -204,34 +187,21 @@ function NumeroCardInner({
               className="numero-type-badge numero-type-badge--clickable"
               onClick={() => (showTypeMenu ? setShowTypeMenu(false) : openTypeMenu())}
               title={t("parts:changeType")}
+              aria-haspopup="menu"
+              aria-expanded={showTypeMenu}
             >
               {typeBadge[numero.type] ?? numero.type}
               <ChevronDown size={12} />
             </button>
-            {showTypeMenu && typeMenuPos && createPortal(
-              <div
-                className="numero-type-menu"
-                ref={typeMenuRef}
-                style={{ top: typeMenuPos.top, left: typeMenuPos.left }}
-              >
-                {typeOptions.map((opt) => {
-                  const Icon = opt.icon;
-                  const isCurrent = opt.id === numero.type;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`numero-type-menu-item${isCurrent ? " numero-type-menu-item--active" : ""}`}
-                      onClick={() => changeType(opt.id)}
-                    >
-                      <Icon size={14} />
-                      <span>{opt.label}</span>
-                      {isCurrent && <Check size={14} />}
-                    </button>
-                  );
-                })}
-              </div>,
-              document.body,
+            {showTypeMenu && typeMenuPos && (
+              <TypeMenu
+                pos={typeMenuPos}
+                anchorRef={typeBtnRef}
+                current={numero.type}
+                options={typeOptions}
+                onPick={changeType}
+                onClose={() => { setShowTypeMenu(false); typeBtnRef.current?.focus(); }}
+              />
             )}
           </>
         ) : (
@@ -264,7 +234,7 @@ function NumeroCardInner({
               <Pencil size={14} />
             </button>
             {canDelete && (
-              <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
+              <button className="btn-icon btn-danger" onClick={() => onDelete(numero.id)} title={t("common:actions.delete")}>
                 <Trash2 size={14} />
               </button>
             )}
@@ -279,7 +249,7 @@ function NumeroCardInner({
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleItemDragEnd}>
           <SortableContext
-            items={numero.items.map((i) => i.id)}
+            items={itemIds}
             strategy={verticalListSortingStrategy}
           >
             {numero.items.map((item, iIdx) =>
@@ -287,28 +257,34 @@ function NumeroCardInner({
                 <PauseTrack
                   key={item.id}
                   pause={item}
+                  numeroId={numero.id}
+                  numeroIndex={numeroIndex}
+                  itemIndex={iIdx}
                   editMode={editMode}
-                  isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
-                  onPlay={() => playAt(numeroIndex, iIdx)}
-                  onChange={(updated, tag) => updatePause(updated, iIdx, tag)}
-                  onDelete={() => deleteItem(item)}
+                  isActive={activeItemIndex === iIdx}
+                  playAt={playAt}
+                  onChange={onChangeItem}
+                  onDelete={onDeleteItem}
                 />
               ) : (
                 <AudioItem
                   key={item.id}
                   audio={item}
+                  numeroId={numero.id}
+                  numeroIndex={numeroIndex}
+                  itemIndex={iIdx}
                   projectPath={projectPath}
                   editMode={editMode}
                   volumeEditable={volumeEditable}
                   fileDuration={audioDurations.get(item.filename)}
-                  isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
-                  isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
+                  isActive={activeItemIndex === iIdx}
+                  isPlaying={activeItemIndex === iIdx && isPlaying}
                   isMissing={missingFiles.has(item.filename)}
-                  activeFade={isActiveNumero && playerPosition?.audioIndex === iIdx ? playerFade : null}
-                  // On the current track the button shows Pause: it must pause, not restart from the top.
-                  onPlay={() => (isActiveNumero && playerPosition?.audioIndex === iIdx ? togglePlay() : playAt(numeroIndex, iIdx))}
-                  onChange={(updated, tag) => updateAudio(updated, iIdx, tag)}
-                  onDelete={() => deleteItem(item)}
+                  activeFade={activeItemIndex === iIdx ? fade : null}
+                  playAt={playAt}
+                  togglePlay={togglePlay}
+                  onChange={onChangeItem}
+                  onDelete={onDeleteItem}
                 />
               )
             )}
@@ -338,5 +314,82 @@ function NumeroCardInner({
   );
 }
 
+
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
+
+interface TypeMenuProps {
+  pos: { top: number; left: number };
+  anchorRef: RefObject<HTMLButtonElement | null>;
+  current: NumeroType;
+  options: { id: NumeroType; label: string; icon: typeof ListMusic }[];
+  onPick: (type: NumeroType) => void;
+  onClose: () => void;
+}
+
+// Fixed-position popup: registered like a modal so that Escape closes it
+// instead of reaching the player, and closed on any scroll, since it would
+// otherwise stay put while its button scrolls away.
+function TypeMenu({ pos, anchorRef, current, options, onPick, onClose }: TypeMenuProps) {
+  useModal(onClose);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (!anchorRef.current?.contains(target) && !menuRef.current?.contains(target)) onCloseRef.current();
+    }
+    function onScroll(e: Event) {
+      if (!menuRef.current?.contains(e.target as Node)) onCloseRef.current();
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("scroll", onScroll, true);
+    menuRef.current?.querySelector<HTMLButtonElement>("[aria-checked='true']")?.focus();
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [anchorRef]);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = e.key === "ArrowDown" ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+    items[next]?.focus();
+  }
+
+  return createPortal(
+    <div
+      className="numero-type-menu"
+      ref={menuRef}
+      role="menu"
+      style={{ top: pos.top, left: pos.left }}
+      onKeyDown={onKeyDown}
+    >
+      {options.map((opt) => {
+        const Icon = opt.icon;
+        const isCurrent = opt.id === current;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="menuitemradio"
+            aria-checked={isCurrent}
+            className={`numero-type-menu-item${isCurrent ? " numero-type-menu-item--active" : ""}`}
+            onClick={() => onPick(opt.id)}
+          >
+            <Icon size={14} />
+            <span>{opt.label}</span>
+            {isCurrent && <Check size={14} />}
+          </button>
+        );
+      })}
+    </div>,
+    document.body,
+  );
+}
 
 export default memo(NumeroCardInner);

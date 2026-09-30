@@ -1,6 +1,6 @@
-import { ListMusic, Coffee, MicVocal, FileInput, Cloud, X } from "lucide-react";
+import { ListMusic, Coffee, MicVocal, FileInput, Cloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 interface Props {
   onSelectNumero: () => void;
@@ -20,7 +20,6 @@ export default function AddPartModal({
   onClose,
 }: Props) {
   const { t } = useTranslation(["parts", "editor"]);
-  useModal(onClose);
 
   function pick(handler: () => void) {
     onClose();
@@ -28,12 +27,7 @@ export default function AddPartModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{t("editor:addPart")}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
+    <Modal title={t("editor:addPart")} onClose={onClose} style={{ maxWidth: 420 }}>
 
         <div className="source-list">
           <button className="source-option part-option part-option--numero" onClick={() => pick(onSelectNumero)}>
@@ -72,7 +66,6 @@ export default function AddPartModal({
             </div>
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
