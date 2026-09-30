@@ -292,18 +292,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFil
         .join("musiques")
         .join(&new_filename);
     fs::copy(src, &dest).map_err(fail("io.copyFailed"))?;
-    Ok(AudioFile {
-        id,
-        filename: new_filename,
-        original_name,
-        volume: 100.0,
-        start_time: None,
-        end_time: None,
-        fade_in: None,
-        fade_out: None,
-        cue: None,
-        extra: Default::default(),
-    })
+    Ok(AudioFile::new(id, new_filename, original_name))
 }
 
 #[tauri::command]

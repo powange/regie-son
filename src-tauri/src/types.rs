@@ -31,6 +31,24 @@ pub struct AudioFile {
     pub extra: Extra,
 }
 
+impl AudioFile {
+    /// A freshly added track: full volume, played whole, no cue.
+    pub fn new(id: String, filename: String, original_name: String) -> Self {
+        AudioFile {
+            id,
+            filename,
+            original_name,
+            volume: default_volume(),
+            start_time: None,
+            end_time: None,
+            fade_in: None,
+            fade_out: None,
+            cue: None,
+            extra: Extra::new(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PauseItem {
     pub id: String,
@@ -127,18 +145,7 @@ pub fn migrate_project(raw: &str, path: String) -> AppResult<Project> {
                 n.audio_files
                     .into_iter()
                     .map(|af| {
-                        PlaylistItem::Audio(AudioFile {
-                            id: af.id,
-                            filename: af.filename,
-                            original_name: af.original_name,
-                            volume: 100.0,
-                            start_time: None,
-                            end_time: None,
-                            fade_in: None,
-                            fade_out: None,
-                            cue: None,
-                            extra: Extra::new(),
-                        })
+                        PlaylistItem::Audio(AudioFile::new(af.id, af.filename, af.original_name))
                     })
                     .collect()
             };

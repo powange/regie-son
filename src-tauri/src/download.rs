@@ -414,18 +414,7 @@ pub async fn download_youtube_audio(
     };
     let original_name = format!("{}.{}", display_title, ext);
 
-    Ok(AudioFile {
-        id,
-        filename,
-        original_name,
-        volume: 100.0,
-        start_time: None,
-        end_time: None,
-        fade_in: None,
-        fade_out: None,
-        cue: None,
-        extra: Default::default(),
-    })
+    Ok(AudioFile::new(id, filename, original_name))
 }
 
 async fn next_chunk(
@@ -554,18 +543,7 @@ pub async fn download_audio_from_url(
     drop(file);
     dest.keep();
 
-    Ok(AudioFile {
-        id,
-        filename: new_filename,
-        original_name,
-        volume: 100.0,
-        start_time: None,
-        end_time: None,
-        fade_in: None,
-        fade_out: None,
-        cue: None,
-        extra: Default::default(),
-    })
+    Ok(AudioFile::new(id, new_filename, original_name))
 }
 
 #[tauri::command]
