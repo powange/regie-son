@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { Monitor, Link, FileVideo, PauseCircle, X, Download, XCircle } from "lucide-react";
+import { Monitor, Link, FileVideo, PauseCircle, Download, XCircle } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { translateError } from "../errorMessage";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 type View = "list" | "url" | "youtube";
 
@@ -139,17 +139,11 @@ interface Props {
 export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSelectYoutube, onSelectPause, onClose }: Props) {
   const { t } = useTranslation(["audio", "common"]);
   const [view, setView] = useState<View>("list");
-  useModal(onClose, view === "list");
 
   function back() { setView("list"); }
 
   return (
-    <div className="modal-overlay" onClick={view === "list" ? onClose : undefined}>
-      <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{t("audio:addStep")}</h2>
-          {view === "list" && <button className="btn-icon" onClick={onClose}><X size={16} /></button>}
-        </div>
+    <Modal title={t("audio:addStep")} onClose={onClose} canClose={view === "list"} style={{ maxWidth: 380 }}>
 
         {view === "list" && (
           <div className="source-list">
@@ -194,7 +188,6 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
             onBack={back}
           />
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

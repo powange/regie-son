@@ -19,7 +19,7 @@ import {
   isModifierKey,
   mergeWithDefaults,
 } from "../keyBindings";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 interface AudioDevice {
   deviceId: string;
@@ -37,7 +37,6 @@ interface Props {
 
 export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
   const { t } = useTranslation(["settings", "common"]);
-  useModal(onClose);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
@@ -176,12 +175,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title-row">
-          <h2>{t("common:settings")}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
-        </div>
+    <Modal title={t("common:settings")} onClose={onClose}>
 
         <div className="settings-section">
           <div className="settings-section-title">
@@ -355,7 +349,6 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           {version && <span style={{ fontSize: "0.8rem", color: "var(--text2)" }}>v{version}</span>}
           <button className="btn-primary" onClick={onClose}>{t("common:actions.close")}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

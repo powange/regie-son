@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Play, Pause } from "lucide-react";
+import { Play, Pause } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin, { Region } from "wavesurfer.js/dist/plugins/regions";
 import { AudioFile } from "../types";
 import { audioMimeType } from "../mime";
 import { useTranslation } from "react-i18next";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 
 function formatTime(seconds: number | undefined): string {
@@ -45,7 +45,6 @@ interface Props {
 
 export default function AudioSettingsModal({ audio, projectPath, onSave, onClose }: Props) {
   const { t } = useTranslation(["audio", "common"]);
-  useModal(onClose);
   const [startRaw, setStartRaw] = useState(formatTime(audio.startTime));
   const [endRaw, setEndRaw] = useState(formatTime(audio.endTime));
   const [fadeInRaw, setFadeInRaw] = useState(audio.fadeIn !== undefined ? String(audio.fadeIn) : "");
@@ -182,12 +181,12 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ width: "calc(100vw - 4rem)", maxWidth: 1200 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title-row">
-          <h2>{t("audio:settings.title", { name: audio.original_name })}</h2>
-          <button className="btn-icon" onClick={onClose}><X size={16} /></button>
-        </div>
+    <Modal
+      title={t("audio:settings.title", { name: audio.original_name })}
+      onClose={onClose}
+      closeOnBackdrop={false}
+      style={{ width: "calc(100vw - 4rem)", maxWidth: 1200 }}
+    >
 
         <div className="waveform-wrapper">
           <button
@@ -254,7 +253,6 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
           <button className="btn btn-primary" onClick={handleSave}>{t("common:actions.save")}</button>
           <button className="btn btn-secondary" onClick={onClose}>{t("common:actions.cancel")}</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

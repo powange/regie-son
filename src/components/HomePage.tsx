@@ -8,7 +8,7 @@ import { RecentProject } from "../useRecentProjects";
 import { RecentNumero } from "../useRecentNumeros";
 import OpenProjectModal, { OpenKind } from "./OpenProjectModal";
 import CloudImportDialog from "./CloudImportDialog";
-import { useModal } from "../useModal";
+import Modal from "./Modal";
 
 interface Props {
   recents: RecentProject[];
@@ -274,7 +274,6 @@ function slugify(name: string) {
 
 function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
   const { t } = useTranslation(["home", "common"]);
-  useModal(onClose);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -328,9 +327,7 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h2>{t("home:createShow.title")}</h2>
+    <Modal title={t("home:createShow.title")} onClose={onClose} closeOnBackdrop={name.trim() === ""}>
 
         <div className="modal-field">
           <label>{t("home:createShow.nameLabel")}</label>
@@ -368,14 +365,12 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
             {loading ? t("common:actions.creating") : t("common:actions.create")}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
 function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
   const { t } = useTranslation(["home", "common"]);
-  useModal(onClose);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -429,9 +424,7 @@ function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <h2>{t("home:createAct.title")}</h2>
+    <Modal title={t("home:createAct.title")} onClose={onClose} closeOnBackdrop={name.trim() === ""}>
 
         <div className="modal-field">
           <label>{t("home:createAct.nameLabel")}</label>
@@ -469,7 +462,6 @@ function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
             {loading ? t("common:actions.creating") : t("common:actions.create")}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
