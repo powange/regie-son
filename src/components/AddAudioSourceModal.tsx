@@ -52,7 +52,7 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
 
   async function handleDownload() {
     const trimmed = url.trim();
-    if (!trimmed) return;
+    if (!trimmed || downloading) return;
     const id = crypto.randomUUID();
     setDownloadId(id);
     setError(null);

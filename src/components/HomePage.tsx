@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { isNotFoundError, translateError } from "../errorMessage";
@@ -295,6 +295,9 @@ function CreateModal({ kind, onClose, onCreated }: CreateModalProps) {
   const [folderOverride, setFolderOverride] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Enter in the name field bypasses the disabled button: two quick presses
+  // would start two creations in the same folder.
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     invoke<string>(isShow ? "get_default_projects_dir" : "get_default_numeros_dir")
@@ -322,11 +325,13 @@ function CreateModal({ kind, onClose, onCreated }: CreateModalProps) {
   }
 
   async function handleCreate() {
+    if (creatingRef.current) return;
     if (!name.trim()) {
       setError(isShow ? t("home:createShow.nameRequired") : t("home:createAct.nameRequired"));
       return;
     }
     if (!folderPath.trim()) { setError(t("home:folderRequired")); return; }
+    creatingRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -338,6 +343,7 @@ function CreateModal({ kind, onClose, onCreated }: CreateModalProps) {
     } catch (err) {
       setError(translateError(err));
     } finally {
+      creatingRef.current = false;
       setLoading(false);
     }
   }
