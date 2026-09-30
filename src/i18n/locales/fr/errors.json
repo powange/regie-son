@@ -83,7 +83,8 @@
     "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://.",
     "releaseInfoInvalid": "Impossible de lire la dernière version de yt-dlp : {{detail}}",
     "checksumMissing": "La somme de contrôle de yt-dlp est absente de la publication : mise à jour abandonnée.",
-    "checksumMismatch": "Le yt-dlp téléchargé ne correspond pas à sa somme de contrôle : mise à jour abandonnée."
+    "checksumMismatch": "Le yt-dlp téléchargé ne correspond pas à sa somme de contrôle : mise à jour abandonnée.",
+    "notAudio": "Ce lien ne mène pas à un fichier audio (le serveur a renvoyé une page ou un autre type de fichier). Utilisez un lien de téléchargement direct."
   },
   "battery": {
     "accessFailed": "Accès à la batterie : {{detail}}",

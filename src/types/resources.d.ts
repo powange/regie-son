@@ -231,6 +231,7 @@ export default interface Resources {
       "httpStatusUpdate": "Erreur HTTP {{status}} lors du téléchargement",
       "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://.",
       "metadataFailed": "metadata : {{detail}}",
+      "notAudio": "Ce lien ne mène pas à un fichier audio (le serveur a renvoyé une page ou un autre type de fichier). Utilisez un lien de téléchargement direct.",
       "notExecutable": "Le binaire téléchargé n'est pas exécutable sur ce système.",
       "releaseInfoInvalid": "Impossible de lire la dernière version de yt-dlp : {{detail}}",
       "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}",

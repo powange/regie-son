@@ -27,33 +27,43 @@ pub(crate) fn download_client() -> AppResult<reqwest::Client> {
         .map_err(fail("cloud.httpClientFailed"))
 }
 
+// Percent-decoding works on bytes: "%C3%A9" is one UTF-8 "é", not two
+// Latin-1 characters.
+fn percent_decode(encoded: &str) -> String {
+    let bytes = encoded.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Some(b) = std::str::from_utf8(&bytes[i + 1..i + 3])
+                .ok()
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+            {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+// The display name is only ever shown, but keep it to a bare name.
+fn bare_name(name: &str) -> Option<String> {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or(name).trim();
+    (!last.is_empty()).then(|| last.to_string())
+}
+
 pub fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
     // RFC 6266: filename*=UTF-8''percent-encoded
     let lower = disposition.to_ascii_lowercase();
     if let Some(idx) = lower.find("filename*=utf-8''") {
         let rest = &disposition[idx + "filename*=utf-8''".len()..];
         let encoded = rest.split(';').next().unwrap_or(rest).trim();
-        let decoded: String = {
-            let bytes = encoded.as_bytes();
-            let mut out = String::new();
-            let mut i = 0;
-            while i < bytes.len() {
-                if bytes[i] == b'%' && i + 2 < bytes.len() {
-                    if let Ok(s) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
-                        if let Ok(b) = u8::from_str_radix(s, 16) {
-                            out.push(b as char);
-                            i += 3;
-                            continue;
-                        }
-                    }
-                }
-                out.push(bytes[i] as char);
-                i += 1;
-            }
-            out
-        };
-        if !decoded.is_empty() {
-            return Some(decoded);
+        if let Some(name) = bare_name(&percent_decode(encoded)) {
+            return Some(name);
         }
     }
     // Standard filename=
@@ -64,12 +74,67 @@ pub fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
             f.split(';')
                 .next()
                 .unwrap_or(f)
+                .trim()
                 .trim_matches('"')
                 .trim_matches('\'')
                 .trim()
                 .to_string()
         })
-        .filter(|f| !f.is_empty())
+        .and_then(|f| bare_name(&f))
+}
+
+fn filename_from_url(url: &str) -> Option<String> {
+    let path = url.split(['?', '#']).next()?;
+    let last = path.split('/').next_back()?;
+    bare_name(&percent_decode(last))
+}
+
+// Extensions a downloaded file may keep. Anything else (".php", "a:b", which
+// would create an NTFS alternate stream) is replaced by what the bytes say.
+const AUDIO_EXTENSIONS: &[&str] = &[
+    "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "m4a", "mp4", "wma", "webm", "aif", "aiff",
+];
+
+fn audio_extension(name: &str) -> Option<String> {
+    let ext = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
+    AUDIO_EXTENSIONS
+        .contains(&ext.as_str())
+        .then(|| format!(".{}", ext))
+}
+
+/// Recognises an audio container from its first bytes.
+fn sniff_audio(head: &[u8]) -> Option<&'static str> {
+    let at = |offset: usize, magic: &[u8]| head.get(offset..offset + magic.len()) == Some(magic);
+    if at(0, b"ID3") {
+        Some(".mp3")
+    } else if head.len() >= 2 && head[0] == 0xFF && head[1] & 0xE0 == 0xE0 {
+        // MPEG frame sync; layer bits 00 mean an ADTS AAC stream.
+        Some(if head[1] & 0x06 == 0 { ".aac" } else { ".mp3" })
+    } else if at(0, b"OggS") {
+        Some(".ogg")
+    } else if at(0, b"fLaC") {
+        Some(".flac")
+    } else if at(0, b"RIFF") && at(8, b"WAVE") {
+        Some(".wav")
+    } else if at(0, b"FORM") && (at(8, b"AIFF") || at(8, b"AIFC")) {
+        Some(".aiff")
+    } else if at(4, b"ftyp") {
+        Some(".m4a")
+    } else if at(0, &[0x1A, 0x45, 0xDF, 0xA3]) {
+        Some(".webm")
+    } else if at(0, &[0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11]) {
+        Some(".wma")
+    } else {
+        None
+    }
+}
+
+fn is_textual_content_type(content_type: &str) -> bool {
+    content_type.starts_with("text/")
+        || matches!(
+            content_type,
+            "application/json" | "application/xml" | "application/xhtml+xml"
+        )
 }
 
 // A pasted link reaches yt-dlp as an argument: anything but a plain http(s)
@@ -362,6 +427,16 @@ pub async fn download_youtube_audio(
     })
 }
 
+async fn next_chunk(
+    response: &mut reqwest::Response,
+    token: &CancelToken,
+) -> AppResult<Option<bytes::Bytes>> {
+    tokio::select! {
+        r = response.chunk() => r.map_err(fail("io.readFailed")),
+        _ = token.wait() => Err(AppError::new("download.cancelled")),
+    }
+}
+
 #[tauri::command]
 pub async fn download_audio_from_url(
     url: String,
@@ -399,7 +474,17 @@ pub async fn download_audio_from_url(
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
-        .to_string();
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+
+    // A Google Drive or Dropbox share link answers with an HTML page: saved
+    // as .mp3 it would only fail on the night of the show.
+    if is_textual_content_type(&content_type) {
+        return Err(AppError::new("download.notAudio").detail(&content_type));
+    }
 
     let content_disposition = response
         .headers()
@@ -409,72 +494,64 @@ pub async fn download_audio_from_url(
         .to_string();
 
     let original_name = parse_content_disposition_filename(&content_disposition)
-        .or_else(|| {
-            url.split('?')
-                .next()
-                .and_then(|u| u.split('/').next_back())
-                .filter(|f| !f.is_empty())
-                .map(|f| f.to_string())
-        })
+        .or_else(|| filename_from_url(&url))
         .unwrap_or_else(|| "audio".to_string());
 
-    let ext = Path::new(&original_name)
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
-        .filter(|e| e.len() > 1)
-        .or_else(|| {
-            let ct = content_type.split(';').next().unwrap_or("").trim();
-            match ct {
-                "audio/mpeg" | "audio/mp3" => Some(".mp3".into()),
-                "audio/ogg" => Some(".ogg".into()),
-                "audio/wav" => Some(".wav".into()),
-                "audio/flac" => Some(".flac".into()),
-                "audio/aac" => Some(".aac".into()),
-                "audio/mp4" => Some(".m4a".into()),
-                _ => Some(".mp3".into()),
+    // Nothing is written before the first bytes say what the file is.
+    let mut head: Vec<u8> = Vec::new();
+    let mut finished = false;
+    while head.len() < 16 {
+        match next_chunk(&mut response, &guard.token).await? {
+            Some(chunk) => head.extend_from_slice(&chunk),
+            None => {
+                finished = true;
+                break;
             }
-        })
-        .unwrap_or_else(|| ".mp3".into());
+        }
+    }
+    let sniffed = sniff_audio(&head);
+    if sniffed.is_none() && !content_type.starts_with("audio/") {
+        return Err(AppError::new("download.notAudio").detail(&content_type));
+    }
+
+    let ext = audio_extension(&original_name)
+        .or_else(|| sniffed.map(String::from))
+        .unwrap_or_else(|| {
+            match content_type.as_str() {
+                "audio/ogg" => ".ogg",
+                "audio/wav" | "audio/x-wav" | "audio/wave" => ".wav",
+                "audio/flac" | "audio/x-flac" => ".flac",
+                "audio/aac" => ".aac",
+                "audio/mp4" | "audio/x-m4a" => ".m4a",
+                "audio/webm" => ".webm",
+                _ => ".mp3",
+            }
+            .to_string()
+        });
 
     let id = uuid::Uuid::new_v4().to_string();
     let new_filename = format!("{}{}", id, ext);
-    let dest = PathBuf::from(&project_path)
-        .join("musiques")
-        .join(&new_filename);
+    let dest = TempFile::new(
+        PathBuf::from(&project_path)
+            .join("musiques")
+            .join(&new_filename),
+    );
 
-    let mut file = fs::File::create(&dest).map_err(fail("download.createFileFailed"))?;
-    let mut total: u64 = 0;
-    loop {
-        let chunk_result = tokio::select! {
-            r = response.chunk() => r,
-            _ = guard.token.wait() => {
-                drop(file);
-                let _ = fs::remove_file(&dest);
-                return Err(AppError::new("download.cancelled"));
+    let mut file = fs::File::create(&dest.path).map_err(fail("download.createFileFailed"))?;
+    let mut total = head.len() as u64;
+    file.write_all(&head).map_err(fail("io.writeFailed"))?;
+    if !finished {
+        while let Some(chunk) = next_chunk(&mut response, &guard.token).await? {
+            total += chunk.len() as u64;
+            if total > MAX_AUDIO_FILE_SIZE {
+                return Err(AppError::new("download.fileTooLargeLimit")
+                    .with("limit", MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
             }
-        };
-        let chunk = match chunk_result {
-            Ok(Some(c)) => c,
-            Ok(None) => break,
-            Err(e) => {
-                drop(file);
-                let _ = fs::remove_file(&dest);
-                return Err(AppError::new("io.readFailed").detail(e));
-            }
-        };
-        total += chunk.len() as u64;
-        if total > MAX_AUDIO_FILE_SIZE {
-            drop(file);
-            let _ = fs::remove_file(&dest);
-            return Err(AppError::new("download.fileTooLargeLimit")
-                .with("limit", MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
-        }
-        if let Err(e) = file.write_all(&chunk) {
-            drop(file);
-            let _ = fs::remove_file(&dest);
-            return Err(AppError::new("io.writeFailed").detail(e));
+            file.write_all(&chunk).map_err(fail("io.writeFailed"))?;
         }
     }
+    drop(file);
+    dest.keep();
 
     Ok(AudioFile {
         id,
@@ -542,13 +619,28 @@ fn installed_yt_dlp_version(app: &tauri::AppHandle) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-// Removes the download on every early return: a failed update must not
-// leave a half-written or unverified binary behind.
-struct TempFile(PathBuf);
+// Removes a download on every early return: a failed or cancelled transfer
+// must not leave a half-written file (or an unverified binary) behind.
+struct TempFile {
+    path: PathBuf,
+    keep: bool,
+}
+
+impl TempFile {
+    fn new(path: PathBuf) -> Self {
+        Self { path, keep: false }
+    }
+
+    fn keep(mut self) {
+        self.keep = true;
+    }
+}
 
 impl Drop for TempFile {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        if !self.keep {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -622,10 +714,10 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
         &format!("{YT_DLP_RELEASES}/download/{tag}/{asset}"),
     )
     .await?;
-    let tmp = TempFile(dir.join(format!("yt-dlp-{}.download", uuid::Uuid::new_v4())));
-    let mut file = fs::File::create(&tmp.0).map_err(|e| {
+    let tmp = TempFile::new(dir.join(format!("yt-dlp-{}.download", uuid::Uuid::new_v4())));
+    let mut file = fs::File::create(&tmp.path).map_err(|e| {
         AppError::new("download.createPathFailed")
-            .with("path", tmp.0.display())
+            .with("path", tmp.path.display())
             .detail(e)
     })?;
     let mut hasher = Sha256::new();
@@ -650,14 +742,14 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&tmp.0)
+        let mut perms = fs::metadata(&tmp.path)
             .map_err(fail("download.metadataFailed"))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&tmp.0, perms).map_err(fail("download.chmodFailed"))?;
+        fs::set_permissions(&tmp.path, perms).map_err(fail("download.chmodFailed"))?;
     }
 
-    let version_check = silent_command(&tmp.0).arg("--version").output();
+    let version_check = silent_command(&tmp.path).arg("--version").output();
     let version = match version_check {
         Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
         _ => return Err(AppError::new("download.notExecutable")),
@@ -671,14 +763,14 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
         if target_path.exists() {
             fs::rename(&target_path, &old).map_err(fail("download.replaceBinaryFailed"))?;
         }
-        if let Err(e) = fs::rename(&tmp.0, &target_path) {
+        if let Err(e) = fs::rename(&tmp.path, &target_path) {
             let _ = fs::rename(&old, &target_path);
             return Err(AppError::new("download.replaceBinaryFailed").detail(e));
         }
         let _ = fs::remove_file(&old);
     }
     #[cfg(not(target_os = "windows"))]
-    fs::rename(&tmp.0, &target_path).map_err(fail("download.replaceBinaryFailed"))?;
+    fs::rename(&tmp.path, &target_path).map_err(fail("download.replaceBinaryFailed"))?;
 
     Ok(version)
 }
@@ -686,6 +778,64 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_names_are_decoded_as_utf8() {
+        assert_eq!(
+            parse_content_disposition_filename(
+                "attachment; filename*=UTF-8''Caf%C3%A9%20n%C2%B01.mp3"
+            ),
+            Some("Café n°1.mp3".into())
+        );
+        assert_eq!(
+            parse_content_disposition_filename("attachment; filename=\"My Song.mp3\""),
+            Some("My Song.mp3".into())
+        );
+        assert_eq!(
+            parse_content_disposition_filename("attachment; filename=\"../../evil.mp3\""),
+            Some("evil.mp3".into())
+        );
+        assert_eq!(
+            filename_from_url("https://x.org/a/My%20Song.mp3?dl=1"),
+            Some("My Song.mp3".into())
+        );
+        assert_eq!(filename_from_url("https://x.org/"), None);
+        assert_eq!(percent_decode("100%"), "100%");
+    }
+
+    #[test]
+    fn only_audio_extensions_are_kept() {
+        assert_eq!(audio_extension("a.MP3"), Some(".mp3".into()));
+        assert_eq!(audio_extension("a.flac"), Some(".flac".into()));
+        assert_eq!(audio_extension("download.php"), None);
+        assert_eq!(audio_extension("a:b"), None);
+        assert_eq!(audio_extension("track.mp3:evil"), None);
+        assert_eq!(audio_extension("noext"), None);
+    }
+
+    #[test]
+    fn audio_is_recognised_by_its_first_bytes() {
+        assert_eq!(sniff_audio(b"ID3\x04\x00"), Some(".mp3"));
+        assert_eq!(sniff_audio(&[0xFF, 0xFB, 0x90, 0x00]), Some(".mp3"));
+        assert_eq!(sniff_audio(&[0xFF, 0xF1, 0x50, 0x80]), Some(".aac"));
+        assert_eq!(sniff_audio(b"OggS\x00\x02"), Some(".ogg"));
+        assert_eq!(sniff_audio(b"fLaC\x00"), Some(".flac"));
+        assert_eq!(sniff_audio(b"RIFF\x24\x08\x00\x00WAVEfmt "), Some(".wav"));
+        assert_eq!(sniff_audio(b"\x00\x00\x00\x20ftypM4A "), Some(".m4a"));
+        assert_eq!(sniff_audio(&[0x1A, 0x45, 0xDF, 0xA3, 0x01]), Some(".webm"));
+        assert_eq!(sniff_audio(b"<!DOCTYPE html><html>"), None);
+        assert_eq!(sniff_audio(b"{\"error\":1}"), None);
+        assert_eq!(sniff_audio(b"RIFF\x24\x08\x00\x00AVI "), None);
+        assert_eq!(sniff_audio(b""), None);
+    }
+
+    #[test]
+    fn pages_are_not_audio() {
+        assert!(is_textual_content_type("text/html"));
+        assert!(is_textual_content_type("application/json"));
+        assert!(!is_textual_content_type("audio/mpeg"));
+        assert!(!is_textual_content_type("application/octet-stream"));
+    }
 
     #[test]
     fn only_http_urls_are_accepted() {

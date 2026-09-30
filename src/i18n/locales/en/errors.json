@@ -83,7 +83,8 @@
     "invalidUrl": "Invalid link: paste an address that starts with http:// or https://.",
     "releaseInfoInvalid": "Could not read the latest yt-dlp release: {{detail}}",
     "checksumMissing": "The yt-dlp checksum is missing from the release: update abandoned.",
-    "checksumMismatch": "The downloaded yt-dlp does not match its checksum: update abandoned."
+    "checksumMismatch": "The downloaded yt-dlp does not match its checksum: update abandoned.",
+    "notAudio": "This link does not lead to an audio file (the server sent a page or another kind of file). Use a direct download link."
   },
   "battery": {
     "accessFailed": "Reaching the battery: {{detail}}",
