@@ -1,51 +1,49 @@
 # Régie Son — Documentation technique
 
-Application desktop (Tauri 2) de pilotage audio pour spectacles cabaret. Le régisseur prépare un projet (numéros, entractes, présentations), chaque numéro contient une playlist de pistes audio et de pauses, et la lecture s'enchaîne pendant le spectacle avec fade in/out, start/end time, volume par piste et sortie audio configurable.
+Application desktop (Tauri 2) de pilotage audio pour spectacles cabaret. Le régisseur prépare un projet (numéros, entractes, présentations). Chaque numéro contient une liste de pistes audio et de pauses, et la lecture s'enchaîne pendant le spectacle avec fondus, extrait début/fin, volume par piste et sortie audio configurable.
 
-- **Cible** : Linux / Windows / macOS (x86_64 + aarch64 pour macOS)
+- **Cible** : Linux x86_64, Windows x86_64, macOS x86_64 et aarch64
 - **Dev unique** : pcomble
-- **Langue UI** : français — **Code** : anglais
-- **Fichier projet** : dossier contenant `projet.json` + sous-dossier `musiques/`
-- **Archive portable** : `.regieson` (zip du dossier projet)
-- **Numéro isolé** : dossier contenant `numero.json` + `musiques/` (réutilise la structure `Project` avec flag `singleNumero: true`)
-- **Archive portable de numéro** : `.regiesonnumero` (zip du dossier numéro), importable dans un projet pour ajouter un numéro avec tous ses presets (fades, volumes, start/end, notes, pauses intercalées).
+- **Langue UI** : français et anglais (i18next, repli sur le français) — **Code** : anglais
+- **Projet** : dossier contenant `projet.json` + `musiques/`
+- **Numéro isolé** : dossier contenant `numero.json` + `musiques/` (même structure `Project`, avec `singleNumero: true`)
+- **Archives portables** : `.regieson` (spectacle) et `.regiesonnumero` (numéro), des zip du dossier
+
+Les conventions de code (i18n, erreurs Rust, patterns React) sont dans [CLAUDE.md](CLAUDE.md). Ce document décrit l'architecture. Il cite des fichiers et des symboles, jamais des numéros de ligne, qui périment à chaque modification.
 
 ---
 
-## 1. Architecture générale
+## 1. Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Frontend React 19 + TypeScript (Vite)                      │
-│  ┌─────────┐   ┌──────────────┐   ┌───────────────────────┐ │
-│  │ App.tsx │──▶│ HomePage     │   │ ProjectEditor         │ │
-│  │         │   │ (liste pro-  │   │ ┌──────────────────┐  │ │
-│  │         │   │  jets        │   │ │ NumeroCard × N   │  │ │
-│  │         │   │  récents)    │   │ │   AudioItem/…    │  │ │
-│  │         │   └──────────────┘   │ └──────────────────┘  │ │
-│  │         │                      │ PlayerBar             │ │
-│  └─────────┘                      └───────────────────────┘ │
-│       │                                                      │
-│       │ hooks: usePlayer, useSettings,                       │
-│       │        useRecentProjects, useUpdater                 │
-│       ▼                                                      │
-│  [HTMLAudioElement + blob URLs]                             │
-└─────────────────────────────────────────────────────────────┘
-                        │
-                        │  invoke() / event listen()
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Backend Rust + Tauri 2  (tout dans src-tauri/src/lib.rs)   │
-│  • Projet (create/open/save/verify/cleanup)                 │
-│  • Fichiers (copy/delete/read_audio_file)                   │
-│  • Export/Import .regieson (zip)                            │
-│  • Download URL + yt-dlp (cancel token, progress events)    │
-│  • Mode Spectacle (WASAPI Win / NSUserNotif macOS / Linux)  │
-│  • Migration schéma legacy → actuel                         │
-└─────────────────────────────────────────────────────────────┘
-                        │
-                        ▼
-              [FS local + réseau + yt-dlp sidecar]
+┌───────────────────────────────────────────────────────────────┐
+│ Frontend React 19 + TypeScript (Vite)                         │
+│  App.tsx ── HomePage (récents, création, import)              │
+│         └─ ProjectEditor ── NumeroCard × N ── AudioItem       │
+│                          │                  └─ PauseTrack     │
+│                          └─ PlayerBar                          │
+│  hooks : usePlayer, useSettings, useRecentProjects,           │
+│          useRecentNumeros, useUpdater, useBattery,            │
+│          useAudioDurations, useModal                          │
+│  lecture : <audio> alimenté en flux par le protocole asset    │
+└───────────────────────────────────────────────────────────────┘
+                 │ invoke() / listen()          │ asset://
+                 ▼                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ Backend Rust + Tauri 2 (src-tauri/src/)                       │
+│  lib.rs        projets, fichiers audio, scope asset, run()    │
+│  types.rs      modèle de données + migration de l'ancien      │
+│                schéma                                         │
+│  archive.rs    export / import .regieson et .regiesonnumero   │
+│  cloud.rs      partage et import par code (Litterbox)         │
+│  download.rs   URL directe, yt-dlp, mise à jour de yt-dlp     │
+│  file_assoc.rs ouverture par double-clic                      │
+│  show_mode.rs  mode spectacle : notifications système         │
+│  sleep_guard.rs mode spectacle : blocage de la mise en veille │
+│  audio_session.rs  nom de la session audio (Windows)          │
+│  battery.rs    état de la batterie                            │
+│  error.rs      AppError { code, detail, params }              │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Stack
@@ -53,410 +51,241 @@ Application desktop (Tauri 2) de pilotage audio pour spectacles cabaret. Le rég
 | Couche | Choix |
 |---|---|
 | Fenêtre native | Tauri 2 |
-| UI | React 19, TypeScript ~5.8, Vite 7 |
-| State | hooks custom + prop drilling (pas de Redux/Zustand) |
-| Audio playback | `HTMLAudioElement` + `URL.createObjectURL` sur des blobs renvoyés par `read_audio_file` |
-| Icônes | `lucide-react` |
-| Drag & drop | `@dnd-kit/core` + `sortable` |
-| Updater | `tauri-plugin-updater` (signatures minisign) |
-| Téléchargements | `reqwest` (rustls-tls) + sidecar `yt-dlp` |
-| Archive projet | `zip` crate (deflate) |
-| Tests front | Vitest (pas de tests Rust) |
-| Audio système | `windows-rs` 0.58 (WASAPI) — dépendance target-specific Windows |
-
-> **Note** : `howler` et `@types/howler` sont présents dans `package.json` mais **non utilisés** dans le code actuel (la lecture se fait via HTML5 `<audio>` natif). Candidats à suppression.
+| UI | React 19, TypeScript, Vite 7 |
+| State | hooks custom + prop drilling (pas de Redux ni de Zustand) |
+| Traduction | i18next + react-i18next, outillage i18next-cli (extraction, types, lint) |
+| Lecture audio | `HTMLAudioElement`, source `convertFileSrc(<projet>/musiques/<fichier>)` |
+| Forme d'onde | wavesurfer.js + plugin regions (réglages d'une piste) |
+| Icônes | lucide-react |
+| Glisser-déposer | @dnd-kit (souris et clavier) |
+| Mise à jour | tauri-plugin-updater, signatures minisign |
+| Réseau | reqwest 0.12 (rustls) + sidecar yt-dlp |
+| Archives | zip 4 (entrées audio stockées, sans recompression) |
+| Tests | Vitest (jsdom pour les hooks) et `cargo test` |
 
 ---
 
 ## 2. Modèle de données
 
-Défini à la fois côté Rust ([src-tauri/src/lib.rs:55-104](src-tauri/src/lib.rs#L55-L104)) et TypeScript ([src/types.ts](src/types.ts)). Les deux **doivent rester synchronisés**.
-
-### Schéma actuel
+Défini côté Rust dans [types.rs](src-tauri/src/types.rs) et côté TypeScript dans [types.ts](src/types.ts). Les deux doivent rester synchronisés ; les types TypeScript font foi pour le format JSON.
 
 ```ts
 interface AudioFile {
   type: "audio";
   id: string;
-  filename: string;       // nom du fichier dans musiques/
-  original_name: string;  // snake_case — pas renommé côté TS
+  filename: string;       // nom du fichier dans musiques/ (UUID + extension)
+  original_name: string;  // snake_case : pas de rename serde
   volume: number;         // 0–100
-  startTime?: number;     // camelCase via serde rename
+  startTime?: number;     // secondes, camelCase via serde rename
   endTime?: number;
   fadeIn?: number;
   fadeOut?: number;
-  cue?: string;           // "top de départ" — indication pour le régisseur (accepte "note" en lecture pour rétrocompat)
+  cue?: string;           // top de départ ; "note" est accepté en lecture
 }
 
 interface PauseItem {
   type: "pause";
   id: string;
-  cue?: string;           // "top de départ"
+  cue?: string;
+  duration?: number;      // pause minutée : avance seule au bout du délai
 }
 
-type PlaylistItem = AudioFile | PauseItem;
-type NumeroType = "numero" | "entracte" | "presentation";
+type NumeroType = "numero" | "entracte" | "presentation";  // valeurs persistées, jamais traduites
 
-interface Numero {
-  id: string;
-  type: NumeroType;
-  name: string;
-  items: PlaylistItem[];  // piste ou pause intercalée
-}
-
-interface Project {
-  name: string;
-  path: string;           // dossier sur le disque
-  numeros: Numero[];
-  singleNumero?: boolean; // true = numéro isolé (numero.json, export .regiesonnumero)
-}
+interface Numero { id: string; type: NumeroType; name: string; items: (AudioFile | PauseItem)[] }
+interface Project { name: string; path: string; numeros: Numero[]; singleNumero?: boolean }
 ```
 
-### Convention serde critique
-
-Les champs Rust en `snake_case` sont renommés en `camelCase` côté JSON **un par un** via `#[serde(rename = "…")]`. Les champs non renommés (ex. `original_name`) **restent** en `snake_case` côté TypeScript. Les types TS sont la source de vérité.
-
-### Migration legacy
-
-[`migrate_project`](src-tauri/src/lib.rs#L130) détecte l'ancien schéma (`audio_files[]` à la racine du numéro) et le convertit en `items[]`. Les types `LegacyAudioFile`, `LegacyNumero`, `LegacyProject` ([src-tauri/src/lib.rs:106-128](src-tauri/src/lib.rs#L106-L128)) servent uniquement à la désérialisation de l'ancien format.
+**Migration** : `migrate_project` lit tout fichier de projet. Il convertit l'ancien schéma (`audio_files[]` dans chaque numéro) en `items[]`, et accepte `note` comme ancien nom de `cue`. Ses cas sont couverts par les tests de `types.rs`.
 
 ---
 
-## 3. Backend Rust ([src-tauri/src/lib.rs](src-tauri/src/lib.rs))
+## 3. Backend
 
-Tout le backend tient dans un seul fichier (~850 lignes). Pas de découpage en modules.
+### 3.1 Commandes Tauri
 
-### 3.1 Entrée et configuration
+Enregistrées dans `run()` ([lib.rs](src-tauri/src/lib.rs)). Toute commande qui lit ou écrit beaucoup, ou qui ouvre un dialogue `blocking_*`, est `#[tauri::command(async)]` : une commande synchrone tourne sur le thread principal et figerait l'interface.
 
-| Symbole | Rôle |
+| Domaine | Commandes |
 |---|---|
-| [`run`](src-tauri/src/lib.rs#L827) | Point d'entrée, configure les plugins Tauri et enregistre les commandes. Appelle `configure_wsl2_audio()` en amont. |
-| [`configure_wsl2_audio`](src-tauri/src/lib.rs#L819) | Workaround WSL2 (setup env audio). |
-| `main.rs` | Appelle simplement `regie_son_lib::run()`. |
-| `build.rs` | Glue `tauri_build::build()`. |
+| Projets | `get_default_projects_dir`, `get_default_numeros_dir`, `create_project`, `open_project`, `save_project`, `create_numero`, `open_numero`, `save_numero` |
+| Fichiers audio | `pick_folder`, `pick_audio_files`, `copy_audio_file`, `delete_audio_file`, `verify_project`, `cleanup_orphan_files`, `read_audio_file` |
+| Archives | `pick_*_file` / `save_*_file`, `export_project`, `export_numero`, `import_project`, `import_numero_standalone`, `import_numero_into_project` |
+| Double-clic | `auto_import_regieson`, `auto_import_regiesonnumero`, `take_pending_open_file` |
+| Cloud | `share_project_on_cloud`, `share_numero_on_cloud`, `import_project_from_cloud`, `import_numero_from_cloud`, `import_numero_from_cloud_into_project` |
+| Téléchargements | `download_audio_from_url`, `download_youtube_audio`, `cancel_download`, `get_yt_dlp_version`, `update_yt_dlp` |
+| Système | `set_show_mode`, `get_battery_status` |
 
-### 3.2 Commandes Tauri exposées
+Les erreurs sont des `AppError { code, detail?, params? }` traduites par le frontend (`translateError`). Voir CLAUDE.md, section « Erreurs Rust ».
 
-Enregistrées dans [`invoke_handler!`](src-tauri/src/lib.rs#L833) :
+### 3.2 Accès aux fichiers audio (protocole asset)
 
-| Commande | Rôle |
-|---|---|
-| `get_default_projects_dir` | Dossier par défaut (`~/Documents/Régie Son`). |
-| `pick_folder`, `pick_audio_files` | Dialogs natifs. Fallback `zenity` sur Linux (`pick_folder_zenity`, `pick_audio_files_zenity`) pour contourner les limites des dialogs Tauri. |
-| `create_project` | Crée le dossier + `musiques/` + projet vide. |
-| `open_project` | Lit `projet.json`, applique `migrate_project`, renvoie un `Project`. |
-| `save_project` | Sérialise + écrit atomiquement. |
-| `copy_audio_file` | Copie un fichier dans `musiques/`, déduplication par `safe_filename`. |
-| `delete_audio_file` | Supprime un fichier physique. |
-| `verify_project` | Renvoie `VerifyResult` avec fichiers manquants / orphelins. |
-| `cleanup_orphan_files` | Supprime les fichiers non référencés. |
-| `pick_regieson_file` / `save_regieson_file` | Dialogs spécifiques à l'extension `.regieson`. |
-| `export_project` | Zippe le dossier projet en `.regieson`. |
-| `import_project` | Dézippe un `.regieson` dans un dossier destination, ouvre le projet. |
-| `read_audio_file` | Lit un fichier binaire et le renvoie en `tauri::ipc::Response` (pour créer un blob côté front). |
-| `download_audio_from_url` | Télécharge un audio via HTTP avec `reqwest`, stream en chunks. |
-| `download_youtube_audio` | Invoque le sidecar `yt-dlp` (avec progression), extrait le fichier final. |
-| `cancel_download` | Annule un download en cours via `CancelToken`. |
-| `set_show_mode` | Active/désactive le mode spectacle (mute notifications système). |
-| `get_default_numeros_dir` | Dossier par défaut pour les numéros isolés (`~/Documents/Numéros`). |
-| `create_numero` | Crée un dossier numéro isolé : JSON `numero.json` avec 1 `Numero` vide + `singleNumero: true`. |
-| `open_numero` | Lit `numero.json` dans un dossier. |
-| `save_numero` | Sauvegarde atomique (alias sémantique de `save_project` — le nom de fichier est choisi via `singleNumero`). |
-| `pick_regiesonnumero_file` / `save_regiesonnumero_file` | Dialogs natifs pour `.regiesonnumero`. |
-| `export_numero` | Zippe un dossier numéro en `.regiesonnumero`. |
-| `import_numero_standalone` | Dézippe un `.regiesonnumero` en dossier éditable, force `singleNumero: true`. |
-| `import_numero_into_project` | Copie les audios d'un `.regiesonnumero` dans `projet/musiques/`, régénère les UUIDs et l'ID du numéro, ajoute à `project.numeros`, sauvegarde. |
-| `auto_import_regieson` / `auto_import_regiesonnumero` | Décompresse une archive vers un dossier auto-calculé (`{defaultDir}/{nom-archive}` avec suffixe `-2`, `-3` si collision) et renvoie le `Project`. Utilisé par l'ouverture via double-clic sur un fichier associé. |
-| `take_pending_open_file` | Consume le chemin du fichier passé en argument CLI au démarrage (si l'app a été lancée via double-clic). Appelée par le front au mount. |
+`assetProtocol.scope` est vide dans [tauri.conf.json](src-tauri/tauri.conf.json). `grant_audio_access(project_dir)` autorise le seul dossier `<projet>/musiques`, sans récursion, pour chaque projet remis au frontend. Elle est appelée depuis `open_project_from_file` (ouverture, imports, double-clic, cloud), `create_project` et `create_numero`.
 
-### 3.3 Téléchargements annulables
+**Règle** : tout nouveau chemin qui renvoie un `Project` au frontend doit passer par l'une de ces fonctions, sinon rien ne se lit. Le test `every_project_handed_to_the_frontend_is_granted_to_the_player` la vérifie.
 
-Pattern clé pour les downloads concurrents :
+`read_audio_file`, qui ne sert plus qu'à la forme d'onde, n'accepte qu'un fichier situé directement dans un dossier `musiques/` autorisé.
 
-- [`CancelToken`](src-tauri/src/lib.rs#L430) — flag atomique + `tokio::sync::Notify` pour le `wait()`.
-- [`cancel_registry`](src-tauri/src/lib.rs#L448) — `&'static Mutex<HashMap<String, Arc<CancelToken>>>` singleton.
-- [`DownloadGuard`](src-tauri/src/lib.rs#L453) — RAII : insert dans le registry à la création, `drop()` retire automatiquement.
-- [`cancel_download`](src-tauri/src/lib.rs#L473) — retrouve un token par ID et trigger `cancel()`.
-- [`cleanup_partial_files`](src-tauri/src/lib.rs#L479) — nettoie les fichiers partiels après annulation.
+### 3.3 Écriture des projets
 
-### 3.4 yt-dlp sidecar
+`save_project_to_disk` écrit d'abord `projet.json.tmp`, avec `sync_all`, puis le renomme sur `projet.json`. `.bak1` est une **copie**, jamais un renommage, pour que le fichier existe à tout instant. La rotation `.bak1` → `.bak3` a lieu au plus toutes les 10 minutes. `open_project_from_file` retombe sur `.bak1` si le fichier principal manque ou est illisible. Un verrou sérialise les écritures, puisque les imports sauvegardent hors du thread principal.
 
-- [`find_yt_dlp`](src-tauri/src/lib.rs#L408) — cherche le binaire sidecar bundlé (`binaries/yt-dlp` dans `externalBin`).
-- [`silent_command`](src-tauri/src/lib.rs#L398) — wrapper `Command::new` qui ajoute `CREATE_NO_WINDOW` sur Windows (évite le flash de la console).
-- [`YtDlpProgress`](src-tauri/src/lib.rs#L396) — struct émise en événement `yt-dlp-progress` côté front via `app.emit(…)`. Le frontend écoute via `listen()` dans un `useEffect`.
+Créer ou importer dans un dossier qui contient déjà `projet.json` ou `numero.json` est refusé (`project.alreadyExists`).
 
-### 3.5 Mode Spectacle (notifications système)
+### 3.4 Archives
 
-[`set_show_mode`](src-tauri/src/lib.rs#L706) appelle `set_show_mode_impl`, décliné **par plateforme** via `#[cfg(target_os = …)]` :
+- **Export** : `projet.json` est lu et validé avant de toucher la destination. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
+- **Import** : `entry_target` n'accepte que `projet.json`, `numero.json` et `musiques/<fichier>`, et ignore le reste. Un nom qui sortirait du dossier fait échouer l'import : `..`, lettre de lecteur, flux NTFS, barre oblique inverse. Plafonds : 500 Mo par piste, 16 Mo par JSON, 16 Go par archive.
 
-| OS | Ligne | Approche |
-|---|---|---|
-| Windows | [711](src-tauri/src/lib.rs#L711) | WASAPI via `windows-rs` — mute la session `SystemSounds` (PID 0). Nécessite que la session existe (sinon produire un son système au moins une fois). `PresentationSettings.exe` est un no-op sur Win11 → pas utilisé. |
-| macOS | [778](src-tauri/src/lib.rs#L778) | NSUserNotification Focus. |
-| Linux | [800](src-tauri/src/lib.rs#L800) | Best-effort via commandes shell. |
-| Autres | [813](src-tauri/src/lib.rs#L813) | Fallback no-op (`_active: bool`). |
+### 3.5 Téléchargements
 
-### 3.6 Écritures atomiques
+- **URL directe** : une page web ou un JSON est refusé, et rien n'est écrit tant que les premiers octets ne sont pas reconnus comme de l'audio. Le nom de fichier est décodé en UTF-8 et l'extension passe par une liste blanche.
+- **yt-dlp** : l'URL est passée après `--` et doit être en http(s). La phase de téléchargement s'annule par `cancel_download` (`CancelToken` + `DownloadGuard`), et la progression part dans l'événement `yt-dlp-progress`.
+- **Délais** : un transfert échoue s'il est bloqué (15 s pour se connecter, 60 s sans données), pas s'il est lent.
+- **Mise à jour de yt-dlp** : `update_yt_dlp` compare la dernière version publiée à la version installée. Si elle est plus récente, il télécharge le binaire et `SHA2-256SUMS` du même tag, vérifie l'empreinte, puis l'installe. Un verrou global empêche deux mises à jour simultanées.
+- **Sidecar embarqué** : sa version est fixée par `YTDLP_VERSION` dans le workflow de release. Sous Linux, c'est la version Python de yt-dlp : elle demande `python3` sur la machine.
 
-[`save_project_to_disk`](src-tauri/src/lib.rs#L690) écrit d'abord `projet.json.tmp` puis `fs::rename` vers `projet.json`. Atomique sur Windows (MOVEFILE_REPLACE_EXISTING) et Unix. Pattern à reproduire pour toute écriture critique.
+### 3.6 Mode spectacle
 
-### 3.7 Helpers
+`set_show_mode` est asynchrone, sérialisé par un verrou, et mémorise son état en Rust. Il tente toujours ses deux volets et renvoie leurs erreurs séparément (`Vec<AppError>`).
 
-- [`safe_filename`](src-tauri/src/lib.rs#L10) — sanitize + déduplique un nom.
-- [`parse_content_disposition_filename`](src-tauri/src/lib.rs#L17) — extrait le filename d'un header HTTP lors des downloads URL.
-- [`default_volume`](src-tauri/src/lib.rs#L52) — renvoie `100`, utilisé par le `#[serde(default = …)]` sur `AudioFile::volume`.
+| Volet | Windows | macOS | Linux |
+|---|---|---|---|
+| Notifications ([show_mode.rs](src-tauri/src/show_mode.rs)) | coupe la session WASAPI SystemSounds | macOS 11 et moins : `defaults` ; macOS 12 et plus : `showMode.macosManual` (réglage Focus à faire à la main) | GNOME : `gsettings show-banners` ; autres bureaux : `showMode.desktopUnsupported` |
+| Veille ([sleep_guard.rs](src-tauri/src/sleep_guard.rs)) | `SetThreadExecutionState` sur un thread parqué | `caffeinate -w <pid>` | `systemd-inhibit … cat` |
+
+Le réglage d'avant est relu à l'activation et restauré à la désactivation, ainsi qu'à la fermeture de l'application (`release_on_exit`). Un marqueur dans le dossier de données de l'application permet de le restaurer au lancement suivant après un crash. Le blocage de veille se relâche tout seul si le processus meurt.
 
 ---
 
 ## 4. Frontend
 
-### 4.1 Entrée et orchestration
+### 4.1 Orchestration
 
-- [src/main.tsx](src/main.tsx) — bootstrap React (`createRoot`).
-- [src/App.tsx](src/App.tsx) — switch `HomePage` ↔ `ProjectEditor` selon `project === null`. Possède l'état global : `project`, `showSettings`, recents, settings, updater state. Affiche `UpdateBanner` en haut + `SettingsModal` en overlay.
+- [App.tsx](src/App.tsx) bascule entre `HomePage` et `ProjectEditor`. `ProjectEditor` porte `key={project.path}`, donc chaque projet ouvert repart d'un éditeur neuf. App parle à l'éditeur par un `EditorHandle` (`flushSave`, `leaveShowMode`, `importNumeroFile`), ce qui permet d'ouvrir un autre fichier sans perdre de modification.
+- [ProjectEditor.tsx](src/components/ProjectEditor.tsx) porte la sauvegarde, l'historique, les raccourcis, le mode spectacle, le preflight, l'export et le partage.
+  - **Sauvegarde** : `flushSave` sérialise les écritures (différées de 600 ms). Elle est appelée à la fermeture, au démontage, à la fermeture de la fenêtre, et avant un export ou un import.
+  - **Historique** : annuler et rétablir sur 50 niveaux, avec des boutons dans l'en-tête et une notification « Annuler » après une suppression.
+  - **Mode spectacle** : il verrouille l'édition (`editable = editMode && !showMode`), mais laisse le volume réglable.
 
-### 4.2 Hooks custom
+### 4.2 Hooks et modules
 
-| Hook | Responsabilité | Notes |
-|---|---|---|
-| [`usePlayer`](src/usePlayer.ts) | Moteur de lecture. ~340 lignes. | Voir section 5. |
-| [`useSettings`](src/useSettings.ts) | `Settings` (volume général, device audio) persisté dans `localStorage` sous la clé `KEY`. | `DEFAULT` + `load()` pour hydratation. |
-| [`useRecentProjects`](src/useRecentProjects.ts) | Liste des projets récents (nom + path + `last_opened_at`). | Max `MAX` entrées, LRU, persisté en `localStorage`. |
-| [`useUpdater`](src/useUpdater.ts) | État updater (`checking`/`available`/`downloading`/`ready`/`error`), actions `install`/`dismiss`/`checkUpdate`. | Consomme `@tauri-apps/plugin-updater`. |
-
-### 4.3 Utilitaires purs (testés)
-
-- [src/playerNav.ts](src/playerNav.ts) — [`getNextContext`](src/playerNav.ts#L13) calcule la prochaine piste à jouer en tenant compte du type de numéro, pauses, fin de playlist. Testé par [src/playerNav.test.ts](src/playerNav.test.ts) (26 cas).
-- [src/mime.ts](src/mime.ts) — `MIME_MAP` + `audioMimeType(filename)` pour créer le bon `type` sur les blobs.
-- [src/friendlyError.ts](src/friendlyError.ts) — `PATTERNS` + `friendlyError(raw)` convertit les erreurs Rust brutes en messages utilisateur français.
-
-### 4.4 Composants
-
-| Composant | Rôle |
+| Module | Rôle |
 |---|---|
-| [HomePage](src/components/HomePage.tsx) | Accueil : liste des projets récents, boutons ouvrir/créer/importer/réglages. Contient `CreateProjectModal` interne + helper `slugify`. |
-| [ProjectEditor](src/components/ProjectEditor.tsx) | Vue projet. Gère les numéros (ajout, suppression, réordonnancement dnd), intègre `PlayerBar` + `usePlayer`. Helper `newNumero(type, index)`. |
-| [NumeroCard](src/components/NumeroCard.tsx) | Une carte "numéro" avec son nom, ses items (audios/pauses). Surface l'état de lecture (playerPosition, isPlaying, playerFade, missingFile). |
-| [AudioItem](src/components/AudioItem.tsx) | Une piste dans un numéro : bouton play, nom, état actif/playing/missing, fade en cours. |
-| [PauseTrack](src/components/PauseTrack.tsx) | Un slot "pause" entre deux pistes (top de départ optionnel). |
-| [PlayerBar](src/components/PlayerBar.tsx) | Barre de contrôle bas d'écran : play/pause, next, stop, seek. Helper `formatTime(secs)`. |
-| [AddAudioSourceModal](src/components/AddAudioSourceModal.tsx) | Modal multi-vue (`View` = local / url / youtube / pause). Contient `DownloadForm` réutilisable avec progression. |
-| [AudioSettingsModal](src/components/AudioSettingsModal.tsx) | Édition des métadonnées d'une piste (startTime, endTime, fadeIn, fadeOut, volume). Helpers `formatTime` / `parseTime` / `parseDuration`. |
-| [SettingsModal](src/components/SettingsModal.tsx) | Paramètres globaux : sortie audio (`AudioDevice` via `navigator.mediaDevices.enumerateDevices`), updater manuel. |
-| [UpdateBanner](src/components/UpdateBanner.tsx) | Bandeau haut quand un update est dispo/téléchargé. |
+| [usePlayer](src/usePlayer.ts) | Moteur de lecture (section 5). |
+| [playerNav](src/playerNav.ts) | Seule définition de « ce qui vient après » (`firstItemPosition`, `nextItemPosition`), partagée par Suivant, Espace et l'aperçu ; `findItemPosition` retrouve la piste courante par son id. |
+| [useAudioDurations](src/useAudioDurations.ts) | Mesure la durée de chaque fichier par ses métadonnées. Relancé seulement quand la liste des fichiers change. |
+| [preflight](src/preflight.ts) + [preflightMessage](src/preflightMessage.ts) | Vérification avant spectacle : codes d'issue, texte à l'affichage. |
+| [useModal](src/useModal.ts) + [Modal](src/components/Modal.tsx) | Pile des modales : Échap ferme la plus haute, `isModalOpen()` coupe les raccourcis du lecteur, focus piégé et rendu. |
+| [Toast](src/components/Toast.tsx) | Messages non bloquants, qui remplacent `alert()` : un `alert()` fige le JavaScript de la webview, donc les fondus. |
+| [keyBindings](src/keyBindings.ts) | Raccourcis configurables. L'éditeur ignore la répétition automatique, sauf pour l'avance et le recul. |
+| [trackTimes](src/trackTimes.ts), [slug](src/slug.ts), [duration](src/duration.ts), [mime](src/mime.ts) | Utilitaires purs, testés. |
+| [errorMessage](src/errorMessage.ts) | `translateError` pour les `AppError`. |
+| useSettings, useRecentProjects, useRecentNumeros, useUpdater, useBattery | Réglages, listes récentes, mise à jour (inaccessible pendant le spectacle), batterie. |
 
-### 4.5 CSS
+### 4.3 CSS
 
-Fichiers séparés dans [src/styles/](src/styles/) (audio-item, base, buttons, editor, home, inputs, modal, numero, player, settings-modal). Importés via [src/App.css](src/App.css). **Variables CSS** dans `:root` (ex. `var(--accent)`). Chaîne de hauteur critique : `html, body, #root` → `height: 100%; overflow: hidden` — toute dérogation casse le scroll de `.editor-body`.
+Fichiers dans [src/styles/](src/styles/), importés par [App.css](src/App.css). Les variables sont dans `:root`, dans `base.css`. La chaîne `html, body, #root` → `height: 100%; overflow: hidden` est critique : toute dérogation casse le défilement de `.editor-body`. Les modales défilent en interne.
 
 ---
 
-## 5. Moteur de lecture ([src/usePlayer.ts](src/usePlayer.ts))
+## 5. Moteur de lecture ([usePlayer.ts](src/usePlayer.ts))
 
-Cœur de l'app. Un seul hook qui gère tout l'état audio.
+`usePlayer(project, audioDeviceId)` renvoie `{ state, playAt, togglePlay, next, stop, seek }`. `state` contient :
+- `position` : `{ numeroIndex, audioIndex }`, dérivée à chaque rendu de l'id de la piste courante ;
+- `isPlaying` ;
+- `progress`, relatif à l'extrait `[startTime, endTime]` ;
+- `fade` ;
+- `audioError` ;
+- `outputError`.
 
-### 5.1 Types exposés
+Principes :
 
-```ts
-type PlayerPosition  = { numeroIndex: number; itemIndex: number };
-type PlayerProgress  = { current: number; total: number };
-type FadeState       = "in" | "out" | null;
-interface PlayerState {
-  position: PlayerPosition | null;
-  isPlaying: boolean;
-  progress: PlayerProgress;
-  fade: FadeState;
-  missingFile: string | null;
-}
-```
+- **Piste suivie par id**, pas par index : éditer la liste pendant la lecture ne déplace pas la piste courante. Si elle est supprimée, Suivant reprend à son ancienne place.
+- **Garde de version** : `loadVersionRef` est incrémenté par `playAt`, `stop`, le passage sur une pause et le démontage. Une lecture dont la version a changé ne démarre pas.
+- **Lecture en flux** : `audio.src = convertFileSrc(...)`, sans transfert IPC ni copie en mémoire.
+- **Minuteries plutôt que `requestAnimationFrame`** : les fondus et les pauses minutées sont calculés sur l'heure réelle par `setInterval`. Un `rAF` s'arrête quand la fenêtre est masquée. La fenêtre est aussi configurée pour ne pas être bridée en arrière-plan (`backgroundThrottling`, options de WebView2).
+- **Fondus** : le fondu de sortie automatique commence `fadeOut` secondes avant `endTime` (ou la fin du fichier). Une fin naturelle enchaîne sans blanc. Pause et reprise font un fondu de 150 ms, et Stop de 250 ms.
+- **Fin du spectacle** : le lecteur s'arrête proprement.
+- **Sortie audio** : `setSinkId` est réappliqué à chaque changement et à chaque `devicechange`, et un échec remplit `outputError`. `setSinkId` n'existe que dans Chromium (WebView2) ; ailleurs, le preflight signale que le choix de sortie est ignoré.
+- **Patterns** : ref-sync (`stateRef`, `projectRef`) pour des callbacks stables, et références croisées (`playAtRef`, `advanceRef`, `stopRef`) pour les listeners installés au montage.
 
-### 5.2 API
-
-`usePlayer(project, audioDeviceId)` renvoie `{ state, playAt, togglePlay, next, stop, seek }`.
-
-Helpers purs exposés (navigation) :
-
-- `firstAudioPosition(project)` — premier audio playable du projet.
-- `firstItemPosition(project)` — premier item (audio ou pause).
-- `nextItemPosition(project, pos)` — item suivant linéaire.
-- `nextAudioPosition(project, pos)` — prochain **audio** (saute les pauses).
-
-### 5.3 Patterns critiques
-
-**Version guard pour les chargements async** — `loadVersionRef` est incrémenté à chaque `playAt()`. Chaque callback `.then()` vérifie `version !== loadVersionRef.current` et bail si stale. Évite qu'un chargement tardif n'écrase une piste plus récente. Le cleanup du hook incrémente aussi `loadVersionRef.current++` pour invalider tout chargement en vol au démontage.
-
-**Refs synchronisés pour callbacks stables** — `useCallback(…, [])` avec `stateRef.current`/`projectRef.current` mis à jour à chaque render. Les fonctions (`next`, `togglePlay`, etc.) lisent toujours le state courant sans re-render.
-
-**Cross-refs pour rompre les cycles** — `nextRef.current = next` et `playAtRef.current = playAt` permettent aux callbacks définis tôt (ex. listener `ended` configuré au montage) d'appeler ceux définis plus tard.
-
-**Flux de lecture typique** :
-1. `playAt(pos)` → incrémente version, appelle `read_audio_file`, crée un blob + object URL, set `audio.src`, set `audio.setSinkId(audioDeviceId)` si dispo.
-2. Écoute `timeupdate` → met à jour `progress`, déclenche `fadeOut` si `endTime` / `fadeOut` approche.
-3. Événement `ended` → appelle `nextRef.current()` qui choisit via `getNextContext` (pause intercalaire ? audio suivant ? fin ?).
-
-### 5.4 Compatibilité audio
-
-- `audio.setSinkId(deviceId)` : Chrome/Edge (WebView2 sur Windows) uniquement. Silent fail ailleurs.
-- `read_audio_file` bufferise en RAM — pour des très gros fichiers ce pattern pourrait être remplacé par du streaming direct via le protocole asset.
+Les tests ([usePlayer.test.tsx](src/usePlayer.test.tsx)) tournent sous jsdom avec un faux élément `<audio>`. Ils couvrent Stop pendant un chargement, un échec de chargement suivi de Suivant, une édition autour de la piste courante, la fin du spectacle, une pause minutée, la progression relative et le fondu avant `endTime`.
 
 ---
 
 ## 6. Configuration Tauri
 
-### 6.1 [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json)
-
-| Champ | Valeur |
-|---|---|
-| `productName` | "Régie Son" |
-| `identifier` | `com.pcomble.regie-son` |
-| `devUrl` | `http://localhost:1420` |
-| `security.csp` | `null` (désactivée) |
-| `security.assetProtocol` | `enable: true`, `scope: ["**"]` — permet de servir n'importe quel fichier local via le protocole asset |
-| `plugins.updater.pubkey` | Clé publique minisign (base64, dans le fichier) |
-| `plugins.updater.endpoints` | `https://github.com/powange/regie-son/releases/latest/download/latest.json` |
-| `bundle.createUpdaterArtifacts` | `true` |
-| `bundle.externalBin` | `["binaries/yt-dlp"]` — le sidecar est injecté par OS durant la CI |
-
-> ⚠️ **La clé de signature minisign ne doit jamais être régénérée** — toute nouvelle paire casse l'updater pour les utilisateurs existants.
-
-### 6.2 [src-tauri/capabilities/default.json](src-tauri/capabilities/default.json)
-
-Permissions accordées à la fenêtre `main` :
-- `core:default`
-- `opener:default` (ouvrir liens externes)
-- `dialog:default` + `dialog:allow-open`
-- `updater:default`
-
-### 6.3 [src-tauri/Cargo.toml](src-tauri/Cargo.toml)
-
-Dépendances clés :
-- `tauri` 2 + plugins (`opener`, `dialog`, `updater`, `process`)
-- `reqwest` 0.12 — feature `rustls-tls` uniquement (pas d'openssl, évite les soucis de build cross-platform)
-- `zip` 2 — feature `deflate` uniquement
-- `tokio` 1 — features `process`, `sync`, `time`, `macros`
-- `dirs` 6 — résolution `~/Documents` etc.
-- Target Windows uniquement : `windows` 0.58 avec `Win32_Media_Audio`, `Win32_System_Com`, `Win32_Foundation` — pour l'API WASAPI du mode spectacle.
+- **[tauri.conf.json](src-tauri/tauri.conf.json)**
+  - CSP stricte : `script-src 'self'`, `object-src`, `base-uri`, `form-action` et `frame-ancestors` à `'none'`.
+  - `assetProtocol.scope` vide (section 3.2).
+  - Fenêtre avec `backgroundThrottling: "disabled"` et les options WebView2 qui désactivent la mise en veille des minuteries.
+  - Updater : `plugins.updater.pubkey` et l'endpoint `latest.json` de la dernière release.
+  - **La clé minisign ne doit jamais être régénérée.**
+- **[capabilities/default.json](src-tauri/capabilities/default.json)**
+  - `core:default` ;
+  - `core:window:allow-destroy`, pour que la fenêtre se ferme après la sauvegarde ;
+  - `dialog:default` ;
+  - `updater:default` ;
+  - `process:allow-restart`, pour relancer après une mise à jour ;
+  - `opener:default`.
+- **[Cargo.toml](src-tauri/Cargo.toml)**
+  - Profil release : LTO, une seule unité de compilation, symboles retirés, `panic = "unwind"` conservé, pour qu'une panique dans une commande ne tue pas l'application en plein spectacle.
+  - `windows` 0.61 et `zip` 4, alignés sur les versions de Tauri.
+  - reqwest reste en 0.12 : passer en 0.13 change le backend TLS.
 
 ---
 
-## 7. Pipeline de release ([.github/workflows/release.yml](.github/workflows/release.yml))
+## 7. CI et release
 
-### Trigger
-Push d'un tag `v*` uniquement — **pas de CI sur push normal**.
-
-### Matrice
-| OS | Target |
-|---|---|
-| `ubuntu-latest` | x86_64-unknown-linux-gnu |
-| `windows-latest` | x86_64-pc-windows-msvc |
-| `macos-latest` | x86_64-apple-darwin |
-| `macos-latest` | aarch64-apple-darwin |
-
-### Étapes clés
-1. Récupère `VERSION` depuis `${{ github.ref_name }}`.
-2. Patch la version dans `tauri.conf.json` **et** `Cargo.toml`.
-3. Download de `yt-dlp` pour la plateforme cible → placé dans `src-tauri/binaries/` (sidecar).
-4. `npm ci` + build Tauri.
-5. Signature des artefacts updater via les secrets :
-   - `TAURI_SIGNING_PRIVATE_KEY`
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-6. Publication release GitHub + `latest.json` consommé par `tauri-plugin-updater`.
+- **[ci.yml](.github/workflows/ci.yml)**, sur chaque push et chaque PR :
+  - frontend : `i18n:check`, types i18n à jour, ESLint (règles des hooks React), tests, build Vite ;
+  - Rust sous Linux, Windows et macOS : `cargo fmt --check` (sous Linux), `clippy -D warnings`, `cargo test`.
+  - C'est le seul endroit où le code `#[cfg(windows)]` et `#[cfg(macos)]` est compilé avant une release.
+- **[release.yml](.github/workflows/release.yml)**, sur un tag `v*` :
+  1. **Brouillon** : création du brouillon de release.
+  2. **Vérifications** : même contrôle que la CI côté frontend.
+  3. **Builds** : quatre builds signés par minisign. yt-dlp est épinglé et vérifié par SHA-256, et la version est patchée depuis le tag.
+  4. **`finalize`** : renommage des fichiers, contrôle que les quatre plateformes figurent dans `latest.json`, puis publication. S'il manque une plateforme, la release reste en brouillon.
+- **Sécurité du workflow** : les actions sont épinglées par SHA de commit et tenues à jour par [Dependabot](.github/dependabot.yml). Le workflow est en lecture seule, sauf les trois jobs qui créent, remplissent et publient la release.
+- **Deux tags d'affilée** : attendre la fin de la release précédente avant de pousser le tag suivant. Sinon, une release plus ancienne qui se termine après une plus récente redevient la « dernière » pour l'updater.
 
 ---
 
 ## 8. Scripts npm
 
-| Script | Commande | Usage |
-|---|---|---|
-| `dev` | `vite` | Dev server front seul (lancé par Tauri auto en mode dev). |
-| `build` | `tsc && vite build` | Type-check + build frontend. |
-| `preview` | `vite preview` | Preview du build. |
-| `tauri` | `tauri` | Proxy CLI Tauri (ex. `npm run tauri dev`, `npm run tauri build`). |
-| `test` | `vitest run` | Tests unitaires Vitest one-shot. |
-| `test:watch` | `vitest` | Tests en mode watch. |
+| Script | Usage |
+|---|---|
+| `dev` / `build` / `preview` | Vite (`build` = `tsc && vite build`) |
+| `tauri` | CLI Tauri (`npm run tauri dev`, `npm run tauri build`) |
+| `test` / `test:watch` | Vitest, limité à `src/` |
+| `lint` | ESLint sur `src/` |
+| `i18n:extract` / `i18n:types` / `i18n:lint` / `i18n:check` | Catalogues de traduction ; `i18n:types` régénère `src/types/resources.d.ts`, qui est commité |
 
 ---
 
-## 9. Format de fichier projet
+## 9. Formats de fichier
 
 ```
 MonSpectacle/
-├── projet.json          # sérialisation du type Project
+├── projet.json          # Project sérialisé
+├── projet.json.bak1…3   # sauvegardes tournantes
 └── musiques/
-    ├── <uuid>.mp3       # fichiers copiés (nom réécrit via safe_filename)
-    ├── <uuid>.wav
-    └── ...
+    └── <uuid>.<ext>     # fichiers copiés, jamais le nom d'origine
 ```
 
-### Écriture
-Toujours via `save_project_to_disk` — écrit `projet.json.tmp` puis rename atomique.
-
-### Archive portable (`.regieson`)
-Zip complet du dossier projet. Créée par `export_project`, restaurée par `import_project` qui extrait dans un dossier destination et renvoie le `Project` chargé.
-
-### Numéro isolé (`.regiesonnumero`)
-
-Structure identique à un projet mais avec un seul `Numero` et le flag `singleNumero: true` :
-
-```
-MonNumero/
-├── numero.json          # Project sérialisé (singleNumero: true, numeros: [<unique numero>])
-└── musiques/
-```
-
-- **Créé** par `create_numero` depuis la page d'accueil (bouton "Nouveau numéro").
-- **Édité** dans le même `ProjectEditor` que les projets complets, mais en mode simplifié :
-  - Pas de drag handle entre numéros (il n'y en a qu'un).
-  - Pas de bouton "Ajouter un numéro/entracte/présentation".
-  - Pas de bouton "Supprimer" sur le numéro principal.
-  - Bouton d'export pointe vers `.regiesonnumero` (via `export_numero`).
-- **Exporté** en archive `.regiesonnumero` (zip) pour être partagé.
-- **Réimporté** :
-  - Comme **numéro éditable** via `import_numero_standalone` (depuis la page d'accueil).
-  - Comme **nouveau numéro dans un projet existant** via `import_numero_into_project` (bouton dans `ProjectEditor` d'un projet complet). Les UUIDs des items/fichiers et l'ID du numéro sont régénérés pour éviter les collisions, et les fichiers audio sont copiés dans le `musiques/` du projet cible avec de nouveaux noms.
-
-**Ré-utilisation de la machinerie projet** : un numéro isolé *est* un `Project` du point de vue du frontend et de `usePlayer`. Le backend choisit simplement `numero.json` au lieu de `projet.json` dans `save_project_to_disk` via le flag `singleNumero`. Zéro duplication de logique de lecture / sauvegarde / migration.
+Un numéro isolé a la même structure avec `numero.json` et `singleNumero: true`. Il s'édite dans le même `ProjectEditor`, simplifié : pas d'ajout de partie, pas de suppression du numéro. Pour importer un `.regiesonnumero` dans un spectacle, on régénère les ids du numéro et des pistes, et on copie les fichiers sous de nouveaux noms.
 
 ---
 
-## 10. Flux d'erreur
+## 10. Où modifier quoi
 
-Les commandes Rust renvoient `Result<_, String>` — les messages d'erreur sont rédigés **en français** car ils remontent directement à l'utilisateur via les `throw` côté front. [`friendlyError`](src/friendlyError.ts) applique des patterns de rewriting pour les erreurs connues (ex. traduction d'erreurs bas niveau en messages lisibles).
-
----
-
-## 11. Tests
-
-Localisation | Cible
----|---
-[src/friendlyError.test.ts](src/friendlyError.test.ts) | Patterns de ré-écriture d'erreurs.
-[src/mime.test.ts](src/mime.test.ts) | Mapping extension → MIME type.
-[src/playerNav.test.ts](src/playerNav.test.ts) | Logique de navigation entre items (26 cas, largement couvert).
-
-> Pas de tests côté Rust ni e2e Tauri.
-
----
-
-## 12. Gotchas connus
-
-- `PresentationSettings.exe` existe sur Windows 11 mais est **un no-op** — c'est pour ça que le mode spectacle Windows passe désormais par WASAPI.
-- La session `SystemSounds` WASAPI peut ne **pas exister au premier lancement** — l'utilisateur doit alors produire un son système d'abord (notification, beep).
-- `setSinkId` (sélection sortie audio) n'est dispo qu'en Chromium → fonctionne dans WebView2 Windows, peut silent-fail ailleurs.
-- `response.bytes().await` de reqwest buffer tout en mémoire — le code utilise `chunk()` en boucle pour streamer les gros downloads.
-- Les projets existants avec l'ancien schéma (`audio_files[]`) sont migrés automatiquement via `migrate_project` au premier `open_project`.
-- Ne pas faire `git add -A` — ajoute `.vscode/` par accident.
-
----
-
-## 13. Points d'entrée pour modifier le code
-
-| Objectif | Fichier à ouvrir |
+| Objectif | Fichiers |
 |---|---|
-| Ajouter une commande Tauri | [src-tauri/src/lib.rs](src-tauri/src/lib.rs) + enregistrer dans `invoke_handler!` ligne 833 |
-| Changer le format de projet | [src-tauri/src/lib.rs:55-104](src-tauri/src/lib.rs#L55-L104) **et** [src/types.ts](src/types.ts) — prévoir migration dans `migrate_project` |
-| Modifier le moteur de lecture | [src/usePlayer.ts](src/usePlayer.ts) — attention aux patterns version-guard et ref-sync |
-| Ajouter un type de numéro | `NumeroType` dans [src/types.ts](src/types.ts) + Rust `Numero.type` + UI dans [ProjectEditor.tsx](src/components/ProjectEditor.tsx) + logique nav dans [playerNav.ts](src/playerNav.ts) |
-| Personnaliser l'apparence | [src/styles/](src/styles/) — ne pas casser la chaîne `html/body/#root` |
-| Changer le comportement updater | [src/useUpdater.ts](src/useUpdater.ts) + [tauri.conf.json](src-tauri/tauri.conf.json) pour l'endpoint |
-| Ajouter une permission | [src-tauri/capabilities/default.json](src-tauri/capabilities/default.json) |
-| CI/release | [.github/workflows/release.yml](.github/workflows/release.yml) |
+| Ajouter une commande Tauri | Le module concerné dans `src-tauri/src/` + `generate_handler!` dans `run()` ([lib.rs](src-tauri/src/lib.rs)) ; `async` si elle touche au disque ou au réseau |
+| Renvoyer un projet au frontend depuis un nouveau chemin | Passer par `open_project_from_file` ou appeler `grant_audio_access` |
+| Changer le format de projet | [types.rs](src-tauri/src/types.rs) **et** [types.ts](src/types.ts), avec une migration dans `migrate_project` |
+| Modifier la lecture | [usePlayer.ts](src/usePlayer.ts) et [playerNav.ts](src/playerNav.ts), avec leurs tests |
+| Ajouter un message | Catalogues `fr` et `en` puis `npm run i18n:types` ; un code d'erreur Rust va dans `errors.json` |
+| Ajouter une permission | [capabilities/default.json](src-tauri/capabilities/default.json) |
+| Apparence | [src/styles/](src/styles/) ; ne pas casser la chaîne `html/body/#root` |
