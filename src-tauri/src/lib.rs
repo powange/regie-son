@@ -162,10 +162,18 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
     Ok(project)
 }
 
-pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
+fn read_project_file(folder: &Path, filename: &str) -> AppResult<Project> {
     let content =
         fs::read_to_string(folder.join(filename)).map_err(fail("io.readProjectFailed"))?;
     migrate_project(&content, folder.to_string_lossy().to_string())
+}
+
+// A missing or unparsable file falls back to the most recent backup, so an
+// interrupted save never loses the show. The original error wins if the
+// backup is no better.
+pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
+    read_project_file(folder, filename)
+        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))
 }
 
 #[tauri::command]
@@ -326,21 +334,37 @@ fn rotate_backups(dir: &Path, filename: &str) {
     let _ = fs::remove_file(bak(3));
     let _ = fs::rename(bak(2), bak(3));
     let _ = fs::rename(bak(1), bak(2));
+    // Copied, not renamed: the target must exist at every instant, in case
+    // the final rename fails (file held by an antivirus, disk full).
     let current = dir.join(filename);
     if current.exists() {
-        let _ = fs::rename(&current, bak(1));
+        let _ = fs::copy(&current, bak(1));
     }
 }
 
 pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
+    use std::io::Write;
+
     let content = serde_json::to_string_pretty(project).map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);
     let filename = project_json_filename(project);
     let target = dir.join(filename);
     let tmp = dir.join(format!("{}.tmp", filename));
-    fs::write(&tmp, &content).map_err(fail("io.saveFailed"))?;
+    {
+        let mut file = fs::File::create(&tmp).map_err(fail("io.saveFailed"))?;
+        file.write_all(content.as_bytes())
+            .map_err(fail("io.saveFailed"))?;
+        // Without it a power cut after the rename can leave an empty file.
+        file.sync_all().map_err(fail("io.saveFailed"))?;
+    }
     rotate_backups(dir, filename);
     fs::rename(&tmp, &target).map_err(fail("io.saveFailed"))?;
+    // Persist the rename itself. Directories cannot be opened this way on
+    // Windows, where NTFS journals the metadata anyway.
+    #[cfg(unix)]
+    if let Ok(d) = fs::File::open(dir) {
+        let _ = d.sync_all();
+    }
     Ok(())
 }
 
@@ -421,4 +445,75 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("regie-son-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn show(dir: &Path, name: &str) -> Project {
+        Project {
+            name: name.into(),
+            path: dir.to_string_lossy().to_string(),
+            numeros: vec![],
+            single_numero: None,
+        }
+    }
+
+    #[test]
+    fn save_keeps_the_previous_version_as_backup() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "v2"
+        );
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v1"
+        );
+        assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_falls_back_to_the_backup_when_the_file_is_missing() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        fs::remove_file(dir.join("projet.json")).unwrap();
+        let project = open_project_from_file(&dir, "projet.json").unwrap();
+        assert_eq!(project.name, "v1");
+        assert_eq!(project.path, dir.to_string_lossy());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_falls_back_to_the_backup_when_the_file_is_corrupt() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        fs::write(dir.join("projet.json"), "{ trunc").unwrap();
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "v1"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_reports_the_original_error_without_a_backup() {
+        let dir = scratch_dir();
+        fs::write(dir.join("projet.json"), "{ trunc").unwrap();
+        let err = open_project_from_file(&dir, "projet.json").unwrap_err();
+        assert_eq!(err.code, "project.invalidFile");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

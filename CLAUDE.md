@@ -148,7 +148,7 @@ Frontend écoute avec `listen("yt-dlp-progress", …)` dans un `useEffect`. Nett
 
 ### Écritures atomiques
 
-`save_project_to_disk` écrit dans `projet.json.tmp` puis `fs::rename` — atomique sur Windows (MOVEFILE_REPLACE_EXISTING) et Unix. Reproduire ce pattern pour toute écriture critique.
+`save_project_to_disk` écrit dans `projet.json.tmp` (avec `sync_all`) puis `fs::rename` — atomique sur Windows (MOVEFILE_REPLACE_EXISTING) et Unix. La sauvegarde `.bak1` est une **copie**, pas un rename : le fichier cible existe à tout instant, même si le rename final échoue. `open_project_from_file` retombe sur `.bak1` si le fichier principal manque ou est illisible. Reproduire ce pattern pour toute écriture critique.
 
 ### Fermeture silencieuse des subprocess
 
