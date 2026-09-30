@@ -3,5 +3,8 @@
   "installingPercent": "Installing {{percent}}%",
   "available": "Update available — version {{version}}",
   "install": "Install",
-  "dismiss": "Dismiss"
+  "dismiss": "Dismiss",
+  "confirmTitle": "Install the update?",
+  "confirmMessage": "Régie Son will close to install version {{version}}, then restart.",
+  "confirmInstall": "Install and restart"
 }

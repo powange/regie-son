@@ -10,6 +10,7 @@ import ProjectEditor, { EditorHandle } from "./components/ProjectEditor";
 import SettingsModal from "./components/SettingsModal";
 import UpdateBanner from "./components/UpdateBanner";
 import Toast, { ToastData, makeToast } from "./components/Toast";
+import ConfirmModal from "./components/ConfirmModal";
 import { useRecentProjects } from "./useRecentProjects";
 import { useRecentNumeros } from "./useRecentNumeros";
 import { useSettings } from "./useSettings";
@@ -17,7 +18,7 @@ import { useUpdater } from "./useUpdater";
 import "./App.css";
 
 function App() {
-  const { t } = useTranslation(["app"]);
+  const { t } = useTranslation(["app", "updater"]);
   const [project, setProject] = useState<Project | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
@@ -33,6 +34,24 @@ function App() {
   const projectRef = useRef(project);
   projectRef.current = project;
   const editorRef = useRef<EditorHandle>(null);
+
+  // Installing an update restarts the app and cuts the music: impossible
+  // while the show mode is on or a track plays, and confirmed otherwise.
+  const [live, setLive] = useState(false);
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const [confirmInstall, setConfirmInstall] = useState(false);
+
+  function requestInstall() {
+    if (!liveRef.current) setConfirmInstall(true);
+  }
+
+  async function confirmAndInstall() {
+    setConfirmInstall(false);
+    if (liveRef.current) return;
+    if (editorRef.current && !(await editorRef.current.flushSave())) return;
+    await install();
+  }
 
   function handleProjectOpen(p: Project) {
     addRecent(p.name, p.path);
@@ -104,7 +123,9 @@ function App() {
 
   return (
     <div className="app">
-      <UpdateBanner state={updaterState} onInstall={install} onDismiss={dismiss} />
+      {(!live || updaterState.installing) && (
+        <UpdateBanner state={updaterState} onInstall={requestInstall} onDismiss={dismiss} />
+      )}
       {project === null ? (
         <HomePage
           recents={recents}
@@ -126,6 +147,7 @@ function App() {
           onProjectChange={setProject}
           onClose={() => setProject(null)}
           onOpenSettings={() => setShowSettings(true)}
+          onLiveChange={setLive}
         />
       )}
 
@@ -136,7 +158,18 @@ function App() {
           onClose={() => setShowSettings(false)}
           updaterState={updaterState}
           onCheckUpdate={checkUpdate}
-          onInstallUpdate={install}
+          onInstallUpdate={requestInstall}
+          installBlocked={live}
+        />
+      )}
+
+      {confirmInstall && (
+        <ConfirmModal
+          title={t("updater:confirmTitle")}
+          message={t("updater:confirmMessage", { version: updaterState.update?.version ?? "" })}
+          confirmLabel={t("updater:confirmInstall")}
+          onConfirm={() => { void confirmAndInstall(); }}
+          onCancel={() => setConfirmInstall(false)}
         />
       )}
 

@@ -402,6 +402,7 @@ export default interface Resources {
       "title": "Langue"
     },
     "updates": {
+      "blockedDuringShow": "Installation impossible pendant le mode spectacle ou une lecture.",
       "check": "Chercher les mises à jour",
       "checkError": "Erreur de vérification",
       "checking": "Vérification…",
@@ -460,6 +461,9 @@ export default interface Resources {
   },
   "updater": {
     "available": "Mise à jour disponible — version {{version}}",
+    "confirmInstall": "Installer et redémarrer",
+    "confirmMessage": "Régie Son va se fermer pour installer la version {{version}}, puis redémarrer.",
+    "confirmTitle": "Installer la mise à jour ?",
     "dismiss": "Ignorer",
     "install": "Installer",
     "installing": "Installation…",

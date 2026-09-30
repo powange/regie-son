@@ -33,9 +33,10 @@ interface Props {
   updaterState: UpdaterState;
   onCheckUpdate: () => void;
   onInstallUpdate: () => void;
+  installBlocked: boolean;
 }
 
-export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
+export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate, installBlocked }: Props) {
   const { t } = useTranslation(["settings", "common"]);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -287,12 +288,16 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             </button>
 
             {!updaterState.checking && updaterState.update && (
-              <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing}>
+              <button className="btn btn-primary settings-install-btn" onClick={onInstallUpdate} disabled={updaterState.installing || installBlocked}>
                 <ArrowDownCircle size={14} />
                 {updaterState.installing
                   ? updaterState.progress !== null ? `${updaterState.progress}%` : t("settings:updates.installing")
                   : t("settings:updates.install", { version: updaterState.update.version })}
               </button>
+            )}
+
+            {!updaterState.checking && updaterState.update && installBlocked && !updaterState.installing && (
+              <span className="settings-update-status">{t("settings:updates.blockedDuringShow")}</span>
             )}
 
             {!updaterState.checking && !updaterState.update && !updaterState.error && (

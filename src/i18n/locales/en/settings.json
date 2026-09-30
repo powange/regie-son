@@ -36,7 +36,8 @@
     "install": "Install v{{version}}",
     "installing": "Installing…",
     "upToDate": "Up to date",
-    "checkError": "Check failed"
+    "checkError": "Check failed",
+    "blockedDuringShow": "Can't install while show mode is on or a track is playing."
   },
   "ytDlp": {
     "title": "yt-dlp (YouTube downloads)",

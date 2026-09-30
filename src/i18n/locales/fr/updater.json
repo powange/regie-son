@@ -3,5 +3,8 @@
   "installingPercent": "Installation {{percent}}%",
   "available": "Mise à jour disponible — version {{version}}",
   "install": "Installer",
-  "dismiss": "Ignorer"
+  "dismiss": "Ignorer",
+  "confirmTitle": "Installer la mise à jour ?",
+  "confirmMessage": "Régie Son va se fermer pour installer la version {{version}}, puis redémarrer.",
+  "confirmInstall": "Installer et redémarrer"
 }

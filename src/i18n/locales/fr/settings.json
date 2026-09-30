@@ -36,7 +36,8 @@
     "install": "Installer v{{version}}",
     "installing": "Installation…",
     "upToDate": "À jour",
-    "checkError": "Erreur de vérification"
+    "checkError": "Erreur de vérification",
+    "blockedDuringShow": "Installation impossible pendant le mode spectacle ou une lecture."
   },
   "ytDlp": {
     "title": "yt-dlp (téléchargement YouTube)",

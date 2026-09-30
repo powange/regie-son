@@ -54,6 +54,9 @@ interface Props {
   onProjectChange: (p: Project) => void;
   onClose: () => void;
   onOpenSettings: () => void;
+  // True while the show mode is on or a track plays: App then keeps the
+  // update installer, which restarts the app, out of reach.
+  onLiveChange?: (live: boolean) => void;
 }
 
 function newNumero(type: NumeroType, index: number): Numero {
@@ -85,7 +88,7 @@ function filenamesIn(projects: Project[]): Set<string> {
   return names;
 }
 
-export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
+export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings, onLiveChange }: Props) {
   const { t } = useTranslation(["editor", "common"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
@@ -424,6 +427,12 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     if (!showModeRef.current) return;
     try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
   }, []);
+
+  const onLiveChangeRef = useRef(onLiveChange);
+  onLiveChangeRef.current = onLiveChange;
+  const live = showMode || playerState.isPlaying;
+  useEffect(() => { onLiveChangeRef.current?.(live); }, [live]);
+  useEffect(() => () => { onLiveChangeRef.current?.(false); }, []);
 
   useImperativeHandle(ref, () => ({ flushSave, leaveShowMode, importNumeroFile }), [flushSave, leaveShowMode, importNumeroFile]);
 
