@@ -17,7 +17,6 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  NDK_VERSION: "27.0.12077973"
 
 jobs:
   apk:
@@ -35,12 +34,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-
-      - name: Install the NDK
+      # The runner image ships the Android SDK and a recent NDK; the
+      # setup-android action tried to install a package that no longer exists.
+      - name: Use the preinstalled NDK
         run: |
-          sdkmanager "ndk;${NDK_VERSION}"
-          echo "NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=${ANDROID_NDK_LATEST_HOME}" >> "$GITHUB_ENV"
+          echo "Android SDK: ${ANDROID_HOME} · NDK: ${ANDROID_NDK_LATEST_HOME}"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
