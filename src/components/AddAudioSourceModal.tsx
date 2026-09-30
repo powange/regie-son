@@ -45,9 +45,11 @@ function DownloadForm({ label, placeholder, hint, withProgress, onSubmit, onBack
   useEffect(() => {
     if (!downloading || !withProgress) return;
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<YtDlpStep>("yt-dlp-progress", (e) => setStep(e.payload))
-      .then((fn) => { unlisten = fn; });
-    return () => { unlisten?.(); };
+      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
+      .catch((err) => console.error("listen yt-dlp-progress:", err));
+    return () => { cancelled = true; unlisten?.(); };
   }, [downloading, withProgress]);
 
   async function handleDownload() {

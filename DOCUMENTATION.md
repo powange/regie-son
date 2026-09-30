@@ -164,8 +164,8 @@ Le réglage d'avant est relu à l'activation et restauré à la désactivation, 
 
 - [App.tsx](src/App.tsx) bascule entre `HomePage` et `ProjectEditor`. `ProjectEditor` porte `key={project.path}`, donc chaque projet ouvert repart d'un éditeur neuf. App parle à l'éditeur par un `EditorHandle` (`flushSave`, `leaveShowMode`, `importNumeroFile`), ce qui permet d'ouvrir un autre fichier sans perdre de modification.
 - [ProjectEditor.tsx](src/components/ProjectEditor.tsx) porte la sauvegarde, l'historique, les raccourcis, le mode spectacle, le preflight, l'export et le partage.
-  - **Sauvegarde** : `flushSave` sérialise les écritures (différées de 600 ms). Elle est appelée à la fermeture, au démontage, à la fermeture de la fenêtre, et avant un export ou un import.
-  - **Historique** : annuler et rétablir sur 50 niveaux, avec des boutons dans l'en-tête et une notification « Annuler » après une suppression.
+  - **Sauvegarde** ([useAutosave](src/useAutosave.ts)) : `flushSave` sérialise les écritures (différées de 600 ms). Elle est appelée à la fermeture, au démontage, à la fermeture de la fenêtre, et avant un export ou un import.
+  - **Historique** ([useProjectHistory](src/useProjectHistory.ts)) : toute modification passe par `update`. Annuler et rétablir sur 50 niveaux, avec des boutons dans l'en-tête et une notification « Annuler » après une suppression.
   - **Mode spectacle** : il verrouille l'édition (`editable = editMode && !showMode`), mais laisse le volume réglable.
 
 ### 4.2 Hooks et modules
@@ -174,6 +174,7 @@ Le réglage d'avant est relu à l'activation et restauré à la désactivation, 
 |---|---|
 | [usePlayer](src/usePlayer.ts) | Moteur de lecture (section 5). |
 | [playerNav](src/playerNav.ts) | Seule définition de « ce qui vient après » (`firstItemPosition`, `nextItemPosition`), partagée par Suivant, Espace et l'aperçu ; `findItemPosition` retrouve la piste courante par son id. |
+| [useFollowActive](src/useFollowActive.ts) | Amène la piste courante à l'écran par le plus court chemin, sauf si l'opérateur vient de faire défiler la liste à la main. |
 | [useAudioDurations](src/useAudioDurations.ts) | Mesure la durée de chaque fichier par ses métadonnées. Relancé seulement quand la liste des fichiers change. |
 | [preflight](src/preflight.ts) + [preflightMessage](src/preflightMessage.ts) | Vérification avant spectacle : codes d'issue, texte à l'affichage. |
 | [useModal](src/useModal.ts) + [Modal](src/components/Modal.tsx) | Pile des modales : Échap ferme la plus haute, `isModalOpen()` coupe les raccourcis du lecteur, focus piégé et rendu. |

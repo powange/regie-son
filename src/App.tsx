@@ -103,9 +103,12 @@ function App() {
   }
 
   useEffect(() => {
+    // The listener may arrive after the cleanup: it is then dropped at once.
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     listen<string>("open-file", (e) => { handleOpenFile(e.payload); })
-      .then((fn) => { unlisten = fn; });
+      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
+      .catch((err) => console.error("listen open-file:", err));
     invoke<string | null>("take_pending_open_file").then((path) => {
       if (path) handleOpenFile(path);
     });
@@ -117,7 +120,7 @@ function App() {
         console.warn("yt-dlp auto-update failed:", err);
       });
     }
-    return () => { unlisten?.(); };
+    return () => { cancelled = true; unlisten?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

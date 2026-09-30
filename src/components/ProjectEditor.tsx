@@ -14,6 +14,8 @@ import { translateError } from "../errorMessage";
 import { formatLongDuration } from "../duration";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
+import { useAutosave } from "../useAutosave";
+import { useProjectHistory } from "../useProjectHistory";
 import { isModalOpen } from "../useModal";
 import {
   DndContext,
@@ -31,7 +33,6 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
@@ -105,8 +106,6 @@ function filenamesIn(projects: Project[]): Set<string> {
 export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings, onLiveChange }: Props) {
   const { t } = useTranslation(["editor", "common", "share"]);
   const isSingle = project.singleNumero === true;
-  const [saved, setSaved] = useState(true);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAddPart, setShowAddPart] = useState(false);
   const [editMode, setEditMode] = useState(readEditModePref);
   const [showMode, setShowMode] = useState(false);
@@ -130,24 +129,15 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [toast, setToast] = useState<ToastData | null>(null);
   const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
   const undoToastIdRef = useRef<number | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoStackRef = useRef<Project[]>([]);
-  const redoStackRef = useRef<Project[]>([]);
-  // Mirrors the stack sizes for the Undo / Redo buttons.
-  const [history, setHistory] = useState({ undo: 0, redo: 0 });
-  const syncHistory = useCallback(() => {
-    const undo = undoStackRef.current.length;
-    const redo = redoStackRef.current.length;
-    setHistory((h) => (h.undo === undo && h.redo === redo ? h : { undo, redo }));
-    // An "Undo" offered by a toast only makes sense until the next change.
+  const { saved, saveError, flushSave, scheduleSave } = useAutosave();
+  // An "Undo" offered by a toast only makes sense until the next change.
+  const dropUndoToast = useCallback(() => {
     setToast((cur) => (cur && cur.id === undoToastIdRef.current ? null : cur));
   }, []);
-  const UNDO_LIMIT = 50;
-  const COALESCE_WINDOW_MS = 1500;
-  const lastUpdateTagRef = useRef<string | null>(null);
-  const lastUpdateAtRef = useRef(0);
   const projectRef = useRef(project);
   projectRef.current = project;
+  const { update, undo, redo, history, snapshots } =
+    useProjectHistory(projectRef, onProjectChange, scheduleSave, dropUndoToast);
 
   // verify_project checks every file on disk: only a change in the set of
   // audio files calls for it, not a keystroke in a cue or a slider step. The
@@ -172,9 +162,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   // Deleting a track keeps its file, so that undo can bring it back. Such a
   // file is only an orphan once no undo or redo step refers to it any more.
   const cleanableOrphans = useMemo(() => {
-    const inHistory = filenamesIn([...undoStackRef.current, ...redoStackRef.current]);
+    const inHistory = filenamesIn(snapshots());
     return verify.orphans.filter((f) => !inHistory.has(f));
-  }, [verify.orphans]);
+  }, [verify.orphans, snapshots]);
 
   async function cleanupOrphans() {
     setConfirm(null);
@@ -206,104 +196,6 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const stopArmedAtRef = useRef(0);
   const audioDurations = useAudioDurations(project);
   const battery = useBattery();
-
-  const onProjectChangeRef = useRef(onProjectChange);
-  onProjectChangeRef.current = onProjectChange;
-
-  const pendingSaveRef = useRef<Project | null>(null);
-  const saveChainRef = useRef<Promise<boolean>>(Promise.resolve(true));
-
-  // Writes the pending project now, one save at a time: two writes never
-  // overlap, and "saved" only shows once nothing newer is waiting. Resolves to
-  // false when the write failed; the project then stays pending for a retry.
-  const flushSave = useCallback((): Promise<boolean> => {
-    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    const p = pendingSaveRef.current;
-    if (!p) return saveChainRef.current;
-    pendingSaveRef.current = null;
-    saveChainRef.current = saveChainRef.current.then(async () => {
-      try {
-        await invoke("save_project", { project: p });
-        if (pendingSaveRef.current === null) setSaved(true);
-        setSaveError(null);
-        return true;
-      } catch (err) {
-        if (pendingSaveRef.current === null) pendingSaveRef.current = p;
-        setSaveError(translateError(err));
-        return false;
-      }
-    });
-    return saveChainRef.current;
-  }, []);
-
-  const scheduleSave = useCallback((p: Project) => {
-    setSaved(false);
-    pendingSaveRef.current = p;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { void flushSave(); }, 600);
-  }, [flushSave]);
-
-  // `tag` lets callers coalesce successive pushes from the same field/control
-  // (e.g. typing in a cue input) into a single undo entry, as long as they
-  // arrive within COALESCE_WINDOW_MS.
-  const update = useCallback((updated: Project, tag?: string) => {
-    const now = performance.now();
-    const sameSession = !!tag
-      && tag === lastUpdateTagRef.current
-      && now - lastUpdateAtRef.current < COALESCE_WINDOW_MS;
-    if (!sameSession) {
-      undoStackRef.current.push(projectRef.current);
-      if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
-      redoStackRef.current = [];
-    }
-    lastUpdateTagRef.current = tag ?? null;
-    lastUpdateAtRef.current = now;
-    // Ahead of the re-render, so that two updates in a row (files added one
-    // by one) each build on the previous one.
-    projectRef.current = updated;
-    onProjectChangeRef.current(updated);
-    scheduleSave(updated);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  const undo = useCallback(() => {
-    const prev = undoStackRef.current.pop();
-    if (!prev) return;
-    lastUpdateTagRef.current = null;
-    redoStackRef.current.push(projectRef.current);
-    projectRef.current = prev;
-    onProjectChangeRef.current(prev);
-    scheduleSave(prev);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  const redo = useCallback(() => {
-    const nxt = redoStackRef.current.pop();
-    if (!nxt) return;
-    lastUpdateTagRef.current = null;
-    undoStackRef.current.push(projectRef.current);
-    projectRef.current = nxt;
-    onProjectChangeRef.current(nxt);
-    scheduleSave(nxt);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  // Leaving the editor writes what the 600 ms debounce still held.
-  useEffect(() => () => { void flushSave(); }, [flushSave]);
-
-  // Same when the window itself is closed. Bounded, so that a hung write
-  // cannot keep the window open.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    getCurrentWindow()
-      .onCloseRequested(async () => {
-        await Promise.race([flushSave(), new Promise((r) => setTimeout(r, 3000))]);
-      })
-      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
-      .catch((err) => console.error("onCloseRequested:", err));
-    return () => { cancelled = true; unlisten?.(); };
-  }, [flushSave]);
 
   useEffect(() => {
     try { localStorage.setItem(EDIT_MODE_KEY, String(editMode)); } catch { /* preference only */ }
