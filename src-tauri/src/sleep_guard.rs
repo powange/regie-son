@@ -99,7 +99,14 @@ mod imp {
         // système sur secteur. -w arrime caffeinate à notre PID : s'il n'y a
         // personne pour le tuer, il s'arrête quand l'application s'arrête.
         let child = Command::new("caffeinate")
-            .args(["-d", "-i", "-m", "-s", "-w", &std::process::id().to_string()])
+            .args([
+                "-d",
+                "-i",
+                "-m",
+                "-s",
+                "-w",
+                &std::process::id().to_string(),
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

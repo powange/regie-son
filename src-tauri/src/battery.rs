@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::error::{AppError, AppResult, fail};
+use crate::error::{fail, AppError, AppResult};
 
 #[derive(Serialize)]
 pub struct BatteryStatus {

@@ -49,12 +49,12 @@ fn wide(s: &str) -> Vec<u16> {
 
 #[cfg(target_os = "windows")]
 fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String> {
+    use windows::core::{Interface, PCWSTR};
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator,
         MMDeviceEnumerator,
     };
     use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_ALL};
-    use windows::core::{Interface, PCWSTR};
 
     unsafe {
         let enumerator: IMMDeviceEnumerator =
@@ -104,7 +104,10 @@ fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String
             // (and a mixer redraw) on every poll.
             if let Ok(current) = ctrl.GetDisplayName() {
                 if !current.is_null() {
-                    let already = current.to_string().map(|s| s == DISPLAY_NAME).unwrap_or(false);
+                    let already = current
+                        .to_string()
+                        .map(|s| s == DISPLAY_NAME)
+                        .unwrap_or(false);
                     CoTaskMemFree(Some(current.0 as *const std::ffi::c_void));
                     if already {
                         continue;

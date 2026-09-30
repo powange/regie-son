@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::error::{AppError, AppResult, fail};
+use crate::error::{fail, AppError, AppResult};
 
-pub fn default_volume() -> f64 { 100.0 }
+pub fn default_volume() -> f64 {
+    100.0
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioFile {
@@ -53,7 +55,11 @@ pub struct Project {
     pub name: String,
     pub path: String,
     pub numeros: Vec<Numero>,
-    #[serde(default, skip_serializing_if = "Option::is_none", rename = "singleNumero")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "singleNumero"
+    )]
     pub single_numero: Option<bool>,
 }
 
@@ -87,28 +93,49 @@ struct LegacyProject {
 }
 
 pub fn migrate_project(raw: &str, path: String) -> AppResult<Project> {
-    let legacy: LegacyProject = serde_json::from_str(raw)
-        .map_err(fail("project.invalidFile"))?;
-    let numeros: AppResult<Vec<Numero>> = legacy.numeros.into_iter().map(|n| {
-        let items: Vec<PlaylistItem> = if !n.items.is_empty() {
-            serde_json::from_value(serde_json::Value::Array(n.items))
-                .map_err(|e| AppError::new("project.invalidItems").with("name", &n.name).detail(e))?
-        } else {
-            n.audio_files.into_iter().map(|af| PlaylistItem::Audio(AudioFile {
-                id: af.id,
-                filename: af.filename,
-                original_name: af.original_name,
-                volume: 100.0,
-                start_time: None,
-                end_time: None,
-                fade_in: None,
-                fade_out: None,
-                cue: None,
-            })).collect()
-        };
-        Ok(Numero { id: n.id, numero_type: n.numero_type, name: n.name, items })
-    }).collect();
-    Ok(Project { name: legacy.name, path, numeros: numeros?, single_numero: legacy.single_numero })
+    let legacy: LegacyProject = serde_json::from_str(raw).map_err(fail("project.invalidFile"))?;
+    let numeros: AppResult<Vec<Numero>> = legacy
+        .numeros
+        .into_iter()
+        .map(|n| {
+            let items: Vec<PlaylistItem> = if !n.items.is_empty() {
+                serde_json::from_value(serde_json::Value::Array(n.items)).map_err(|e| {
+                    AppError::new("project.invalidItems")
+                        .with("name", &n.name)
+                        .detail(e)
+                })?
+            } else {
+                n.audio_files
+                    .into_iter()
+                    .map(|af| {
+                        PlaylistItem::Audio(AudioFile {
+                            id: af.id,
+                            filename: af.filename,
+                            original_name: af.original_name,
+                            volume: 100.0,
+                            start_time: None,
+                            end_time: None,
+                            fade_in: None,
+                            fade_out: None,
+                            cue: None,
+                        })
+                    })
+                    .collect()
+            };
+            Ok(Numero {
+                id: n.id,
+                numero_type: n.numero_type,
+                name: n.name,
+                items,
+            })
+        })
+        .collect();
+    Ok(Project {
+        name: legacy.name,
+        path,
+        numeros: numeros?,
+        single_numero: legacy.single_numero,
+    })
 }
 
 #[derive(Serialize)]

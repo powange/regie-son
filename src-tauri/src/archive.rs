@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 
 use tauri_plugin_dialog::DialogExt;
 
-use crate::error::{AppError, AppResult, fail, missing};
+use crate::error::{fail, missing, AppError, AppResult};
 use crate::types::{migrate_project, PlaylistItem, Project};
 use crate::{open_project_from_file, safe_filename, save_project_to_disk};
 
 #[tauri::command]
 pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
-    app.dialog().file()
+    app.dialog()
+        .file()
         .add_filter("Régie Son", &["regieson"])
         .blocking_pick_file()
         .map(|p| p.to_string())
@@ -18,16 +19,18 @@ pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
 
 #[tauri::command]
 pub fn save_regieson_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
-    app.dialog().file()
+    app.dialog()
+        .file()
         .add_filter("Régie Son", &["regieson"])
-        .set_file_name(&format!("{}.regieson", default_name))
+        .set_file_name(format!("{}.regieson", default_name))
         .blocking_save_file()
         .map(|p| p.to_string())
 }
 
 #[tauri::command]
 pub fn pick_regiesonnumero_file(app: tauri::AppHandle) -> Option<String> {
-    app.dialog().file()
+    app.dialog()
+        .file()
         .add_filter("Numéro Régie Son", &["regiesonnumero"])
         .blocking_pick_file()
         .map(|p| p.to_string())
@@ -35,38 +38,52 @@ pub fn pick_regiesonnumero_file(app: tauri::AppHandle) -> Option<String> {
 
 #[tauri::command]
 pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
-    app.dialog().file()
+    app.dialog()
+        .file()
         .add_filter("Numéro Régie Son", &["regiesonnumero"])
-        .set_file_name(&format!("{}.regiesonnumero", default_name))
+        .set_file_name(format!("{}.regiesonnumero", default_name))
         .blocking_save_file()
         .map(|p| p.to_string())
 }
 
-pub(crate) fn export_to_zip(src_path: &Path, dest_file: &str, json_filename: &str) -> AppResult<()> {
-    let file = fs::File::create(dest_file)
-        .map_err(fail("archive.createFailed"))?;
+pub(crate) fn export_to_zip(
+    src_path: &Path,
+    dest_file: &str,
+    json_filename: &str,
+) -> AppResult<()> {
+    let file = fs::File::create(dest_file).map_err(fail("archive.createFailed"))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<()> = zip::write::FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let options: zip::write::FileOptions<()> =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     let json_path = src_path.join(json_filename);
     if !json_path.exists() {
         return Err(AppError::new("archive.missingFile").with("name", json_filename));
     }
-    let content = fs::read(&json_path)
-        .map_err(|e| AppError::new("archive.readNamedFailed").with("name", json_filename).detail(e))?;
-    zip.start_file(json_filename, options).map_err(fail("archive.zipFailed"))?;
+    let content = fs::read(&json_path).map_err(|e| {
+        AppError::new("archive.readNamedFailed")
+            .with("name", json_filename)
+            .detail(e)
+    })?;
+    zip.start_file(json_filename, options)
+        .map_err(fail("archive.zipFailed"))?;
     zip.write_all(&content).map_err(fail("io.writeFailed"))?;
 
     let musiques_dir = src_path.join("musiques");
     if musiques_dir.exists() {
         let entries = fs::read_dir(&musiques_dir).map_err(fail("archive.readDirFailed"))?;
         for entry in entries.filter_map(|e| e.ok()) {
-            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) { continue; }
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                continue;
+            }
             let name = entry.file_name().to_string_lossy().to_string();
-            let content = fs::read(entry.path())
-                .map_err(|e| AppError::new("archive.readNamedFailed").with("name", &name).detail(e))?;
-            zip.start_file(format!("musiques/{}", name), options).map_err(fail("archive.zipFailed"))?;
+            let content = fs::read(entry.path()).map_err(|e| {
+                AppError::new("archive.readNamedFailed")
+                    .with("name", &name)
+                    .detail(e)
+            })?;
+            zip.start_file(format!("musiques/{}", name), options)
+                .map_err(fail("archive.zipFailed"))?;
             zip.write_all(&content).map_err(fail("io.writeFailed"))?;
         }
     }
@@ -98,7 +115,10 @@ fn entry_target(name: &str) -> Result<Option<PathBuf>, ()> {
     }
     let parts: Vec<&str> = name.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
     // ':' covers drive letters (`C:`) and NTFS alternate streams (`a.mp3:x`).
-    if parts.iter().any(|p| *p == ".." || *p == "." || p.contains(':')) {
+    if parts
+        .iter()
+        .any(|p| *p == ".." || *p == "." || p.contains(':'))
+    {
         return Err(());
     }
     match parts.as_slice() {
@@ -118,14 +138,18 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
     let mut archive = zip::ZipArchive::new(file).map_err(fail("archive.invalid"))?;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(fail("archive.readEntryFailed"))?;
+        let mut entry = archive
+            .by_index(i)
+            .map_err(fail("archive.readEntryFailed"))?;
         let name = entry.name().to_string();
         let unsafe_path = || AppError::new("archive.unsafePath").with("name", &name);
         // Second opinion from the zip crate, which also judges by the host's rules.
         if entry.enclosed_name().is_none() {
             return Err(unsafe_path());
         }
-        let Some(relative) = entry_target(&name).map_err(|_| unsafe_path())? else { continue };
+        let Some(relative) = entry_target(&name).map_err(|_| unsafe_path())? else {
+            continue;
+        };
         if entry.is_dir() {
             continue;
         }
@@ -146,16 +170,15 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
 pub fn import_project(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
     extract_zip_to(&src_file, &dest)?;
-    open_project_from_file(&dest, "projet.json")
-        .map_err(fail("archive.invalid"))
+    open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
 }
 
 #[tauri::command]
 pub fn import_numero_standalone(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
     extract_zip_to(&src_file, &dest)?;
-    let mut project = open_project_from_file(&dest, "numero.json")
-        .map_err(fail("archive.invalid"))?;
+    let mut project =
+        open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;
     project.single_numero = Some(true);
     save_project_to_disk(&project)?;
     Ok(project)
@@ -170,15 +193,23 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
     let mut archive = zip::ZipArchive::new(file).map_err(fail("archive.invalid"))?;
 
     let raw_numero_json = {
-        let mut entry = archive.by_name("numero.json")
+        let mut entry = archive
+            .by_name("numero.json")
             .map_err(|_| AppError::new("archive.missingNumeroJson"))?;
         let mut s = String::new();
-        entry.read_to_string(&mut s).map_err(|e| AppError::new("archive.readNamedFailed").with("name", "numero.json").detail(e))?;
+        entry.read_to_string(&mut s).map_err(|e| {
+            AppError::new("archive.readNamedFailed")
+                .with("name", "numero.json")
+                .detail(e)
+        })?;
         s
     };
 
     let src_project = migrate_project(&raw_numero_json, String::new())?;
-    let mut numero = src_project.numeros.into_iter().next()
+    let mut numero = src_project
+        .numeros
+        .into_iter()
+        .next()
         .ok_or_else(missing("archive.noAct"))?;
 
     let dest_musiques = PathBuf::from(&project_path).join("musiques");
@@ -188,18 +219,26 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
         if let PlaylistItem::Audio(audio) = item {
             safe_filename(&audio.filename)?;
             let archive_path = format!("musiques/{}", audio.filename);
-            let mut entry = archive.by_name(&archive_path)
-                .map_err(|_| AppError::new("archive.fileMissingInArchive").with("name", &audio.filename))?;
-            let ext = Path::new(&audio.filename).extension()
+            let mut entry = archive.by_name(&archive_path).map_err(|_| {
+                AppError::new("archive.fileMissingInArchive").with("name", &audio.filename)
+            })?;
+            let ext = Path::new(&audio.filename)
+                .extension()
                 .map(|e| format!(".{}", e.to_string_lossy()))
                 .unwrap_or_default();
             let new_id = uuid::Uuid::new_v4().to_string();
             let new_filename = format!("{}{}", new_id, ext);
             let out_path = dest_musiques.join(&new_filename);
-            let mut out = fs::File::create(&out_path)
-                .map_err(|e| AppError::new("archive.createNamedFailed").with("name", &new_filename).detail(e))?;
-            std::io::copy(&mut entry, &mut out)
-                .map_err(|e| AppError::new("archive.extractNamedFailed").with("name", &new_filename).detail(e))?;
+            let mut out = fs::File::create(&out_path).map_err(|e| {
+                AppError::new("archive.createNamedFailed")
+                    .with("name", &new_filename)
+                    .detail(e)
+            })?;
+            std::io::copy(&mut entry, &mut out).map_err(|e| {
+                AppError::new("archive.extractNamedFailed")
+                    .with("name", &new_filename)
+                    .detail(e)
+            })?;
             audio.id = new_id;
             audio.filename = new_filename;
         } else if let PlaylistItem::Pause(pause) = item {
@@ -221,8 +260,14 @@ mod tests {
 
     #[test]
     fn entry_target_keeps_the_archive_layout() {
-        assert_eq!(entry_target("projet.json"), Ok(Some(PathBuf::from("projet.json"))));
-        assert_eq!(entry_target("numero.json"), Ok(Some(PathBuf::from("numero.json"))));
+        assert_eq!(
+            entry_target("projet.json"),
+            Ok(Some(PathBuf::from("projet.json")))
+        );
+        assert_eq!(
+            entry_target("numero.json"),
+            Ok(Some(PathBuf::from("numero.json")))
+        );
         assert_eq!(
             entry_target("musiques/1f0e.mp3"),
             Ok(Some(Path::new("musiques").join("1f0e.mp3")))
@@ -280,15 +325,21 @@ mod tests {
     fn extract_writes_the_expected_files_only() {
         let dir = scratch_dir();
         let src = dir.join("show.regieson");
-        write_zip(&src, &[
-            ("projet.json", b"{}"),
-            ("musiques/a.mp3", b"audio"),
-            ("__MACOSX/._a.mp3", b"junk"),
-        ]);
+        write_zip(
+            &src,
+            &[
+                ("projet.json", b"{}"),
+                ("musiques/a.mp3", b"audio"),
+                ("__MACOSX/._a.mp3", b"junk"),
+            ],
+        );
         let dest = dir.join("out");
         extract_zip_to(src.to_str().unwrap(), &dest).unwrap();
         assert_eq!(fs::read(dest.join("projet.json")).unwrap(), b"{}");
-        assert_eq!(fs::read(dest.join("musiques").join("a.mp3")).unwrap(), b"audio");
+        assert_eq!(
+            fs::read(dest.join("musiques").join("a.mp3")).unwrap(),
+            b"audio"
+        );
         assert!(!dest.join("__MACOSX").exists());
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -297,7 +348,10 @@ mod tests {
     fn extract_refuses_an_escaping_entry() {
         let dir = scratch_dir();
         let src = dir.join("evil.regieson");
-        write_zip(&src, &[("projet.json", b"{}"), ("musiques/../../evil.bat", b"x")]);
+        write_zip(
+            &src,
+            &[("projet.json", b"{}"), ("musiques/../../evil.bat", b"x")],
+        );
         let dest = dir.join("out");
         let err = extract_zip_to(src.to_str().unwrap(), &dest).unwrap_err();
         assert_eq!(err.code, "archive.unsafePath");

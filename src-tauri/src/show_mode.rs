@@ -21,7 +21,11 @@ pub fn set_show_mode(active: bool) -> Result<(), Vec<AppError>> {
         .into_iter()
         .flatten()
         .collect();
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -38,8 +42,8 @@ fn build_silent_wav() -> Vec<u8> {
     wav.extend_from_slice(b"WAVE");
     wav.extend_from_slice(b"fmt ");
     wav.extend_from_slice(&16u32.to_le_bytes());
-    wav.extend_from_slice(&1u16.to_le_bytes());        // PCM
-    wav.extend_from_slice(&1u16.to_le_bytes());        // mono
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
     wav.extend_from_slice(&sample_rate.to_le_bytes());
     wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
     wav.extend_from_slice(&2u16.to_le_bytes());
@@ -53,8 +57,8 @@ fn build_silent_wav() -> Vec<u8> {
 #[cfg(target_os = "windows")]
 fn nudge_system_sounds() {
     use std::sync::OnceLock;
-    use windows::Win32::Media::Audio::{PlaySoundW, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
     use windows::core::PCWSTR;
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
 
     static SILENT_WAV: OnceLock<Vec<u8>> = OnceLock::new();
     let wav = SILENT_WAV.get_or_init(build_silent_wav);
@@ -83,35 +87,54 @@ struct MuteOutcome {
 
 #[cfg(target_os = "windows")]
 fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
-    use windows::Win32::Media::Audio::{
-        eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2,
-        IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
-    };
+    use windows::core::Interface;
     use windows::Win32::Foundation::S_OK;
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator,
+        ISimpleAudioVolume, MMDeviceEnumerator,
+    };
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
     };
-    use windows::core::Interface;
 
     unsafe {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let should_uninit = hr.is_ok();
 
         let result = (|| -> AppResult<MuteOutcome> {
-            let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
-                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "CoCreateInstance").detail(e))?;
+            let enumerator: IMMDeviceEnumerator =
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| {
+                    AppError::new("showMode.audioApiFailed")
+                        .with("api", "CoCreateInstance")
+                        .detail(e)
+                })?;
 
-            let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole)
-                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetDefaultAudioEndpoint").detail(e))?;
+            let device = enumerator
+                .GetDefaultAudioEndpoint(eRender, eConsole)
+                .map_err(|e| {
+                    AppError::new("showMode.audioApiFailed")
+                        .with("api", "GetDefaultAudioEndpoint")
+                        .detail(e)
+                })?;
 
-            let session_mgr: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)
-                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "Activate IAudioSessionManager2").detail(e))?;
+            let session_mgr: IAudioSessionManager2 =
+                device.Activate(CLSCTX_ALL, None).map_err(|e| {
+                    AppError::new("showMode.audioApiFailed")
+                        .with("api", "Activate IAudioSessionManager2")
+                        .detail(e)
+                })?;
 
-            let session_enum = session_mgr.GetSessionEnumerator()
-                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetSessionEnumerator").detail(e))?;
+            let session_enum = session_mgr.GetSessionEnumerator().map_err(|e| {
+                AppError::new("showMode.audioApiFailed")
+                    .with("api", "GetSessionEnumerator")
+                    .detail(e)
+            })?;
 
-            let count = session_enum.GetCount()
-                .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "GetCount").detail(e))? as u32;
+            let count = session_enum.GetCount().map_err(|e| {
+                AppError::new("showMode.audioApiFailed")
+                    .with("api", "GetCount")
+                    .detail(e)
+            })? as u32;
 
             let mut muted_any = false;
             let mut tree: Option<crate::audio_session::ProcessTree> = None;
@@ -152,12 +175,18 @@ fn try_mute_system_sounds(active: bool) -> AppResult<MuteOutcome> {
                         Ok(v) => v,
                         Err(_) => continue,
                     };
-                    vol.SetMute(active, std::ptr::null())
-                        .map_err(|e| AppError::new("showMode.audioApiFailed").with("api", "SetMute").detail(e))?;
+                    vol.SetMute(active, std::ptr::null()).map_err(|e| {
+                        AppError::new("showMode.audioApiFailed")
+                            .with("api", "SetMute")
+                            .detail(e)
+                    })?;
                     muted_any = true;
                 }
             }
-            Ok(MuteOutcome { muted: muted_any, session_count: count })
+            Ok(MuteOutcome {
+                muted: muted_any,
+                session_count: count,
+            })
         })();
 
         if should_uninit {
@@ -188,14 +217,26 @@ fn set_notifications_muted(active: bool) -> AppResult<()> {
 fn set_notifications_muted(active: bool) -> AppResult<()> {
     // Essayer AppleScript (macOS ≤ 12)
     let value = if active { "true" } else { "false" };
-    let script = format!("tell application \"System Events\" to set Do Not Disturb to {}", value);
+    let script = format!(
+        "tell application \"System Events\" to set Do Not Disturb to {}",
+        value
+    );
     if let Ok(out) = Command::new("osascript").args(["-e", &script]).output() {
-        if out.status.success() { return Ok(()); }
+        if out.status.success() {
+            return Ok(());
+        }
     }
     // Fallback defaults + redémarrage NotificationCenter (macOS 12+)
     let bool_val = if active { "YES" } else { "NO" };
     let out = Command::new("defaults")
-        .args(["-currentHost", "write", "com.apple.notificationcenterui", "doNotDisturb", "-boolean", bool_val])
+        .args([
+            "-currentHost",
+            "write",
+            "com.apple.notificationcenterui",
+            "doNotDisturb",
+            "-boolean",
+            bool_val,
+        ])
         .output()
         .map_err(|e| AppError::new("showMode.appleScriptFailed").detail(e))?;
     if out.status.success() {
@@ -211,10 +252,17 @@ fn set_notifications_muted(active: bool) -> AppResult<()> {
     // GNOME : inverser show-banners (false = muet)
     let value = if active { "false" } else { "true" };
     let out = Command::new("gsettings")
-        .args(["set", "org.gnome.desktop.notifications", "show-banners", value])
+        .args([
+            "set",
+            "org.gnome.desktop.notifications",
+            "show-banners",
+            value,
+        ])
         .output()
         .map_err(|_| AppError::new("showMode.gsettingsMissing"))?;
-    if out.status.success() { Ok(()) } else {
+    if out.status.success() {
+        Ok(())
+    } else {
         Err(AppError::new("showMode.gnomeFailed"))
     }
 }
@@ -225,7 +273,11 @@ fn set_notifications_muted(_active: bool) -> AppResult<()> {
 }
 
 pub fn configure_wsl2_audio() {
-    if !fs::read_to_string("/proc/version").unwrap_or_default().to_lowercase().contains("microsoft") {
+    if !fs::read_to_string("/proc/version")
+        .unwrap_or_default()
+        .to_lowercase()
+        .contains("microsoft")
+    {
         return;
     }
     std::env::set_var("PULSE_LATENCY_MSEC", "500");
