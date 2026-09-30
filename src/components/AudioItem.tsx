@@ -7,6 +7,7 @@ import { FadeState } from "../usePlayer";
 import { formatTime } from "../trackTimes";
 import { useTranslation } from "react-i18next";
 import { useFollowActive } from "../useFollowActive";
+import MoveToActButton, { ActTarget } from "./MoveToActButton";
 
 // Loaded on first use: it brings wavesurfer.js, which nothing else needs.
 const AudioSettingsModal = lazy(() => import("./AudioSettingsModal"));
@@ -33,11 +34,13 @@ interface Props {
   togglePlay: () => void;
   onChange: (numeroId: string, updated: AudioFile, tag?: string) => void;
   onDelete: (numeroId: string, itemId: string) => void;
+  acts: ActTarget[];
+  onMove: (fromNumeroId: string, itemId: string, toNumeroId: string) => void;
 }
 
 function AudioItemInner({
   audio, numeroId, numeroIndex, itemIndex, projectPath, editMode, volumeEditable, isActive, isPlaying, isMissing,
-  activeFade, fileDuration, playAt, togglePlay, onChange: onChangeItem, onDelete: onDeleteItem,
+  activeFade, fileDuration, playAt, togglePlay, onChange: onChangeItem, onDelete: onDeleteItem, acts, onMove,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -169,6 +172,8 @@ function AudioItemInner({
             <span className="audio-volume-value">{volume}%</span>
           </div>
         )}
+
+        {editMode && <MoveToActButton numeroId={numeroId} itemId={audio.id} acts={acts} onMove={onMove} />}
 
         {editMode && (
           <button className="btn-icon" onClick={() => setShowSettings(true)} title={t("common:settings")}>

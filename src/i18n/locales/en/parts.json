@@ -20,5 +20,10 @@
     "hint": "An announcement or a transition."
   },
   "changeType": "Change the type",
-  "emptyAct": "Nothing here yet — add a track or a pause."
+  "emptyAct": "Nothing here yet — add a track or a pause.",
+  "duration": {
+    "title": "Playing time of this part",
+    "atLeast": "≥ {{duration}}",
+    "atLeastTitle": "Minimum length: pauses without a duration and tracks not measured yet are not counted"
+  }
 }

@@ -16,6 +16,7 @@ import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
 import { useAutosave } from "../useAutosave";
 import { useProjectHistory } from "../useProjectHistory";
+import { remainingShowDuration } from "../runningTime";
 import { isModalOpen } from "../useModal";
 import {
   DndContext,
@@ -33,10 +34,11 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, Maximize2, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, Maximize2, Clock, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
+import { ActTarget } from "./MoveToActButton";
 import PlayerBar from "./PlayerBar";
 import ShowView from "./ShowView";
 import { FadeState, usePlayer } from "../usePlayer";
@@ -493,7 +495,50 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
   }, [editable, update]);
 
+  // Moves a track or a pause to the end of another part, as one undoable
+  // step. A menu entry rather than a drag between cards: a single DndContext
+  // for parts and items would need its own collision rules, a live move
+  // between lists during the drag and drop zones for empty parts, all on the
+  // screen used during the show. The player follows the item by id, so
+  // moving the one that plays does not disturb it.
+  const moveItem = useCallback((fromNumeroId: string, itemId: string, toNumeroId: string) => {
+    if (!editable || fromNumeroId === toNumeroId) return;
+    const cur = projectRef.current;
+    const from = cur.numeros.find((n) => n.id === fromNumeroId);
+    const item = from?.items.find((i) => i.id === itemId);
+    const to = cur.numeros.find((n) => n.id === toNumeroId);
+    if (!item || !to) return;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => {
+        if (n.id === fromNumeroId) return { ...n, items: n.items.filter((i) => i.id !== itemId) };
+        if (n.id === toNumeroId) return { ...n, items: [...n.items, item] };
+        return n;
+      }),
+    });
+    offerUndo(i18next.t("editor:undo.stepMoved", { name: to.name }));
+  }, [editable, update, offerUndo]);
+
   const numeroIds = useMemo(() => project.numeros.map((n) => n.id), [project.numeros]);
+  // Rebuilt only when a part is added, removed, renamed or moved, so that
+  // the memoised rows do not re-render at each keystroke in a cue.
+  const actsKey = JSON.stringify(project.numeros.map((n) => [n.id, n.name]));
+  const acts = useMemo<ActTarget[]>(
+    () => (JSON.parse(actsKey) as [string, string][]).map(([id, name]) => ({ id, name })),
+    [actsKey],
+  );
+
+  // Playing time still ahead, a floor when some steps have no known length.
+  const remaining = remainingShowDuration(project, audioDurations, playerState.position, playerState.progress);
+  const remainingLabel = remaining.seconds <= 0
+    ? null
+    : playerState.position
+      ? (remaining.complete
+        ? t("editor:runningTime.remaining", { duration: formatLongDuration(remaining.seconds) })
+        : t("editor:runningTime.remainingAtLeast", { duration: formatLongDuration(remaining.seconds) }))
+      : (remaining.complete
+        ? t("editor:runningTime.total", { duration: formatLongDuration(remaining.seconds) })
+        : t("editor:runningTime.totalAtLeast", { duration: formatLongDuration(remaining.seconds) }));
 
   // The player updates its state every 25 ms during a fade. Cards only see a
   // fade rounded to the tenth they display, so they re-render at 10 Hz, and
@@ -569,6 +614,13 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
               <Redo2 size={17} />
             </button>
           </div>
+        )}
+
+        {remainingLabel && (
+          <span className="show-duration" title={t("editor:runningTime.title")}>
+            <Clock size={14} />
+            {remainingLabel}
+          </span>
         )}
 
         {battery && (
@@ -709,6 +761,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
                 fade={nIdx === activeNumeroIndex ? displayFade : null}
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
+                acts={acts}
                 playAt={playAt}
                 togglePlay={togglePlay}
                 onAppendItems={appendItems}
@@ -716,6 +769,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
                 onChange={updateNumero}
                 onChangeItem={updateItem}
                 onDeleteItem={deleteItem}
+                onMoveItem={moveItem}
                 onDelete={deleteNumero}
                 canDelete={!isSingle}
                 canChangeType={!isSingle}
@@ -813,6 +867,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         <ShowView
           state={playerState}
           project={project}
+          remainingLabel={remainingLabel}
           onTogglePlay={togglePlay}
           onNext={next}
           onStop={stop}

@@ -5,6 +5,7 @@ import { Clock, GripVertical, Info, PauseCircle, Play, Trash2 } from "lucide-rea
 import { PauseItem } from "../types";
 import { useTranslation } from "react-i18next";
 import { useFollowActive } from "../useFollowActive";
+import MoveToActButton, { ActTarget } from "./MoveToActButton";
 
 
 interface Props {
@@ -17,10 +18,12 @@ interface Props {
   playAt: (numeroIndex: number, itemIndex: number) => void;
   onChange: (numeroId: string, updated: PauseItem, tag?: string) => void;
   onDelete: (numeroId: string, itemId: string) => void;
+  acts: ActTarget[];
+  onMove: (fromNumeroId: string, itemId: string, toNumeroId: string) => void;
 }
 
 function PauseTrackInner({
-  pause, numeroId, numeroIndex, itemIndex, editMode, isActive, playAt, onChange: onChangeItem, onDelete: onDeleteItem,
+  pause, numeroId, numeroIndex, itemIndex, editMode, isActive, playAt, onChange: onChangeItem, onDelete: onDeleteItem, acts, onMove,
 }: Props) {
   const { t } = useTranslation(["audio", "common"]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -83,6 +86,7 @@ function PauseTrackInner({
             <span>s</span>
           </div>
         )}
+        {editMode && <MoveToActButton numeroId={numeroId} itemId={pause.id} acts={acts} onMove={onMove} />}
         {editMode && (
           <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
             <Trash2 size={14} />

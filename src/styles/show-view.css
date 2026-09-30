@@ -178,3 +178,11 @@
   border-color: var(--accent);
 }
 .show-view-btn--stop { color: #ff8a95; }
+
+.show-view-remaining {
+  margin-left: auto;
+  font-size: clamp(1rem, 2.4vh, 1.4rem);
+  font-weight: 600;
+  color: #c8c8dc;
+  font-variant-numeric: tabular-nums;
+}

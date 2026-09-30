@@ -46,7 +46,8 @@
     "missing": "Fichier introuvable",
     "missingFile": "Fichier introuvable : {{filename}}",
     "play": "Lire",
-    "clickToRename": "Cliquer pour renommer"
+    "clickToRename": "Cliquer pour renommer",
+    "moveTo": "Déplacer vers une autre partie"
   },
   "pause": {
     "label": "Pause",

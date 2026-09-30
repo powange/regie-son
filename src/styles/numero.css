@@ -135,3 +135,13 @@
   gap: 0.4rem;
   font-size: 0.9rem;
 }
+
+.numero-duration {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

@@ -58,7 +58,8 @@
     "undoTitle": "Undo the last change (Ctrl+Z)",
     "redoTitle": "Redo the undone change (Ctrl+Y)",
     "partDeleted": "“{{name}}” deleted",
-    "stepDeleted": "Step deleted"
+    "stepDeleted": "Step deleted",
+    "stepMoved": "Step moved to “{{name}}”"
   },
   "showView": {
     "title": "Show view",
@@ -70,5 +71,12 @@
     "idle": "Nothing playing",
     "endOfShow": "End of the show",
     "offer": "Show mode on. Switch to the show view?"
+  },
+  "runningTime": {
+    "title": "Playing time, not counting changeovers between parts or pauses without a duration",
+    "total": "Length: {{duration}}",
+    "totalAtLeast": "Length: at least {{duration}}",
+    "remaining": "{{duration}} left",
+    "remainingAtLeast": "At least {{duration}} left"
   }
 }

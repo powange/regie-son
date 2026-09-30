@@ -40,6 +40,7 @@ export default interface Resources {
       "duration": "Durée",
       "missing": "Fichier introuvable",
       "missingFile": "Fichier introuvable : {{filename}}",
+      "moveTo": "Déplacer vers une autre partie",
       "play": "Lire",
       "volume": "Volume : {{percent}} %"
     },
@@ -147,6 +148,13 @@ export default interface Resources {
     "exportAct": "Exporter le numéro",
     "exportShow": "Exporter le projet",
     "retrySave": "Réessayer",
+    "runningTime": {
+      "remaining": "Reste {{duration}}",
+      "remainingAtLeast": "Reste au moins {{duration}}",
+      "title": "Durée de lecture, sans les enchaînements entre les parties ni les pauses sans durée",
+      "total": "Durée : {{duration}}",
+      "totalAtLeast": "Durée : au moins {{duration}}"
+    },
     "saveFailed": "Modifications non enregistrées : {{detail}}",
     "saved": "✓ Sauvegardé",
     "showMode": {
@@ -171,6 +179,7 @@ export default interface Resources {
       "partDeleted": "« {{name}} » supprimé",
       "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
       "stepDeleted": "Étape supprimée",
+      "stepMoved": "Étape déplacée vers « {{name}} »",
       "undo": "Annuler",
       "undoTitle": "Annuler la dernière modification (Ctrl+Z)"
     },
@@ -362,6 +371,11 @@ export default interface Resources {
       "label": "Numéro"
     },
     "changeType": "Changer le type",
+    "duration": {
+      "atLeast": "≥ {{duration}}",
+      "atLeastTitle": "Durée minimale : les pauses sans durée et les pistes pas encore mesurées ne sont pas comptées",
+      "title": "Durée de lecture de cette partie"
+    },
     "emptyAct": "Aucun élément — ajoutez une musique ou une pause.",
     "hostSegment": {
       "hint": "Un moment d'annonce ou de transition.",

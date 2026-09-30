@@ -58,7 +58,8 @@
     "undoTitle": "Annuler la dernière modification (Ctrl+Z)",
     "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
     "partDeleted": "« {{name}} » supprimé",
-    "stepDeleted": "Étape supprimée"
+    "stepDeleted": "Étape supprimée",
+    "stepMoved": "Étape déplacée vers « {{name}} »"
   },
   "showView": {
     "title": "Vue spectacle",
@@ -70,5 +71,12 @@
     "idle": "Rien n'est en cours",
     "endOfShow": "Fin du spectacle",
     "offer": "Mode spectacle activé. Passer en vue spectacle ?"
+  },
+  "runningTime": {
+    "title": "Durée de lecture, sans les enchaînements entre les parties ni les pauses sans durée",
+    "total": "Durée : {{duration}}",
+    "totalAtLeast": "Durée : au moins {{duration}}",
+    "remaining": "Reste {{duration}}",
+    "remainingAtLeast": "Reste au moins {{duration}}"
   }
 }

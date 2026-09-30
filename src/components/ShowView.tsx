@@ -7,6 +7,8 @@ import { formatCountdown, showViewModel } from "../showView";
 interface Props {
   state: PlayerState;
   project: Project;
+  // Playing time left in the show, already worded; null when unknown.
+  remainingLabel: string | null;
   onTogglePlay: () => void;
   onNext: () => void;
   onStop: () => void;
@@ -17,7 +19,7 @@ interface Props {
 // transport, readable from a distance, with no editing at all. It is not a
 // modal: the editor's shortcuts keep working, Escape included, which stops the
 // music as everywhere else. Only its own button closes it.
-export default function ShowView({ state, project, onTogglePlay, onNext, onStop, onClose }: Props) {
+export default function ShowView({ state, project, remainingLabel, onTogglePlay, onNext, onStop, onClose }: Props) {
   const { t } = useTranslation(["editor", "audio"]);
   const { current, next, remaining, elapsedRatio, onUntimedPause, hasAudio } = showViewModel(state, project);
   const { position, isPlaying, fade, audioError, outputError } = state;
@@ -35,6 +37,7 @@ export default function ShowView({ state, project, onTogglePlay, onNext, onStop,
     <div className={`show-view${isPlaying ? " show-view--playing" : ""}`} role="region" aria-label={t("editor:showView.title")}>
       <div className="show-view-top">
         <span className="show-view-title">{t("editor:showView.title")}</span>
+        {remainingLabel && <span className="show-view-remaining" title={t("editor:runningTime.title")}>{remainingLabel}</span>}
         <button type="button" className="show-view-close" onClick={onClose}>
           <X size={18} />
           {t("editor:showView.close")}
