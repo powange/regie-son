@@ -41,6 +41,15 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # The tag becomes the app version: refuse anything that is not
+          # semver before building anything. A suffix (v1.2.3-beta.1) makes
+          # a prerelease, which /releases/latest and so the updater skip.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not vX.Y.Z or vX.Y.Z-suffix"
+            exit 1
+          fi
+          prerelease=false
+          [[ "$TAG" == *-* ]] && prerelease=true
           # Idempotent, so re-running a failed workflow reuses its draft.
           id=$(gh api "repos/$REPO/releases" --paginate \
                  --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)
@@ -49,7 +58,7 @@ jobs:
                    -f tag_name="$TAG" \
                    -f name="Régie Son $TAG" \
                    -f body="Voir les changements dans cette version." \
-                   -F draft=true -F prerelease=false --jq '.id')
+                   -F draft=true -F prerelease="$prerelease" --jq '.id')
             echo "Brouillon créé : $id"
           else
             echo "Brouillon existant réutilisé : $id"
@@ -154,20 +163,25 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      # The tag reaches the scripts through the environment, never
+      # interpolated into their source: a quote or $( ) in it cannot become
+      # code. create-release has already checked it is semver.
       - name: Set version from tag
         shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          node -e "
-            const fs = require('fs');
-            const c = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            c.version = '${VERSION}';
-            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
-            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
-            cargo = cargo.replace(/^version = \"[^\"]+\"/m, 'version = \"${VERSION}\"');
-            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
-          "
+          export VERSION="${TAG#v}"
+          node -e '
+            const fs = require("fs");
+            const version = process.env.VERSION;
+            const c = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+            c.version = version;
+            fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(c, null, 2) + "\n");
+            let cargo = fs.readFileSync("src-tauri/Cargo.toml", "utf8");
+            cargo = cargo.replace(/^version = "[^"]+"/m, `version = "${version}"`);
+            fs.writeFileSync("src-tauri/Cargo.toml", cargo);
+          '
 
       - name: Cache yt-dlp sidecar
         id: ytdlp-cache
