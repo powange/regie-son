@@ -107,7 +107,7 @@ fn get_default_numeros_dir() -> String {
     default_numeros_dir()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     if Command::new("which")
         .arg("zenity")
@@ -121,7 +121,7 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     Ok(result.map(|p| p.to_string()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
     if Command::new("which")
         .arg("zenity")
@@ -230,7 +230,7 @@ fn save_numero(project: Project) -> AppResult<()> {
     save_project_to_disk(&project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFile> {
     let src = Path::new(&src_path);
     let original_name = src
@@ -273,7 +273,7 @@ fn delete_audio_file(project_path: String, filename: String) -> AppResult<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn verify_project(project: Project) -> AppResult<VerifyResult> {
     let musiques_dir = PathBuf::from(&project.path).join("musiques");
     let mut referenced: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -307,7 +307,7 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
     Ok(VerifyResult { missing, orphans })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResult<u32> {
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let mut deleted = 0u32;
@@ -323,7 +323,7 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResu
     Ok(deleted)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
@@ -358,6 +358,12 @@ fn rotate_backups(dir: &Path, filename: &str) {
 
 pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
     use std::io::Write;
+    use std::sync::Mutex;
+
+    // Imports run off the main thread and save too: two writers must never
+    // share the same .tmp file.
+    static SAVE_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let content = serde_json::to_string_pretty(project).map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);

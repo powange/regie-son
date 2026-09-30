@@ -21,7 +21,7 @@ pub struct BatteryStatus {
 }
 
 // Ok(None) on a machine without a battery: desktop tower, most VMs.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_battery_status() -> AppResult<Option<BatteryStatus>> {
     use starship_battery::units::{ratio::percent, time::second};
     use starship_battery::{Manager, State};

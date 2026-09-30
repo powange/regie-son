@@ -71,7 +71,7 @@ pub(crate) fn pick_unique_path(base: &Path) -> PathBuf {
     parent.join(format!("{}-{}", name, std::process::id()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn auto_import_regieson(src_file: String) -> AppResult<Project> {
     let archive_name = Path::new(&src_file)
         .file_stem()
@@ -83,7 +83,7 @@ pub fn auto_import_regieson(src_file: String) -> AppResult<Project> {
     import_project(src_file, dest.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn auto_import_regiesonnumero(src_file: String) -> AppResult<Project> {
     let archive_name = Path::new(&src_file)
         .file_stem()
