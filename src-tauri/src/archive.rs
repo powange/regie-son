@@ -122,6 +122,9 @@ pub(crate) fn export_to_zip(
     })?;
     let project = migrate_project(&String::from_utf8_lossy(&json), String::new())?;
     let files = referenced_audio(&project);
+    // Re-serialised rather than copied: a file saved by an older version
+    // still holds the author's absolute path, which must not be shared.
+    let json = serde_json::to_vec_pretty(&project).map_err(fail("io.serializeFailed"))?;
 
     // Written aside then renamed, so a failure halfway leaves the previous
     // archive (or nothing) rather than a truncated one.
@@ -624,6 +627,27 @@ mod tests {
         let mut names: Vec<&str> = archive.file_names().collect();
         names.sort();
         assert_eq!(names, ["musiques/a.mp3", "projet.json"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn export_leaves_the_author_s_path_behind() {
+        let dir = scratch_dir();
+        let show = dir.join("show");
+        fs::create_dir_all(show.join("musiques")).unwrap();
+        fs::write(
+            show.join("projet.json"),
+            r#"{"name":"s","path":"/home/alice/Spectacles/s","numeros":[],"future":1}"#,
+        )
+        .unwrap();
+        let dest = dir.join("show.regieson");
+        export_to_zip(&show, dest.to_str().unwrap(), "projet.json").unwrap();
+
+        let mut archive = zip::ZipArchive::new(fs::File::open(&dest).unwrap()).unwrap();
+        let json = read_json_entry(&mut archive.by_name("projet.json").unwrap(), "p").unwrap();
+        assert!(!json.contains("alice"), "{json}");
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!((&value["name"], &value["future"]), (&"s".into(), &1.into()));
         fs::remove_dir_all(&dir).unwrap();
     }
 

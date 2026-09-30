@@ -93,7 +93,7 @@ interface PauseItem {
 type NumeroType = "numero" | "entracte" | "presentation";  // valeurs persistées, jamais traduites
 
 interface Numero { id: string; type: NumeroType; name: string; items: (AudioFile | PauseItem)[] }
-interface Project { name: string; path: string; numeros: Numero[]; singleNumero?: boolean }
+interface Project { name: string; path: string; numeros: Numero[]; singleNumero?: boolean }  // path : absent des fichiers sur disque
 ```
 
 **Migration** : `migrate_project` lit tout fichier de projet. Il convertit l'ancien schéma (`audio_files[]` dans chaque numéro) en `items[]`, et accepte `note` comme ancien nom de `cue`. Ses cas sont couverts par les tests de `types.rs`.
@@ -136,7 +136,7 @@ Créer ou importer dans un dossier qui contient déjà `projet.json` ou `numero.
 
 ### 3.4 Archives
 
-- **Export** : `projet.json` est lu et validé avant de toucher la destination. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
+- **Export** : `projet.json` est lu et validé avant de toucher la destination, puis réécrit sans chemin absolu. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
 - **Import** : `entry_target` n'accepte que `projet.json`, `numero.json` et `musiques/<fichier>`, et ignore le reste. Un nom qui sortirait du dossier fait échouer l'import : `..`, lettre de lecteur, flux NTFS, barre oblique inverse. Plafonds : 500 Mo par piste, 16 Mo par JSON, 16 Go par archive.
 
 ### 3.5 Téléchargements

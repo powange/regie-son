@@ -63,6 +63,9 @@ pub struct Numero {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
     pub name: String,
+    // Where the project lives, for the frontend only: empty in the files on
+    // disk, since the folder a file is read from is its path anyway.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub path: String,
     pub numeros: Vec<Numero>,
     #[serde(

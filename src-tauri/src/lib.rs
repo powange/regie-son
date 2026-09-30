@@ -415,7 +415,13 @@ pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
     static SAVE_LOCK: Mutex<()> = Mutex::new(());
     let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
-    let content = serde_json::to_string_pretty(project).map_err(fail("io.serializeFailed"))?;
+    // The absolute path names the user's account: written into the file, it
+    // would travel with every export and cloud share.
+    let on_disk = Project {
+        path: String::new(),
+        ..project.clone()
+    };
+    let content = serde_json::to_string_pretty(&on_disk).map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);
     let filename = project_json_filename(project);
     let target = dir.join(filename);
@@ -589,6 +595,23 @@ mod tests {
             "v1"
         );
         assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_absolute_path_stays_out_of_the_file() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "s")).unwrap();
+        let raw = fs::read_to_string(dir.join("projet.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(json.get("path").is_none(), "{raw}");
+        // The frontend still gets it, from the folder.
+        let project = open_project_from_file(&dir, "projet.json").unwrap();
+        assert_eq!(project.path, dir.to_string_lossy());
+        assert_eq!(
+            serde_json::to_value(&project).unwrap()["path"],
+            project.path
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
