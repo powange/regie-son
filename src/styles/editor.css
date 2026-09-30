@@ -66,11 +66,16 @@
   gap: 0.4rem;
   font-size: 0.8rem;
   color: var(--text2);
+  background: transparent;
+  padding: 0.2rem 0.3rem;
   cursor: pointer;
   user-select: none;
 }
+.edit-mode-toggle:disabled { opacity: 0.5; cursor: default; }
+.edit-mode-toggle:active { transform: none; }
 
 .toggle-switch {
+  display: block;
   width: 36px;
   height: 20px;
   background: var(--border);
@@ -83,6 +88,7 @@
 .toggle-switch--on { background: var(--accent); }
 
 .toggle-thumb {
+  display: block;
   width: 16px;
   height: 16px;
   background: white;

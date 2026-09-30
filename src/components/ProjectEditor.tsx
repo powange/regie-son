@@ -18,6 +18,7 @@ import { isModalOpen } from "../useModal";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -27,6 +28,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -73,6 +75,10 @@ interface VerifyResult { missing: string[]; orphans: string[] }
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
+
+// Space or Enter on a focused drag handle picks the part up, the arrows move
+// it, Space drops it and Escape cancels.
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
 
 const EDIT_MODE_KEY = "regieson.editMode";
 
@@ -172,7 +178,10 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   // Memoised: a new options object at each render would rebuild the sensors
   // and re-render every sortable card.
   const pointerOptions = useMemo(() => ({ activationConstraint: { distance: editable ? 5 : 99999 } }), [editable]);
-  const sensors = useSensors(useSensor(PointerSensor, pointerOptions));
+  const sensors = useSensors(
+    useSensor(PointerSensor, pointerOptions),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
+  );
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
   const audioDurations = useAudioDurations(project);
@@ -300,6 +309,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       if (isModalOpen()) return;
       const target = e.target as HTMLElement | null;
       if (target && isTextEntry(target)) return;
+      // A focused drag handle owns Space, the arrows and Escape while it
+      // moves a part or a track with the keyboard.
+      if (target?.closest?.('[aria-roledescription="sortable"]')) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
@@ -565,20 +577,21 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         <h1>{project.name}</h1>
         {saved && <span className="saved-badge">{t("editor:saved")}</span>}
 
-        <label
+        <button
+          type="button"
+          role="switch"
+          aria-checked={editable}
+          disabled={showMode}
           className="edit-mode-toggle"
           title={showMode ? t("editor:editMode.lockedByShow") : editMode ? t("editor:editMode.on") : t("editor:editMode.off")}
-          style={showMode ? { opacity: 0.5 } : undefined}
+          onClick={() => setEditMode((v) => !v)}
         >
           <Pencil size={14} />
           <span>{t("editor:editMode.label")}</span>
-          <div
-            className={`toggle-switch${editable ? " toggle-switch--on" : ""}`}
-            onClick={() => { if (!showMode) setEditMode((v) => !v); }}
-          >
-            <div className="toggle-thumb" />
-          </div>
-        </label>
+          <span className={`toggle-switch${editable ? " toggle-switch--on" : ""}`} aria-hidden="true">
+            <span className="toggle-thumb" />
+          </span>
+        </button>
 
         {editable && (
           <div className="undo-buttons">

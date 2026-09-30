@@ -189,16 +189,20 @@ export default function HomePage({
           </div>
           <div className="recents-list">
             {recents.map((r) => (
-              <div key={r.path} className="recent-item" onClick={() => handleOpenRecent(r)}>
-                <div className="recent-item-info">
-                  <span className="recent-item-name">{r.name}</span>
-                  <span className="recent-item-path">{r.path}</span>
-                </div>
-                <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
+              <div key={r.path} className="recent-item">
+                <button type="button" className="recent-item-open" onClick={() => handleOpenRecent(r)}>
+                  <span className="recent-item-info">
+                    <span className="recent-item-name">{r.name}</span>
+                    <span className="recent-item-path">{r.path}</span>
+                  </span>
+                  <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
+                </button>
                 <button
+                  type="button"
                   className="recent-item-remove"
                   title={t("home:removeFromList")}
-                  onClick={(e) => { e.stopPropagation(); onRemoveRecent(r.path); }}
+                  aria-label={t("home:removeFromList")}
+                  onClick={() => onRemoveRecent(r.path)}
                 >
                   <X size={13} />
                 </button>
@@ -216,16 +220,20 @@ export default function HomePage({
           </div>
           <div className="recents-list">
             {numeroRecents.map((r) => (
-              <div key={r.path} className="recent-item" onClick={() => handleOpenRecentNumero(r)}>
-                <div className="recent-item-info">
-                  <span className="recent-item-name">{r.name}</span>
-                  <span className="recent-item-path">{r.path}</span>
-                </div>
-                <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
+              <div key={r.path} className="recent-item">
+                <button type="button" className="recent-item-open" onClick={() => handleOpenRecentNumero(r)}>
+                  <span className="recent-item-info">
+                    <span className="recent-item-name">{r.name}</span>
+                    <span className="recent-item-path">{r.path}</span>
+                  </span>
+                  <span className="recent-item-date">{formatDate(r.lastOpened)}</span>
+                </button>
                 <button
+                  type="button"
                   className="recent-item-remove"
                   title={t("home:removeFromList")}
-                  onClick={(e) => { e.stopPropagation(); onRemoveNumeroRecent(r.path); }}
+                  aria-label={t("home:removeFromList")}
+                  onClick={() => onRemoveNumeroRecent(r.path)}
                 >
                   <X size={13} />
                 </button>
