@@ -21,7 +21,11 @@ pub struct AppError {
 
 impl AppError {
     pub fn new(code: &'static str) -> Self {
-        AppError { code, detail: None, params: BTreeMap::new() }
+        AppError {
+            code,
+            detail: None,
+            params: BTreeMap::new(),
+        }
     }
 
     pub fn detail(mut self, detail: impl fmt::Display) -> Self {

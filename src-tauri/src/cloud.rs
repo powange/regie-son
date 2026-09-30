@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
-use crate::error::{AppError, AppResult, fail, missing};
+use crate::error::{fail, missing, AppError, AppResult};
 use crate::types::{migrate_project, Project};
 use crate::{open_project_from_file, save_project_to_disk};
 
@@ -99,16 +99,11 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
 
     if let Some(len) = resp.content_length() {
         if len > MAX_CLOUD_FILE_SIZE {
-            return Err(
-                AppError::new("cloud.remoteFileTooLarge").with("size", len / (1024 * 1024))
-            );
+            return Err(AppError::new("cloud.remoteFileTooLarge").with("size", len / (1024 * 1024)));
         }
     }
 
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(fail("io.readFailed"))?;
+    let bytes = resp.bytes().await.map_err(fail("io.readFailed"))?;
     fs::write(dest, &bytes).map_err(fail("io.writeFailed"))?;
     Ok(())
 }
@@ -124,13 +119,16 @@ fn temp_archive_path(ext: &str) -> PathBuf {
 // other Régie Son share kind.
 fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
     use std::io::Read;
-    let file = fs::File::open(zip_path)
-        .map_err(fail("cloud.readDownloadedFailed"))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|_| AppError::new("cloud.notAnArchive"))?;
+    let file = fs::File::open(zip_path).map_err(fail("cloud.readDownloadedFailed"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|_| AppError::new("cloud.notAnArchive"))?;
 
     let expecting_show = expected_json == "projet.json";
-    let other_json = if expecting_show { "numero.json" } else { "projet.json" };
+    let other_json = if expecting_show {
+        "numero.json"
+    } else {
+        "projet.json"
+    };
 
     let names: Vec<String> = archive.file_names().map(String::from).collect();
     let has_expected = names.iter().any(|n| n == expected_json);
@@ -151,21 +149,25 @@ fn validate_zip_archive(zip_path: &Path, expected_json: &str) -> AppResult<()> {
         }));
     }
 
-    let mut entry = archive.by_name(expected_json)
+    let mut entry = archive
+        .by_name(expected_json)
         .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
     let mut content = String::new();
     entry
         .read_to_string(&mut content)
         .map_err(|_| AppError::new("archive.corrupt").with("name", expected_json))?;
-    migrate_project(&content, String::new())
-        .map_err(fail("archive.invalid"))?;
+    migrate_project(&content, String::new()).map_err(fail("archive.invalid"))?;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn share_project_on_cloud(project_path: String) -> AppResult<String> {
     let tmp = temp_archive_path("zip");
-    export_to_zip(Path::new(&project_path), &tmp.to_string_lossy(), "projet.json")?;
+    export_to_zip(
+        Path::new(&project_path),
+        &tmp.to_string_lossy(),
+        "projet.json",
+    )?;
     let result = upload_file(&tmp).await;
     let _ = fs::remove_file(&tmp);
     result
@@ -174,7 +176,11 @@ pub async fn share_project_on_cloud(project_path: String) -> AppResult<String> {
 #[tauri::command]
 pub async fn share_numero_on_cloud(numero_path: String) -> AppResult<String> {
     let tmp = temp_archive_path("zip");
-    export_to_zip(Path::new(&numero_path), &tmp.to_string_lossy(), "numero.json")?;
+    export_to_zip(
+        Path::new(&numero_path),
+        &tmp.to_string_lossy(),
+        "numero.json",
+    )?;
     let result = upload_file(&tmp).await;
     let _ = fs::remove_file(&tmp);
     result
@@ -188,8 +194,7 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> App
         validate_zip_archive(&tmp, "projet.json")?;
         let dest = PathBuf::from(&dest_folder);
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
-        open_project_from_file(&dest, "projet.json")
-            .map_err(fail("archive.invalid"))
+        open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
     }
     .await;
     let _ = fs::remove_file(&tmp);
@@ -197,7 +202,10 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> App
 }
 
 #[tauri::command]
-pub async fn import_numero_from_cloud_into_project(code: String, project_path: String) -> AppResult<Project> {
+pub async fn import_numero_from_cloud_into_project(
+    code: String,
+    project_path: String,
+) -> AppResult<Project> {
     let tmp = temp_archive_path("zip");
     let outcome = async {
         download_file(&code, &tmp).await?;
@@ -217,8 +225,8 @@ pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> AppR
         validate_zip_archive(&tmp, "numero.json")?;
         let dest = PathBuf::from(&dest_folder);
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
-        let mut project = open_project_from_file(&dest, "numero.json")
-            .map_err(fail("archive.invalid"))?;
+        let mut project =
+            open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;
         project.single_numero = Some(true);
         save_project_to_disk(&project)?;
         Ok(project)
