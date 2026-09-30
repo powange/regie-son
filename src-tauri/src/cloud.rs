@@ -38,14 +38,18 @@ async fn upload_file(path: &Path) -> AppResult<String> {
             .with("limit", MAX_CLOUD_FILE_SIZE / (1024 * 1024)));
     }
 
-    let bytes = fs::read(path).map_err(fail("io.readFileFailed"))?;
     let filename = path
         .file_name()
         .ok_or_else(missing("io.invalidFilename"))?
         .to_string_lossy()
         .to_string();
 
-    let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+    // Streamed from disk: a 1 GB share must not be held in memory whole.
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(fail("io.readFileFailed"))?;
+    let part =
+        reqwest::multipart::Part::stream_with_length(file, metadata.len()).file_name(filename);
     let form = reqwest::multipart::Form::new()
         .text("reqtype", "fileupload")
         .text("time", RETENTION)
@@ -94,7 +98,7 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
 
     let client = download_client()?;
     let url = format!("{}/{}.zip", DOWNLOAD_BASE, trimmed);
-    let resp = client
+    let mut resp = client
         .get(&url)
         .send()
         .await
@@ -113,8 +117,19 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
         }
     }
 
-    let bytes = resp.bytes().await.map_err(fail("io.readFailed"))?;
-    fs::write(dest, &bytes).map_err(fail("io.writeFailed"))?;
+    // Written as it arrives, and capped whatever Content-Length claimed.
+    use std::io::Write;
+    let mut file = fs::File::create(dest).map_err(fail("io.writeFailed"))?;
+    let mut total: u64 = 0;
+    while let Some(chunk) = resp.chunk().await.map_err(fail("io.readFailed"))? {
+        total += chunk.len() as u64;
+        if total > MAX_CLOUD_FILE_SIZE {
+            return Err(
+                AppError::new("cloud.remoteFileTooLarge").with("size", total / (1024 * 1024))
+            );
+        }
+        file.write_all(&chunk).map_err(fail("io.writeFailed"))?;
+    }
     Ok(())
 }
 
