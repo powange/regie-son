@@ -680,7 +680,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       {showModeError && (
         <div className="show-mode-warning">
           <span>{showModeError}</span>
-          <button className="btn-icon" onClick={() => setShowModeError(null)}><X size={13} /></button>
+          <button className="btn-icon" onClick={() => setShowModeError(null)} title={t("common:actions.close")} aria-label={t("common:actions.close")}><X size={13} /></button>
         </div>
       )}
 
