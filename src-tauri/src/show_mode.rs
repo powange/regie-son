@@ -50,7 +50,7 @@ fn build_silent_wav() -> Vec<u8> {
     wav.extend_from_slice(&16u16.to_le_bytes());
     wav.extend_from_slice(b"data");
     wav.extend_from_slice(&data_size.to_le_bytes());
-    wav.extend(std::iter::repeat(0u8).take(data_size as usize));
+    wav.extend(std::iter::repeat_n(0u8, data_size as usize));
     wav
 }
 
