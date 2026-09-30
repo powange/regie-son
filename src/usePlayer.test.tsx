@@ -285,3 +285,76 @@ describe("usePlayer — resume after a crash", () => {
     expect(localStorage.getItem("regie-son:resume")).toBeNull();
   });
 });
+
+describe("usePlayer — live-show report of 0.4.10", () => {
+  it("skips the rest of a fade-out when Next is pressed again", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a", { fadeOut: 6 }), audio("b")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+
+    await settle(() => result.current.next());
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+    await settle(() => result.current.next());
+    expect(el().src).toBe("asset:///show/musiques/b.mp3");
+    expect(result.current.state.position).toEqual({ numeroIndex: 0, audioIndex: 1 });
+  });
+
+  it("still lets the automatic end-of-track fade finish on its own", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a", { endTime: 60, fadeOut: 4 }), audio("b")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+    el().currentTime = 57;
+    await settle(() => el().fire("timeupdate"));
+    el().currentTime = 58;
+    await settle(() => el().fire("timeupdate"));
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+  });
+
+  it("holds a track that is still starting when Space is pressed, and resumes it next", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a", { fadeIn: 3 })]), null));
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => result.current.togglePlay());
+    expect(el().paused).toBe(true);
+    expect(result.current.state.isPlaying).toBe(false);
+    // The start that was pending no longer counts.
+    await settle(() => el().pending[0].resolve());
+    expect(result.current.state.isPlaying).toBe(false);
+
+    await settle(() => result.current.togglePlay());
+    await settle(() => el().pending[1].resolve());
+    expect(result.current.state.isPlaying).toBe(true);
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+  });
+
+  it("loops a repeating track at its end point until Next", async () => {
+    const { result } = renderHook(() =>
+      usePlayer(project([audio("a", { startTime: 5, endTime: 20, fadeOut: 2, loop: true }), audio("b")]), null),
+    );
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+
+    el().currentTime = 19;
+    await settle(() => el().fire("timeupdate"));
+    expect(result.current.state.fade).toBeNull();
+    el().currentTime = 20.1;
+    await settle(() => el().fire("timeupdate"));
+    expect(el().currentTime).toBe(5);
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+
+    await settle(() => result.current.next());
+    await act(async () => { vi.advanceTimersByTime(2100); });
+    expect(el().src).toBe("asset:///show/musiques/b.mp3");
+  });
+
+  it("restarts a repeating track that reaches the end of its file", async () => {
+    const { result } = renderHook(() => usePlayer(project([audio("a", { loop: true }), audio("b")]), null));
+    await settle(() => result.current.playAt(0, 0));
+    await settle(() => el().pending[0].resolve());
+    el().currentTime = 120;
+    el().ended = true;
+    await settle(() => el().fire("ended"));
+    expect(el().currentTime).toBe(0);
+    expect(el().src).toBe("asset:///show/musiques/a.mp3");
+  });
+});

@@ -34,6 +34,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, Maximize2, Clock, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
@@ -113,7 +114,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [editMode, setEditMode] = useState(readEditModePref);
   const [showMode, setShowMode] = useState(false);
   const [showViewOpen, setShowViewOpen] = useState(false);
-  const [confirm, setConfirm] = useState<"close" | "showModeOff" | "cleanup" | null>(null);
+  const [confirm, setConfirm] = useState<"close" | "quit" | "showModeOff" | "cleanup" | null>(null);
   // The show mode locks the running order: no edit, drag, delete or undo in
   // front of the audience, whatever the edit switch says.
   const editable = editMode && !showMode;
@@ -133,7 +134,14 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [toast, setToast] = useState<ToastData | null>(null);
   const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
   const undoToastIdRef = useRef<number | null>(null);
-  const { saved, saveError, flushSave, scheduleSave } = useAutosave();
+  // The window's close button follows the same rule as the Close button:
+  // no confirmation needed unless a track plays or show mode is on.
+  const liveRef = useRef(false);
+  const { saved, saveError, flushSave, scheduleSave } = useAutosave(() => {
+    if (!liveRef.current) return false;
+    setConfirm("quit");
+    return true;
+  });
   // An "Undo" offered by a toast only makes sense until the next change.
   const dropUndoToast = useCallback(() => {
     setToast((cur) => (cur && cur.id === undoToastIdRef.current ? null : cur));
@@ -398,6 +406,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const onLiveChangeRef = useRef(onLiveChange);
   onLiveChangeRef.current = onLiveChange;
   const live = showMode || playerState.isPlaying;
+  liveRef.current = live;
   useEffect(() => { onLiveChangeRef.current?.(live); }, [live]);
   useEffect(() => () => { onLiveChangeRef.current?.(false); }, []);
 
@@ -416,6 +425,18 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   function requestClose() {
     if (showMode || playerStateRef.current.isPlaying) setConfirm("close");
     else void handleClose();
+  }
+
+  // Confirmed from the window's close button: leave the app altogether. The
+  // save is bounded, and show mode is released by Rust on exit as well.
+  async function quitApp() {
+    setConfirm(null);
+    stop();
+    await flushSave(3000);
+    if (showMode) {
+      try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
+    }
+    await getCurrentWindow().destroy();
   }
 
   async function handleClose() {
@@ -823,6 +844,15 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
           message={t("editor:confirm.closeMessage")}
           confirmLabel={t("common:actions.close")}
           onConfirm={() => { void handleClose(); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "quit" && (
+        <ConfirmModal
+          title={t("editor:confirm.quitTitle")}
+          message={t("editor:confirm.quitMessage")}
+          confirmLabel={t("editor:confirm.quit")}
+          onConfirm={() => { void quitApp(); }}
           onCancel={() => setConfirm(null)}
         />
       )}

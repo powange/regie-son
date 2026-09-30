@@ -20,6 +20,8 @@ function sum(items: PlaylistItem[], durations: Map<string, number>): ShowDuratio
     const d = itemDuration(item, durations);
     if (d === null) complete = false;
     else seconds += d;
+    // A looping track plays until Next: one pass is only a minimum.
+    if (item.type === "audio" && item.loop) complete = false;
   }
   return { seconds, complete };
 }

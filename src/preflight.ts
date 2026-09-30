@@ -65,6 +65,8 @@ export function estimateShowDuration(
         continue;
       }
       seconds += Math.max(0, end - (item.startTime ?? 0));
+      // A looping track plays until Next: one pass is only a minimum.
+      if (item.loop) complete = false;
     }
   }
 

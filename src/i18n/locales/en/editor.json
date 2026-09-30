@@ -51,7 +51,10 @@
     "showModeOffMessage": "Notifications will come back and sleep will no longer be blocked.",
     "showModeOff": "Turn off",
     "cleanupMessage_one": "{{count}} audio file no longer used by any item will be deleted from the folder. This cannot be undone.",
-    "cleanupMessage_other": "{{count}} audio files no longer used by any item will be deleted from the folder. This cannot be undone."
+    "cleanupMessage_other": "{{count}} audio files no longer used by any item will be deleted from the folder. This cannot be undone.",
+    "quitTitle": "Quit Régie Son?",
+    "quitMessage": "A track is playing or show mode is on. Quitting will stop the music.",
+    "quit": "Quit"
   },
   "undo": {
     "undo": "Undo",

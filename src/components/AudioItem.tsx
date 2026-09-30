@@ -1,7 +1,7 @@
 import { lazy, memo, Suspense, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
+import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Repeat, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
 import { formatTime } from "../trackTimes";
@@ -140,8 +140,13 @@ function AudioItemInner({
           </span>
         )}
 
-        {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null) && (
+        {(audio.startTime != null || audio.endTime != null || audio.fadeIn != null || audio.fadeOut != null || audio.loop) && (
           <span className="audio-badges">
+            {audio.loop && (
+              <span className="audio-badge" title={t("audio:item.loop")}>
+                <Repeat size={11} />
+              </span>
+            )}
             {audio.startTime != null && <span className="audio-badge">▶ {formatTime(audio.startTime)}</span>}
             {audio.endTime   != null && <span className="audio-badge">⏹ {formatTime(audio.endTime)}</span>}
             {audio.fadeIn    != null && audio.fadeIn  > 0 && (

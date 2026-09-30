@@ -10,8 +10,15 @@ const CLOSE_SAVE_TIMEOUT_MS = 3000;
 /**
  * Debounced writes of the open project. `flushSave` writes what is pending
  * now; it is also run when the editor unmounts and when the window closes.
+ *
+ * `holdWindowClose` is asked first when the window's close button is used:
+ * returning true keeps the window open (the editor then asks for a
+ * confirmation and closes it itself). It lives here because Tauri allows a
+ * single close handler: each one destroys the window unless it prevents it.
  */
-export function useAutosave() {
+export function useAutosave(holdWindowClose?: () => boolean) {
+  const holdRef = useRef(holdWindowClose);
+  holdRef.current = holdWindowClose;
   const [saved, setSaved] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -21,7 +28,7 @@ export function useAutosave() {
   // Writes the pending project now, one save at a time: two writes never
   // overlap, and "saved" only shows once nothing newer is waiting. Resolves to
   // false when the write failed; the project then stays pending for a retry.
-  const flushSave = useCallback((): Promise<boolean> => {
+  const flushSaveNow = useCallback((): Promise<boolean> => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
     const p = pendingSaveRef.current;
     if (!p) return saveChainRef.current;
@@ -41,6 +48,14 @@ export function useAutosave() {
     return saveChainRef.current;
   }, []);
 
+  // With a timeout, a hung write resolves to false instead of blocking forever
+  // (closing the window must not depend on the disk answering).
+  const flushSave = useCallback((timeoutMs?: number): Promise<boolean> => {
+    const write = flushSaveNow();
+    if (timeoutMs === undefined) return write;
+    return Promise.race([write, new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs))]);
+  }, [flushSaveNow]);
+
   const scheduleSave = useCallback((p: Project) => {
     setSaved(false);
     pendingSaveRef.current = p;
@@ -57,8 +72,12 @@ export function useAutosave() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     getCurrentWindow()
-      .onCloseRequested(async () => {
-        await Promise.race([flushSave(), new Promise((r) => setTimeout(r, CLOSE_SAVE_TIMEOUT_MS))]);
+      .onCloseRequested(async (event) => {
+        if (holdRef.current?.()) {
+          event.preventDefault();
+          return;
+        }
+        await flushSave(CLOSE_SAVE_TIMEOUT_MS);
       })
       .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
       .catch((err) => console.error("onCloseRequested:", err));

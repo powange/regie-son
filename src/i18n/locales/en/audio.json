@@ -37,7 +37,9 @@
     "invalidFadeOut": "Invalid fade-out length (in seconds, e.g. 3)",
     "startBeyondFile": "The start is past the end of the file ({{duration}})",
     "endBeyondFile": "The end is past the end of the file ({{duration}})",
-    "fadesTooLong": "The fade-in and fade-out together are longer than the played part ({{length}})"
+    "fadesTooLong": "The fade-in and fade-out together are longer than the played part ({{length}})",
+    "loop": "Repeat until Next",
+    "loopHint": "The excerpt starts over each time it ends, and Next moves on with the usual fade-out. Useful for waiting music of unknown length."
   },
   "item": {
     "duration": "Length",
@@ -48,7 +50,8 @@
     "missingFile": "File not found: {{filename}}",
     "play": "Play",
     "clickToRename": "Click to rename",
-    "moveTo": "Move to another part"
+    "moveTo": "Move to another part",
+    "loop": "Repeats until Next"
   },
   "pause": {
     "label": "Pause",
