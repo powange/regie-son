@@ -74,6 +74,12 @@ const STOP_CONFIRM_MS = 1000;
 
 interface VerifyResult { missing: string[]; orphans: string[] }
 
+interface ShareState {
+  status: "uploading" | "done" | "error";
+  code: string | null;
+  error: string | null;
+}
+
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
@@ -97,7 +103,7 @@ function filenamesIn(projects: Project[]): Set<string> {
 }
 
 export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings, onLiveChange }: Props) {
-  const { t } = useTranslation(["editor", "common"]);
+  const { t } = useTranslation(["editor", "common", "share"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,12 +120,16 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [preflightIssues, setPreflightIssues] = useState<PreflightIssue[] | null>(null);
   const [preflightConfirmActivation, setPreflightConfirmActivation] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [shareStatus, setShareStatus] = useState<"uploading" | "done" | "error" | null>(null);
-  const [shareCode, setShareCode] = useState<string | null>(null);
-  const [shareError, setShareError] = useState<string | null>(null);
+  const [share, setShare] = useState<ShareState | null>(null);
+  // The dialog can be closed while the upload goes on: its outcome then
+  // arrives as a toast.
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareOpenRef = useRef(shareOpen);
+  shareOpenRef.current = shareOpen;
   const [showImportNumeroCloud, setShowImportNumeroCloud] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
   const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
+  const undoToastIdRef = useRef<number | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoStackRef = useRef<Project[]>([]);
   const redoStackRef = useRef<Project[]>([]);
@@ -130,7 +140,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     const redo = redoStackRef.current.length;
     setHistory((h) => (h.undo === undo && h.redo === redo ? h : { undo, redo }));
     // An "Undo" offered by a toast only makes sense until the next change.
-    setToast((cur) => (cur?.action ? null : cur));
+    setToast((cur) => (cur && cur.id === undoToastIdRef.current ? null : cur));
   }, []);
   const UNDO_LIMIT = 50;
   const COALESCE_WINDOW_MS = 1500;
@@ -422,20 +432,34 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   }
 
   async function handleExportCloud() {
+    // One upload at a time: asking again while one runs shows its progress.
+    if (share?.status === "uploading") { setShareOpen(true); return; }
     if (!(await flushSave())) return;
-    setShareStatus("uploading");
-    setShareCode(null);
-    setShareError(null);
+    setShare({ status: "uploading", code: null, error: null });
+    setShareOpen(true);
     try {
       const code = isSingle
         ? await invoke<string>("share_numero_on_cloud", { numeroPath: project.path })
         : await invoke<string>("share_project_on_cloud", { projectPath: project.path });
-      setShareCode(code);
-      setShareStatus("done");
+      setShare({ status: "done", code, error: null });
+      if (!shareOpenRef.current) {
+        setToast(makeToast(
+          "info",
+          i18next.t("share:cloudShare.readyToast", { code }),
+          { label: i18next.t("share:cloudShare.showCode"), run: () => setShareOpen(true) },
+          true,
+        ));
+      }
     } catch (err) {
-      setShareError(translateError(err));
-      setShareStatus("error");
+      const detail = translateError(err);
+      setShare({ status: "error", code: null, error: detail });
+      if (!shareOpenRef.current) showError(i18next.t("share:cloudShare.failedToast", { detail }));
     }
+  }
+
+  function closeShare() {
+    setShareOpen(false);
+    if (share?.status !== "uploading") setShare(null);
   }
 
   const importNumeroFile = useCallback(async (srcFile: string) => {
@@ -513,7 +537,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
 
   // A deletion is one click away from a mistake: it says so, with an Undo.
   const offerUndo = useCallback((message: string) => {
-    setToast(makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() }));
+    const toast = makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() });
+    undoToastIdRef.current = toast.id;
+    setToast(toast);
   }, []);
 
   const deleteNumero = useCallback((id: string) => {
@@ -862,12 +888,12 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         />
       )}
 
-      {shareStatus !== null && (
+      {share && shareOpen && (
         <CloudShareDialog
-          status={shareStatus}
-          code={shareCode}
-          error={shareError}
-          onClose={() => { setShareStatus(null); setShareCode(null); setShareError(null); }}
+          status={share.status}
+          code={share.code}
+          error={share.error}
+          onClose={closeShare}
         />
       )}
 

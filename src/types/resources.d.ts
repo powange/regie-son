@@ -450,10 +450,15 @@ export default interface Resources {
   },
   "share": {
     "cloudShare": {
+      "backgroundHint": "Vous pouvez fermer cette fenêtre : l'envoi continue, et vous serez prévenu à la fin.",
       "caption": "Communiquez ce code pour que votre destinataire récupère l'archive :",
       "clickToCopy": "Cliquer pour copier",
       "copy": "Copier",
+      "copyFailed": "Copie impossible. Sélectionnez le code pour le copier à la main.",
       "expiry": "Hébergé sur Litterbox — le fichier expire automatiquement au bout de 72 heures.",
+      "failedToast": "Échec du partage : {{detail}}",
+      "readyToast": "Partage terminé. Code : {{code}}",
+      "showCode": "Voir le code",
       "title": "Partage cloud",
       "unknownError": "Erreur inconnue",
       "uploading": "Téléversement en cours…"

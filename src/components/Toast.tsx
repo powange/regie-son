@@ -8,11 +8,15 @@ export interface ToastData {
   kind: "error" | "info";
   message: string;
   action?: { label: string; run: () => void };
+  // Information the user still has to act on stays until closed, like an error.
+  sticky?: boolean;
 }
 
 let nextId = 1;
-export function makeToast(kind: ToastData["kind"], message: string, action?: ToastData["action"]): ToastData {
-  return { id: nextId++, kind, message, action };
+export function makeToast(
+  kind: ToastData["kind"], message: string, action?: ToastData["action"], sticky?: boolean,
+): ToastData {
+  return { id: nextId++, kind, message, action, sticky };
 }
 
 const INFO_TIMEOUT_MS = 6000;
@@ -24,11 +28,11 @@ export default function Toast({ toast, onDismiss }: { toast: ToastData; onDismis
   const { t } = useTranslation(["common"]);
 
   useEffect(() => {
-    if (toast.kind !== "info") return;
+    if (toast.kind !== "info" || toast.sticky) return;
     const timer = setTimeout(onDismiss, INFO_TIMEOUT_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast.id, toast.kind]);
+  }, [toast.id, toast.kind, toast.sticky]);
 
   return (
     <div className={`toast toast--${toast.kind}`} role={toast.kind === "error" ? "alert" : "status"}>
