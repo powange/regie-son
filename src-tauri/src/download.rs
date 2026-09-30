@@ -14,6 +14,19 @@ use crate::types::AudioFile;
 
 pub const MAX_AUDIO_FILE_SIZE: u64 = 500 * 1024 * 1024; // 500 MB
 
+pub(crate) const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Client for downloads of any size. A whole-request timeout would fail a
+/// large file on a slow link while it is still progressing: only an
+/// unreachable server or a stalled transfer (60 s without a byte) gives up.
+pub(crate) fn download_client() -> AppResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(fail("cloud.httpClientFailed"))
+}
+
 pub fn parse_content_disposition_filename(disposition: &str) -> Option<String> {
     // RFC 6266: filename*=UTF-8''percent-encoded
     let lower = disposition.to_ascii_lowercase();
@@ -360,10 +373,7 @@ pub async fn download_audio_from_url(
     let url = validate_http_url(&url)?;
     let guard = DownloadGuard::new(download_id);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(fail("cloud.httpClientFailed"))?;
+    let client = download_client()?;
 
     let mut response = tokio::select! {
         r = client.get(&url).send() => r.map_err(fail("download.failed"))?,
@@ -510,10 +520,7 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
         yt_dlp_asset_name()
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(fail("cloud.httpClientFailed"))?;
+    let client = download_client()?;
 
     let mut response = client
         .get(&url)

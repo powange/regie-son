@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
+use crate::download::download_client;
 use crate::error::{fail, missing, AppError, AppResult};
 use crate::file_assoc::pick_unique_path;
 use crate::types::{migrate_project, Project};
@@ -14,9 +15,16 @@ const DOWNLOAD_BASE: &str = "https://litter.catbox.moe";
 const RETENTION: &str = "72h";
 const MAX_CLOUD_FILE_SIZE: u64 = 1024 * 1024 * 1024; // 1 GB (Litterbox limit per file)
 
-fn http_client() -> AppResult<reqwest::Client> {
+// reqwest's read timeout also bounds the wait for the response headers,
+// which only come once the whole body is sent: an upload cannot use it. It
+// gets a deadline that grows with the file instead, at a floor of 64 KB/s.
+fn upload_timeout(len: u64) -> std::time::Duration {
+    std::time::Duration::from_secs(120 + len / (64 * 1024))
+}
+
+fn upload_client() -> AppResult<reqwest::Client> {
     reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(crate::download::CONNECT_TIMEOUT)
         .build()
         .map_err(fail("cloud.httpClientFailed"))
 }
@@ -43,9 +51,10 @@ async fn upload_file(path: &Path) -> AppResult<String> {
         .text("time", RETENTION)
         .part("fileToUpload", part);
 
-    let client = http_client()?;
+    let client = upload_client()?;
     let resp = client
         .post(UPLOAD_URL)
+        .timeout(upload_timeout(metadata.len()))
         .multipart(form)
         .send()
         .await
@@ -83,7 +92,7 @@ async fn download_file(code: &str, dest: &Path) -> AppResult<()> {
         return Err(AppError::new("cloud.invalidCode"));
     }
 
-    let client = http_client()?;
+    let client = download_client()?;
     let url = format!("{}/{}.zip", DOWNLOAD_BASE, trimmed);
     let resp = client
         .get(&url)
@@ -241,4 +250,16 @@ pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> AppR
     .await;
     let _ = fs::remove_file(&tmp);
     outcome
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_deadline_grows_with_the_file() {
+        assert_eq!(upload_timeout(0).as_secs(), 120);
+        // A full 1 GB share at 64 KB/s: a little over four and a half hours.
+        assert_eq!(upload_timeout(MAX_CLOUD_FILE_SIZE).as_secs(), 120 + 16384);
+    }
 }
