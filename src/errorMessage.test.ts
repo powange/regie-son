@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import i18next from "i18next";
 import { initI18n, FALLBACK_LNG } from "./i18n";
 import { isNotFoundError, translateError } from "./errorMessage";
+import frErrors from "./i18n/locales/fr/errors.json";
 
 beforeAll(async () => {
   initI18n(FALLBACK_LNG);
@@ -20,10 +21,19 @@ describe("codes d'erreur Rust", () => {
     import: "default",
   });
 
+  // Every string literal shaped like "namespace.code" whose namespace exists
+  // in the catalogue, rather than only the literal right after
+  // AppError::new( : that also catches codes picked by an if/else or kept in
+  // a constant, which a call-site pattern missed.
+  const namespaces = new Set(Object.keys(frErrors));
   const codes = [
     ...new Set(
       Object.values(rustSources).flatMap((source) =>
-        [...source.matchAll(/(?:AppError::new|fail|missing)\("([a-zA-Z.]+)"\)/g)].map((m) => m[1]),
+        // Test modules sit at the end of each file and hold file names and
+        // URLs (e.g. "download.php") that look like codes.
+        [...source.split("#[cfg(test)]")[0].matchAll(/"([a-z][a-zA-Z0-9]*\.[a-zA-Z0-9_.]+)"/g)]
+          .map((m) => m[1])
+          .filter((code) => namespaces.has(code.split(".")[0])),
       ),
     ),
   ].sort();
