@@ -1,0 +1,119 @@
+name: CI
+
+# Every push and pull request, so a regression shows up when it is made and
+# not when a tag is pushed. Tags are left to release.yml.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Traductions (extraction, chaînes en dur, paramètres)
+        run: npm run i18n:check
+
+      - name: Types i18n à jour
+        run: |
+          npm run i18n:types
+          git diff --exit-code -- src/types \
+            || { echo "::error::src/types est périmé — lance npm run i18n:types et commite"; exit 1; }
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      # tsc + vite build: the same command the release runs before bundling.
+      - name: Build
+        run: npm run build
+
+  # One job per OS because show_mode.rs, sleep_guard.rs and audio_session.rs
+  # have #[cfg] branches that a Linux build never compiles.
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      # tauri-build checks at compile time that the frontend build and the
+      # yt-dlp sidecar exist. Neither is needed to type-check or test the
+      # Rust code, so empty stand-ins are enough.
+      - name: Stand-ins for dist/ and the sidecar
+        run: |
+          mkdir -p dist src-tauri/binaries
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          ext=""
+          [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          touch "src-tauri/binaries/yt-dlp-${triple}${ext}"
+
+      - name: Format
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      # Warnings fail the build on Linux, which is checked locally too. On
+      # Windows and macOS the platform branches have never been through clippy:
+      # they must compile, and their warnings are reported without failing
+      # until a first pass has cleaned them up.
+      - name: Clippy
+        working-directory: src-tauri
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cargo clippy --all-targets --locked -- -D warnings
+          else
+            cargo clippy --all-targets --locked
+          fi
+
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --locked
