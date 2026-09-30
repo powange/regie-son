@@ -270,11 +270,9 @@ pub async fn download_youtube_audio(
         .to_string();
 
     let mut cmd = tokio::process::Command::new(&yt_dlp);
+    // tokio's Command has creation_flags built in, no CommandExt needed.
     #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000);
-    }
+    cmd.creation_flags(0x08000000);
     cmd.args([
         "-f",
         "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
