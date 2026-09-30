@@ -134,6 +134,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     if (!item) return;
 
     if (item.type === "pause") {
+      // An audio load still in flight must not start over the pause.
+      loadVersionRef.current++;
       audio.pause();
       ignoreSrcErrorRef.current = true;
       audio.src = "";
@@ -395,6 +397,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   }, []);
 
   const stop = useCallback(() => {
+    // Invalidate any load in flight, or the track would start after Stop.
+    loadVersionRef.current++;
     const audio = audioRef.current;
     const wasPlaying = !!audio && !audio.paused && audio.volume > 0;
     const finalize = () => {
