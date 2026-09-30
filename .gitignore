@@ -27,3 +27,7 @@ dist-ssr
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/
+
+# Claude Code: per-machine settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/

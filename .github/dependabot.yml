@@ -1,8 +1,31 @@
 # The workflows pin actions to commit SHAs (a moved tag cannot swap the code
 # that receives the signing key); Dependabot keeps those pins current.
+#
+# The Tauri stack is left out of npm and cargo updates: the CLI refuses to
+# build when @tauri-apps/* and the tauri crates differ in minor version, and
+# Dependabot would bump each side in a separate pull request. Update them
+# together by hand (npm update + cargo update -p tauri …).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "@tauri-apps/*"
+    groups:
+      dev-tooling:
+        dependency-type: development
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "tauri"
+      - dependency-name: "tauri-*"
