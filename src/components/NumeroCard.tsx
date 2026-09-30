@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from "react";
+import { memo, useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -18,7 +18,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { GripVertical, Pencil, Trash2, Plus, ListMusic, Coffee, MicVocal, Check, ChevronDown } from "lucide-react";
 import { Numero, NumeroType, AudioFile, PauseItem, PlaylistItem } from "../types";
-import { PlayerPosition, FadeState } from "../usePlayer";
+import { FadeState } from "../usePlayer";
 import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
 import PauseTrack from "./PauseTrack";
@@ -32,9 +32,11 @@ interface Props {
   projectPath: string;
   editMode: boolean;
   volumeEditable: boolean;
-  playerPosition: PlayerPosition | null;
+  // Player state is narrowed to this card: every card but the active one
+  // gets null / false / null and skips the re-renders of the progress.
+  activeItemIndex: number | null;
   isPlaying: boolean;
-  playerFade: FadeState | null;
+  fade: FadeState | null;
   missingFiles: Set<string>;
   audioDurations: Map<string, number>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
@@ -42,7 +44,9 @@ interface Props {
   onAppendItems: (numeroId: string, items: PlaylistItem[]) => void;
   onError: (message: string) => void;
   onChange: (updated: Numero, tag?: string) => void;
-  onDelete: () => void;
+  onChangeItem: (numeroId: string, updated: PlaylistItem, tag?: string) => void;
+  onDeleteItem: (numeroId: string, itemId: string) => void;
+  onDelete: (numeroId: string) => void;
   canDelete?: boolean;
   canChangeType?: boolean;
   showDragHandle?: boolean;
@@ -50,8 +54,8 @@ interface Props {
 
 function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode, volumeEditable,
-  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems, onError,
-  onChange, onDelete,
+  activeItemIndex, isPlaying, fade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems, onError,
+  onChange, onChangeItem, onDeleteItem, onDelete,
   canDelete = true,
   canChangeType = true,
   showDragHandle = true,
@@ -100,7 +104,8 @@ function NumeroCardInner({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isActiveNumero = playerPosition?.numeroIndex === numeroIndex;
+  const isActiveNumero = activeItemIndex !== null;
+  const itemIds = useMemo(() => numero.items.map((i) => i.id), [numero.items]);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -138,23 +143,9 @@ function NumeroCardInner({
     onAppendItems(numero.id, [{ ...af, type: "audio" as const, volume: af.volume ?? 100 }]);
   }
 
-  function updateAudio(updated: AudioFile, iIdx: number, tag?: string) {
-    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
-  }
-
-  function updatePause(updated: PauseItem, iIdx: number, tag?: string) {
-    onChange({ ...numero, items: numero.items.map((it, i) => i === iIdx ? updated : it) }, tag);
-  }
-
   function addPause() {
     const pause: PauseItem = { type: "pause", id: crypto.randomUUID() };
     onChange({ ...numero, items: [...numero.items, pause] });
-  }
-
-  // The file stays on disk so that undo can bring the track back; it is
-  // cleaned up later as an orphan, once no undo step refers to it.
-  function deleteItem(item: PlaylistItem) {
-    onChange({ ...numero, items: numero.items.filter((i) => i.id !== item.id) });
   }
 
   const sensors = useSensors(useSensor(PointerSensor));
@@ -265,7 +256,7 @@ function NumeroCardInner({
               <Pencil size={14} />
             </button>
             {canDelete && (
-              <button className="btn-icon btn-danger" onClick={onDelete} title={t("common:actions.delete")}>
+              <button className="btn-icon btn-danger" onClick={() => onDelete(numero.id)} title={t("common:actions.delete")}>
                 <Trash2 size={14} />
               </button>
             )}
@@ -280,7 +271,7 @@ function NumeroCardInner({
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleItemDragEnd}>
           <SortableContext
-            items={numero.items.map((i) => i.id)}
+            items={itemIds}
             strategy={verticalListSortingStrategy}
           >
             {numero.items.map((item, iIdx) =>
@@ -288,28 +279,34 @@ function NumeroCardInner({
                 <PauseTrack
                   key={item.id}
                   pause={item}
+                  numeroId={numero.id}
+                  numeroIndex={numeroIndex}
+                  itemIndex={iIdx}
                   editMode={editMode}
-                  isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
-                  onPlay={() => playAt(numeroIndex, iIdx)}
-                  onChange={(updated, tag) => updatePause(updated, iIdx, tag)}
-                  onDelete={() => deleteItem(item)}
+                  isActive={activeItemIndex === iIdx}
+                  playAt={playAt}
+                  onChange={onChangeItem}
+                  onDelete={onDeleteItem}
                 />
               ) : (
                 <AudioItem
                   key={item.id}
                   audio={item}
+                  numeroId={numero.id}
+                  numeroIndex={numeroIndex}
+                  itemIndex={iIdx}
                   projectPath={projectPath}
                   editMode={editMode}
                   volumeEditable={volumeEditable}
                   fileDuration={audioDurations.get(item.filename)}
-                  isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
-                  isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
+                  isActive={activeItemIndex === iIdx}
+                  isPlaying={activeItemIndex === iIdx && isPlaying}
                   isMissing={missingFiles.has(item.filename)}
-                  activeFade={isActiveNumero && playerPosition?.audioIndex === iIdx ? playerFade : null}
-                  // On the current track the button shows Pause: it must pause, not restart from the top.
-                  onPlay={() => (isActiveNumero && playerPosition?.audioIndex === iIdx ? togglePlay() : playAt(numeroIndex, iIdx))}
-                  onChange={(updated, tag) => updateAudio(updated, iIdx, tag)}
-                  onDelete={() => deleteItem(item)}
+                  activeFade={activeItemIndex === iIdx ? fade : null}
+                  playAt={playAt}
+                  togglePlay={togglePlay}
+                  onChange={onChangeItem}
+                  onDelete={onDeleteItem}
                 />
               )
             )}

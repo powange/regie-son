@@ -11,6 +11,9 @@ import { useTranslation } from "react-i18next";
 
 interface Props {
   audio: AudioFile;
+  numeroId: string;
+  numeroIndex: number;
+  itemIndex: number;
   projectPath: string;
   editMode: boolean;
   // Kept apart from editMode: the show mode locks the running order, but the
@@ -21,12 +24,18 @@ interface Props {
   isMissing?: boolean;
   activeFade?: FadeState | null;
   fileDuration?: number;
-  onPlay: () => void;
-  onChange: (updated: AudioFile, tag?: string) => void;
-  onDelete: () => void;
+  // Stable callbacks shared by every row, so that memo holds: the row passes
+  // its own ids instead of receiving a closure rebuilt at each render.
+  playAt: (numeroIndex: number, itemIndex: number) => void;
+  togglePlay: () => void;
+  onChange: (numeroId: string, updated: AudioFile, tag?: string) => void;
+  onDelete: (numeroId: string, itemId: string) => void;
 }
 
-function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive, isPlaying, isMissing, activeFade, fileDuration, onPlay, onChange, onDelete }: Props) {
+function AudioItemInner({
+  audio, numeroId, numeroIndex, itemIndex, projectPath, editMode, volumeEditable, isActive, isPlaying, isMissing,
+  activeFade, fileDuration, playAt, togglePlay, onChange: onChangeItem, onDelete: onDeleteItem,
+}: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(audio.original_name);
@@ -50,6 +59,11 @@ function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive
   useEffect(() => {
     if (editingName) nameInputRef.current?.focus();
   }, [editingName]);
+
+  const onChange = (updated: AudioFile, tag?: string) => onChangeItem(numeroId, updated, tag);
+  const onDelete = () => onDeleteItem(numeroId, audio.id);
+  // On the current track the button shows Pause: it must pause, not restart from the top.
+  const onPlay = () => (isActive ? togglePlay() : playAt(numeroIndex, itemIndex));
 
   function commitName() {
     const trimmed = nameDraft.trim();

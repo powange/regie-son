@@ -35,7 +35,7 @@ import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
 import PlayerBar from "./PlayerBar";
-import { usePlayer } from "../usePlayer";
+import { FadeState, usePlayer } from "../usePlayer";
 
 interface Props {
   project: Project;
@@ -133,7 +133,10 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   }
 
   const missingSet = useMemo(() => new Set(verify.missing), [verify.missing]);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editable ? 5 : 99999 } }));
+  // Memoised: a new options object at each render would rebuild the sensors
+  // and re-render every sortable card.
+  const pointerOptions = useMemo(() => ({ activationConstraint: { distance: editable ? 5 : 99999 } }), [editable]);
+  const sensors = useSensors(useSensor(PointerSensor, pointerOptions));
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
   const audioDurations = useAudioDurations(project);
@@ -416,18 +419,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     update({ ...cur, numeros: cur.numeros.filter((n) => n.id !== id) });
   }, [update]);
 
-  const deleteNumeroById = useMemo(() => {
-    // Stable closures per-id so NumeroCard's onDelete prop keeps identity across renders.
-    const cache = new Map<string, () => void>();
-    return (id: string) => {
-      let fn = cache.get(id);
-      if (!fn) {
-        fn = () => deleteNumero(id);
-        cache.set(id, fn);
-      }
-      return fn;
-    };
-  }, [deleteNumero]);
+  const updateItem = useCallback((numeroId: string, item: PlaylistItem, tag?: string) => {
+    const cur = projectRef.current;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => (n.id === numeroId
+        ? { ...n, items: n.items.map((i) => (i.id === item.id ? item : i)) }
+        : n)),
+    }, tag);
+  }, [update]);
+
+  // The file stays on disk so that undo can bring the track back; it is
+  // cleaned up later as an orphan, once no undo step refers to it.
+  const deleteItem = useCallback((numeroId: string, itemId: string) => {
+    const cur = projectRef.current;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => (n.id === numeroId ? { ...n, items: n.items.filter((i) => i.id !== itemId) } : n)),
+    });
+  }, [update]);
 
   // Items added by a long operation (copies, downloads) are appended to the
   // act as it is when they arrive, not as it was when the operation started.
@@ -448,6 +458,21 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     const newIdx = cur.numeros.findIndex((n) => n.id === over.id);
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
   }, [editable, update]);
+
+  const numeroIds = useMemo(() => project.numeros.map((n) => n.id), [project.numeros]);
+
+  // The player updates its state every 25 ms during a fade. Cards only see a
+  // fade rounded to the tenth they display, so they re-render at 10 Hz, and
+  // only the active card receives it at all.
+  const activeNumeroIndex = playerState.position?.numeroIndex ?? -1;
+  const activeItemIndex = playerState.position?.audioIndex ?? null;
+  const fadeType = playerState.fade?.type ?? null;
+  const fadeTenths = playerState.fade ? Math.round(playerState.fade.remaining * 10) : 0;
+  const fadeTotal = playerState.fade?.total ?? 0;
+  const displayFade = useMemo<FadeState | null>(
+    () => (fadeType ? { type: fadeType, remaining: fadeTenths / 10, total: fadeTotal } : null),
+    [fadeType, fadeTenths, fadeTotal],
+  );
 
   // Header battery readout. The autonomy is only shown when the OS provides
   // one; a missing estimate is normal and better left blank than faked.
@@ -596,7 +621,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
-            items={project.numeros.map((n) => n.id)}
+            items={numeroIds}
             strategy={verticalListSortingStrategy}
           >
             {project.numeros.map((n, nIdx) => (
@@ -607,9 +632,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 projectPath={project.path}
                 editMode={editable}
                 volumeEditable={editMode}
-                playerPosition={playerState.position}
-                isPlaying={playerState.isPlaying}
-                playerFade={playerState.fade}
+                activeItemIndex={nIdx === activeNumeroIndex ? activeItemIndex : null}
+                isPlaying={nIdx === activeNumeroIndex && playerState.isPlaying}
+                fade={nIdx === activeNumeroIndex ? displayFade : null}
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
                 playAt={playAt}
@@ -617,7 +642,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 onAppendItems={appendItems}
                 onError={showError}
                 onChange={updateNumero}
-                onDelete={deleteNumeroById(n.id)}
+                onChangeItem={updateItem}
+                onDeleteItem={deleteItem}
+                onDelete={deleteNumero}
                 canDelete={!isSingle}
                 canChangeType={!isSingle}
                 showDragHandle={!isSingle}
