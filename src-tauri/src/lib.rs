@@ -5,6 +5,8 @@ mod cloud;
 mod download;
 mod error;
 mod file_assoc;
+#[cfg(test)]
+mod roundtrip_tests;
 mod show_mode;
 mod sleep_guard;
 mod types;
