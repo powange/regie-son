@@ -12,6 +12,9 @@ interface Props {
   audio: AudioFile;
   projectPath: string;
   editMode: boolean;
+  // Kept apart from editMode: the show mode locks the running order, but the
+  // operator still rides the volume live.
+  volumeEditable: boolean;
   isActive: boolean;
   isPlaying: boolean;
   isMissing?: boolean;
@@ -22,7 +25,7 @@ interface Props {
   onDelete: () => void;
 }
 
-function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isMissing, activeFade, fileDuration, onPlay, onChange, onDelete }: Props) {
+function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive, isPlaying, isMissing, activeFade, fileDuration, onPlay, onChange, onDelete }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(audio.original_name);
@@ -137,7 +140,7 @@ function AudioItemInner({ audio, projectPath, editMode, isActive, isPlaying, isM
           </span>
         )}
 
-        {editMode && (
+        {volumeEditable && (
           <div className="audio-volume">
             <Volume2 size={12} />
             <input

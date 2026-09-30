@@ -29,6 +29,9 @@ export default interface Resources {
       "youtubeLabel": "Lien de la vidéo YouTube",
       "youtubePlaceholder": "https://www.youtube.com/watch?v=..."
     },
+    "errors": {
+      "add": "Erreur lors de l'ajout audio : {{detail}}"
+    },
     "fromUrl": "Depuis une URL",
     "item": {
       "cue": "Top de départ",
@@ -101,6 +104,15 @@ export default interface Resources {
       "remaining": "Autonomie restante : {{time}}"
     },
     "checkShow": "Vérifier le spectacle",
+    "confirm": {
+      "cleanupMessage_one": "{{count}} fichier audio que plus aucun élément n'utilise sera supprimé du dossier. Cette action est définitive.",
+      "cleanupMessage_other": "{{count}} fichiers audio que plus aucun élément n'utilise seront supprimés du dossier. Cette action est définitive.",
+      "closeMessage": "La musique va s'arrêter et le mode spectacle sera désactivé.",
+      "closeTitle": "Fermer le spectacle ?",
+      "showModeOff": "Désactiver",
+      "showModeOffMessage": "Les notifications reviendront et la mise en veille ne sera plus bloquée.",
+      "showModeOffTitle": "Désactiver le mode spectacle ?"
+    },
     "defaultName": {
       "act": "Numéro {{index}}",
       "hostSegment": "Présentation {{index}}",
@@ -108,6 +120,7 @@ export default interface Resources {
     },
     "editMode": {
       "label": "Édition",
+      "lockedByShow": "Édition verrouillée pendant le mode spectacle",
       "off": "Mode édition inactif",
       "on": "Mode édition actif"
     },
@@ -119,6 +132,8 @@ export default interface Resources {
     },
     "exportAct": "Exporter le numéro",
     "exportShow": "Exporter le projet",
+    "retrySave": "Réessayer",
+    "saveFailed": "Modifications non enregistrées : {{detail}}",
     "saved": "✓ Sauvegardé",
     "showMode": {
       "activate": "Activer le mode spectacle",

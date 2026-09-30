@@ -23,6 +23,7 @@ import AddAudioSourceModal from "./AddAudioSourceModal";
 import AudioItem from "./AudioItem";
 import PauseTrack from "./PauseTrack";
 import { useTranslation } from "react-i18next";
+import { translateError } from "../errorMessage";
 
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
   numeroIndex: number;
   projectPath: string;
   editMode: boolean;
+  volumeEditable: boolean;
   playerPosition: PlayerPosition | null;
   isPlaying: boolean;
   playerFade: FadeState | null;
@@ -37,6 +39,7 @@ interface Props {
   audioDurations: Map<string, number>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
   togglePlay: () => void;
+  onAppendItems: (numeroId: string, items: PlaylistItem[]) => void;
   onChange: (updated: Numero, tag?: string) => void;
   onDelete: () => void;
   canDelete?: boolean;
@@ -45,8 +48,8 @@ interface Props {
 }
 
 function NumeroCardInner({
-  numero, numeroIndex, projectPath, editMode,
-  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay,
+  numero, numeroIndex, projectPath, editMode, volumeEditable,
+  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay, onAppendItems,
   onChange, onDelete,
   canDelete = true,
   canChangeType = true,
@@ -111,28 +114,27 @@ function NumeroCardInner({
   async function addAudioFiles() {
     try {
       const paths = await invoke<string[]>("pick_audio_files");
-      if (!paths.length) return;
-      const newItems: AudioFile[] = [];
+      // Each file is added as soon as it is copied: a failure halfway keeps
+      // the ones already done instead of leaving them orphaned on disk.
       for (const p of paths) {
         const af = await invoke<{ id: string; filename: string; original_name: string }>(
           "copy_audio_file", { srcPath: p, projectPath }
         );
-        newItems.push({ type: "audio", volume: 100, ...af });
+        onAppendItems(numero.id, [{ type: "audio", volume: 100, ...af }]);
       }
-      onChange({ ...numero, items: [...numero.items, ...newItems] });
     } catch (err) {
-      alert("Erreur lors de l'ajout audio : " + err);
+      alert(t("audio:errors.add", { detail: translateError(err) }));
     }
   }
 
   async function addAudioFromUrl(url: string, downloadId: string) {
     const af = await invoke<AudioFile>("download_audio_from_url", { url, projectPath, downloadId });
-    onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
+    onAppendItems(numero.id, [{ ...af, type: "audio" as const, volume: af.volume ?? 100 }]);
   }
 
   async function addAudioFromYoutube(url: string, downloadId: string) {
     const af = await invoke<AudioFile>("download_youtube_audio", { url, projectPath, downloadId });
-    onChange({ ...numero, items: [...numero.items, { ...af, type: "audio" as const, volume: af.volume ?? 100 }] });
+    onAppendItems(numero.id, [{ ...af, type: "audio" as const, volume: af.volume ?? 100 }]);
   }
 
   function updateAudio(updated: AudioFile, iIdx: number, tag?: string) {
@@ -148,12 +150,9 @@ function NumeroCardInner({
     onChange({ ...numero, items: [...numero.items, pause] });
   }
 
-  async function deleteItem(item: PlaylistItem) {
-    if (item.type === "audio") {
-      try {
-        await invoke("delete_audio_file", { projectPath, filename: item.filename });
-      } catch { /* already gone */ }
-    }
+  // The file stays on disk so that undo can bring the track back; it is
+  // cleaned up later as an orphan, once no undo step refers to it.
+  function deleteItem(item: PlaylistItem) {
     onChange({ ...numero, items: numero.items.filter((i) => i.id !== item.id) });
   }
 
@@ -300,6 +299,7 @@ function NumeroCardInner({
                   audio={item}
                   projectPath={projectPath}
                   editMode={editMode}
+                  volumeEditable={volumeEditable}
                   fileDuration={audioDurations.get(item.filename)}
                   isActive={isActiveNumero && playerPosition?.audioIndex === iIdx}
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}

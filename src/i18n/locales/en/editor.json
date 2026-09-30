@@ -8,7 +8,8 @@
   "editMode": {
     "label": "Edit",
     "on": "Edit mode on",
-    "off": "Edit mode off"
+    "off": "Edit mode off",
+    "lockedByShow": "Editing is locked while show mode is on"
   },
   "battery": {
     "charging": "Charging",
@@ -40,5 +41,16 @@
     "cleanup": "Clean-up failed: {{detail}}",
     "export": "Export failed: {{detail}}",
     "import": "Import failed: {{detail}}"
+  },
+  "saveFailed": "Changes not saved: {{detail}}",
+  "retrySave": "Retry",
+  "confirm": {
+    "closeTitle": "Close the show?",
+    "closeMessage": "The music will stop and show mode will be turned off.",
+    "showModeOffTitle": "Turn off show mode?",
+    "showModeOffMessage": "Notifications will come back and sleep will no longer be blocked.",
+    "showModeOff": "Turn off",
+    "cleanupMessage_one": "{{count}} audio file no longer used by any item will be deleted from the folder. This cannot be undone.",
+    "cleanupMessage_other": "{{count}} audio files no longer used by any item will be deleted from the folder. This cannot be undone."
   }
 }
