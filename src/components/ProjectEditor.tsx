@@ -4,6 +4,7 @@ import PreflightModal from "./PreflightModal";
 import ExportModal from "./ExportModal";
 import CloudShareDialog from "./CloudShareDialog";
 import CloudImportDialog from "./CloudImportDialog";
+import ConfirmModal from "./ConfirmModal";
 import { PreflightIssue, gatherPreflight, estimateShowDuration } from "../preflight";
 import { useBattery, LOW_BATTERY_PERCENT } from "../useBattery";
 import i18next from "i18next";
@@ -27,8 +28,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
-import { Project, Numero, NumeroType } from "../types";
+import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
 import PlayerBar from "./PlayerBar";
@@ -53,13 +55,32 @@ function newNumero(type: NumeroType, index: number): Numero {
 
 interface VerifyResult { missing: string[]; orphans: string[] }
 
+const EDIT_MODE_KEY = "regieson.editMode";
+
+function readEditModePref(): boolean {
+  try { return localStorage.getItem(EDIT_MODE_KEY) !== "false"; } catch { return true; }
+}
+
+function filenamesIn(projects: Project[]): Set<string> {
+  const names = new Set<string>();
+  for (const p of projects) {
+    for (const n of p.numeros) for (const item of n.items) if (item.type === "audio") names.add(item.filename);
+  }
+  return names;
+}
+
 export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
   const { t } = useTranslation(["editor", "common"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAddPart, setShowAddPart] = useState(false);
-  const [editMode, setEditMode] = useState(true);
+  const [editMode, setEditMode] = useState(readEditModePref);
   const [showMode, setShowMode] = useState(false);
+  const [confirm, setConfirm] = useState<"close" | "showModeOff" | "cleanup" | null>(null);
+  // The show mode locks the running order: no edit, drag, delete or undo in
+  // front of the audience, whatever the edit switch says.
+  const editable = editMode && !showMode;
   const [showModeError, setShowModeError] = useState<string | null>(null);
   const [verify, setVerify] = useState<VerifyResult>({ missing: [], orphans: [] });
   const [verifyDismissed, setVerifyDismissed] = useState(false);
@@ -91,17 +112,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   useEffect(() => { runVerify(); }, [project]);
 
+  // Deleting a track keeps its file, so that undo can bring it back. Such a
+  // file is only an orphan once no undo or redo step refers to it any more.
+  const cleanableOrphans = useMemo(() => {
+    const inHistory = filenamesIn([...undoStackRef.current, ...redoStackRef.current]);
+    return verify.orphans.filter((f) => !inHistory.has(f));
+  }, [verify.orphans]);
+
   async function cleanupOrphans() {
+    setConfirm(null);
     try {
-      await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: verify.orphans });
-      setVerify((v) => ({ ...v, orphans: [] }));
+      await invoke<number>("cleanup_orphan_files", { projectPath: project.path, filenames: cleanableOrphans });
+      setVerify((v) => ({ ...v, orphans: v.orphans.filter((f) => !cleanableOrphans.includes(f)) }));
     } catch (err) {
       alert(t("editor:errors.cleanup", { detail: translateError(err) }));
     }
   }
 
   const missingSet = useMemo(() => new Set(verify.missing), [verify.missing]);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editMode ? 5 : 99999 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: editable ? 5 : 99999 } }));
 
   const { state: playerState, playAt, togglePlay, next, stop, seek } = usePlayer(project, settings.audioOutputDeviceId);
   const audioDurations = useAudioDurations(project);
@@ -110,18 +139,38 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
 
-  const scheduleSave = useCallback((p: Project) => {
-    setSaved(false);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
+  const pendingSaveRef = useRef<Project | null>(null);
+  const saveChainRef = useRef<Promise<boolean>>(Promise.resolve(true));
+
+  // Writes the pending project now, one save at a time: two writes never
+  // overlap, and "saved" only shows once nothing newer is waiting. Resolves to
+  // false when the write failed; the project then stays pending for a retry.
+  const flushSave = useCallback((): Promise<boolean> => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    const p = pendingSaveRef.current;
+    if (!p) return saveChainRef.current;
+    pendingSaveRef.current = null;
+    saveChainRef.current = saveChainRef.current.then(async () => {
       try {
         await invoke("save_project", { project: p });
-        setSaved(true);
+        if (pendingSaveRef.current === null) setSaved(true);
+        setSaveError(null);
+        return true;
       } catch (err) {
-        console.error("Erreur sauvegarde :", err);
+        if (pendingSaveRef.current === null) pendingSaveRef.current = p;
+        setSaveError(translateError(err));
+        return false;
       }
-    }, 600);
+    });
+    return saveChainRef.current;
   }, []);
+
+  const scheduleSave = useCallback((p: Project) => {
+    setSaved(false);
+    pendingSaveRef.current = p;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => { void flushSave(); }, 600);
+  }, [flushSave]);
 
   // `tag` lets callers coalesce successive pushes from the same field/control
   // (e.g. typing in a cue input) into a single undo entry, as long as they
@@ -138,6 +187,9 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
     lastUpdateTagRef.current = tag ?? null;
     lastUpdateAtRef.current = now;
+    // Ahead of the re-render, so that two updates in a row (files added one
+    // by one) each build on the previous one.
+    projectRef.current = updated;
     onProjectChangeRef.current(updated);
     scheduleSave(updated);
   }, [scheduleSave]);
@@ -147,6 +199,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     if (!prev) return;
     lastUpdateTagRef.current = null;
     redoStackRef.current.push(projectRef.current);
+    projectRef.current = prev;
     onProjectChangeRef.current(prev);
     scheduleSave(prev);
   }, [scheduleSave]);
@@ -156,11 +209,31 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     if (!nxt) return;
     lastUpdateTagRef.current = null;
     undoStackRef.current.push(projectRef.current);
+    projectRef.current = nxt;
     onProjectChangeRef.current(nxt);
     scheduleSave(nxt);
   }, [scheduleSave]);
 
-  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+  // Leaving the editor writes what the 600 ms debounce still held.
+  useEffect(() => () => { void flushSave(); }, [flushSave]);
+
+  // Same when the window itself is closed. Bounded, so that a hung write
+  // cannot keep the window open.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    getCurrentWindow()
+      .onCloseRequested(async () => {
+        await Promise.race([flushSave(), new Promise((r) => setTimeout(r, 3000))]);
+      })
+      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
+      .catch((err) => console.error("onCloseRequested:", err));
+    return () => { cancelled = true; unlisten?.(); };
+  }, [flushSave]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EDIT_MODE_KEY, String(editMode)); } catch { /* preference only */ }
+  }, [editMode]);
 
   const playerStateRef = useRef(playerState);
   playerStateRef.current = playerState;
@@ -168,6 +241,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const bindingsRef = useRef(mergedBindings);
   bindingsRef.current = mergedBindings;
 
+  const showModeRef = useRef(showMode);
+  showModeRef.current = showMode;
   const undoRef = useRef(undo);
   undoRef.current = undo;
   const redoRef = useRef(redo);
@@ -181,7 +256,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       const target = e.target as HTMLElement | null;
       if (target && isTextEntry(target)) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
         if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); redoRef.current(); return; }
       }
@@ -239,13 +314,15 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   async function toggleShowMode() {
     if (showMode) {
-      await applyShowMode(false);
+      setConfirm("showModeOff");
       return;
     }
     await openPreflight(true);
   }
 
   async function handleExportFile() {
+    // Export and share read projet.json from disk: it must hold the latest edits.
+    if (!(await flushSave())) return;
     try {
       if (isSingle) {
         const destFile = await invoke<string | null>("save_regiesonnumero_file", { defaultName: project.name });
@@ -262,6 +339,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   }
 
   async function handleExportCloud() {
+    if (!(await flushSave())) return;
     setShareStatus("uploading");
     setShareCode(null);
     setShareError(null);
@@ -281,28 +359,38 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     try {
       const srcFile = await invoke<string | null>("pick_regiesonnumero_file");
       if (!srcFile) return;
+      // The import starts from projet.json on disk: flush first, or it would
+      // drop pending edits, and a pending save would then drop the import.
+      if (!(await flushSave())) return;
       const updated = await invoke<Project>("import_numero_into_project", {
         srcFile, projectPath: project.path,
       });
-      onProjectChange(updated);
-      setSaved(true);
-      runVerify();
+      update(updated);
     } catch (err) {
       alert(t("editor:errors.import", { detail: translateError(err) }));
     }
   }
 
   async function handleImportNumeroCloudSubmit(code: string) {
+    if (!(await flushSave())) return;
     const updated = await invoke<Project>("import_numero_from_cloud_into_project", {
       code, projectPath: project.path,
     });
-    onProjectChange(updated);
-    setSaved(true);
-    runVerify();
+    update(updated);
     setShowImportNumeroCloud(false);
   }
 
+  // Closing stops the music and leaves the show mode: never on a stray click.
+  function requestClose() {
+    if (showMode || playerStateRef.current.isPlaying) setConfirm("close");
+    else void handleClose();
+  }
+
   async function handleClose() {
+    setConfirm(null);
+    // A failed write keeps the editor open, with its banner, rather than
+    // dropping the changes.
+    if (!(await flushSave())) return;
     if (showMode) {
       try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
     }
@@ -338,15 +426,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     };
   }, [deleteNumero]);
 
+  // Items added by a long operation (copies, downloads) are appended to the
+  // act as it is when they arrive, not as it was when the operation started.
+  const appendItems = useCallback((numeroId: string, items: PlaylistItem[]) => {
+    const cur = projectRef.current;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => (n.id === numeroId ? { ...n, items: [...n.items, ...items] } : n)),
+    });
+  }, [update]);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
-    if (!editMode) return;
+    if (!editable) return;
     const cur = projectRef.current;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIdx = cur.numeros.findIndex((n) => n.id === active.id);
     const newIdx = cur.numeros.findIndex((n) => n.id === over.id);
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
-  }, [editMode, update]);
+  }, [editable, update]);
 
   // Header battery readout. The autonomy is only shown when the OS provides
   // one; a missing estimate is normal and better left blank than faked.
@@ -372,10 +470,17 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         <h1>{project.name}</h1>
         {saved && <span className="saved-badge">{t("editor:saved")}</span>}
 
-        <label className="edit-mode-toggle" title={editMode ? t("editor:editMode.on") : t("editor:editMode.off")}>
+        <label
+          className="edit-mode-toggle"
+          title={showMode ? t("editor:editMode.lockedByShow") : editMode ? t("editor:editMode.on") : t("editor:editMode.off")}
+          style={showMode ? { opacity: 0.5 } : undefined}
+        >
           <Pencil size={14} />
           <span>{t("editor:editMode.label")}</span>
-          <div className={`toggle-switch${editMode ? " toggle-switch--on" : ""}`} onClick={() => setEditMode((v) => !v)}>
+          <div
+            className={`toggle-switch${editable ? " toggle-switch--on" : ""}`}
+            onClick={() => { if (!showMode) setEditMode((v) => !v); }}
+          >
             <div className="toggle-thumb" />
           </div>
         </label>
@@ -428,11 +533,18 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         <button className="btn-icon" onClick={onOpenSettings} title={t("common:settings")}>
           <Settings size={18} />
         </button>
-        <button className="btn-ghost btn-close-project" onClick={handleClose}>
+        <button className="btn-ghost btn-close-project" onClick={requestClose}>
           <ArrowLeft size={15} />
           {t("common:actions.close")}
         </button>
       </div>
+
+      {saveError && (
+        <div className="show-mode-warning">
+          <span>{t("editor:saveFailed", { detail: saveError })}</span>
+          <button className="btn-ghost" onClick={() => { void flushSave(); }}>{t("editor:retrySave")}</button>
+        </div>
+      )}
 
       {showModeError && (
         <div className="show-mode-warning">
@@ -441,20 +553,20 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
         </div>
       )}
 
-      {!verifyDismissed && (verify.missing.length > 0 || verify.orphans.length > 0) && (
+      {!verifyDismissed && (verify.missing.length > 0 || cleanableOrphans.length > 0) && (
         <div className="verify-banner">
           <AlertTriangle size={14} />
           <div className="verify-banner-text">
             {verify.missing.length > 0 && (
               <span>{t("editor:verify.missingFiles", { count: verify.missing.length })}</span>
             )}
-            {verify.missing.length > 0 && verify.orphans.length > 0 && <span>·</span>}
-            {verify.orphans.length > 0 && (
-              <span>{t("editor:verify.orphanFiles", { count: verify.orphans.length })}</span>
+            {verify.missing.length > 0 && cleanableOrphans.length > 0 && <span>·</span>}
+            {cleanableOrphans.length > 0 && (
+              <span>{t("editor:verify.orphanFiles", { count: cleanableOrphans.length })}</span>
             )}
           </div>
-          {verify.orphans.length > 0 && (
-            <button className="btn-ghost verify-banner-btn" onClick={cleanupOrphans} title={t("editor:verify.cleanupTitle")}>
+          {cleanableOrphans.length > 0 && (
+            <button className="btn-ghost verify-banner-btn" onClick={() => setConfirm("cleanup")} title={t("editor:verify.cleanupTitle")}>
               <Trash2 size={13} />
               {t("editor:verify.cleanup")}
             </button>
@@ -490,7 +602,8 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 numero={n}
                 numeroIndex={nIdx}
                 projectPath={project.path}
-                editMode={editMode}
+                editMode={editable}
+                volumeEditable={editMode}
                 playerPosition={playerState.position}
                 isPlaying={playerState.isPlaying}
                 playerFade={playerState.fade}
@@ -498,6 +611,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 audioDurations={audioDurations}
                 playAt={playAt}
                 togglePlay={togglePlay}
+                onAppendItems={appendItems}
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
@@ -508,7 +622,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           </SortableContext>
         </DndContext>
 
-        {editMode && !isSingle && (
+        {editable && !isSingle && (
           <div className="add-numero-bar">
             <button className="btn-secondary" onClick={() => setShowAddPart(true)}>
               <Plus size={16} />
@@ -543,6 +657,34 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
           onClose={() => { setPreflightIssues(null); setPreflightConfirmActivation(false); }}
           onConfirm={preflightConfirmActivation ? () => applyShowMode(true) : undefined}
           confirmLabel={t("editor:showMode.activate")}
+        />
+      )}
+
+      {confirm === "close" && (
+        <ConfirmModal
+          title={t("editor:confirm.closeTitle")}
+          message={t("editor:confirm.closeMessage")}
+          confirmLabel={t("common:actions.close")}
+          onConfirm={() => { void handleClose(); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "showModeOff" && (
+        <ConfirmModal
+          title={t("editor:confirm.showModeOffTitle")}
+          message={t("editor:confirm.showModeOffMessage")}
+          confirmLabel={t("editor:confirm.showModeOff")}
+          onConfirm={() => { setConfirm(null); void applyShowMode(false); }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "cleanup" && (
+        <ConfirmModal
+          title={t("editor:verify.cleanupTitle")}
+          message={t("editor:confirm.cleanupMessage", { count: cleanableOrphans.length })}
+          confirmLabel={t("editor:verify.cleanup")}
+          onConfirm={() => { void cleanupOrphans(); }}
+          onCancel={() => setConfirm(null)}
         />
       )}
 

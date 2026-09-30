@@ -56,5 +56,8 @@
     "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> left",
     "fadeIn": "Fade in",
     "fadeOut": "Fade out"
+  },
+  "errors": {
+    "add": "Could not add audio: {{detail}}"
   }
 }

@@ -8,7 +8,8 @@
   "editMode": {
     "label": "Édition",
     "on": "Mode édition actif",
-    "off": "Mode édition inactif"
+    "off": "Mode édition inactif",
+    "lockedByShow": "Édition verrouillée pendant le mode spectacle"
   },
   "battery": {
     "charging": "En charge",
@@ -40,5 +41,16 @@
     "cleanup": "Erreur lors du nettoyage : {{detail}}",
     "export": "Erreur lors de l'export : {{detail}}",
     "import": "Erreur lors de l'import : {{detail}}"
+  },
+  "saveFailed": "Modifications non enregistrées : {{detail}}",
+  "retrySave": "Réessayer",
+  "confirm": {
+    "closeTitle": "Fermer le spectacle ?",
+    "closeMessage": "La musique va s'arrêter et le mode spectacle sera désactivé.",
+    "showModeOffTitle": "Désactiver le mode spectacle ?",
+    "showModeOffMessage": "Les notifications reviendront et la mise en veille ne sera plus bloquée.",
+    "showModeOff": "Désactiver",
+    "cleanupMessage_one": "{{count}} fichier audio que plus aucun élément n'utilise sera supprimé du dossier. Cette action est définitive.",
+    "cleanupMessage_other": "{{count}} fichiers audio que plus aucun élément n'utilise seront supprimés du dossier. Cette action est définitive."
   }
 }
