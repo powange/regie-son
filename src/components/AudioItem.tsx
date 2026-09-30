@@ -7,6 +7,7 @@ import { FadeState } from "../usePlayer";
 import AudioSettingsModal from "./AudioSettingsModal";
 import { formatTime } from "../trackTimes";
 import { useTranslation } from "react-i18next";
+import { useFollowActive } from "../useFollowActive";
 
 
 interface Props {
@@ -50,11 +51,7 @@ function AudioItemInner({
     rootRef.current = node;
   };
 
-  useEffect(() => {
-    if (isActive) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [isActive]);
+  useFollowActive(rootRef, isActive);
 
   useEffect(() => {
     if (editingName) nameInputRef.current?.focus();

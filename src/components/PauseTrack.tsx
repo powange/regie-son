@@ -1,9 +1,10 @@
-import { memo, useRef, useEffect } from "react";
+import { memo, useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Clock, GripVertical, Info, PauseCircle, Play, Trash2 } from "lucide-react";
 import { PauseItem } from "../types";
 import { useTranslation } from "react-i18next";
+import { useFollowActive } from "../useFollowActive";
 
 
 interface Props {
@@ -30,11 +31,7 @@ function PauseTrackInner({
     rootRef.current = node;
   };
 
-  useEffect(() => {
-    if (isActive) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [isActive]);
+  useFollowActive(rootRef, isActive);
 
   const onChange = (updated: PauseItem, tag?: string) => onChangeItem(numeroId, updated, tag);
   const onDelete = () => onDeleteItem(numeroId, pause.id);
