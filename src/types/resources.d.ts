@@ -19,6 +19,7 @@ export default interface Resources {
     "categoryPause": "Pause",
     "download": {
       "downloadingTitle": "Téléchargement de « {{title}} »…",
+      "downloadingTitlePercent": "Téléchargement de « {{title}} » : {{percent}} %",
       "fetchingInfo": "Récupération des informations de la vidéo…",
       "inProgress": "Téléchargement en cours…",
       "initializing": "Initialisation…",
