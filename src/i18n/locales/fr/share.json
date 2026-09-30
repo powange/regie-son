@@ -34,6 +34,11 @@
     "clickToCopy": "Cliquer pour copier",
     "copy": "Copier",
     "expiry": "Hébergé sur Litterbox — le fichier expire automatiquement au bout de 72 heures.",
-    "unknownError": "Erreur inconnue"
+    "unknownError": "Erreur inconnue",
+    "backgroundHint": "Vous pouvez fermer cette fenêtre : l'envoi continue, et vous serez prévenu à la fin.",
+    "copyFailed": "Copie impossible. Sélectionnez le code pour le copier à la main.",
+    "readyToast": "Partage terminé. Code : {{code}}",
+    "showCode": "Voir le code",
+    "failedToast": "Échec du partage : {{detail}}"
   }
 }

@@ -1,12 +1,16 @@
-import { memo, useState, useRef, useEffect } from "react";
+import { lazy, memo, Suspense, useState, useRef, useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle, Clock, GripVertical, Info, Music, Pause, Play, Settings, Trash2, Volume2 } from "lucide-react";
 import { AudioFile } from "../types";
 import { FadeState } from "../usePlayer";
-import AudioSettingsModal from "./AudioSettingsModal";
 import { formatTime } from "../trackTimes";
 import { useTranslation } from "react-i18next";
+import { useFollowActive } from "../useFollowActive";
+import MoveToActButton, { ActTarget } from "./MoveToActButton";
+
+// Loaded on first use: it brings wavesurfer.js, which nothing else needs.
+const AudioSettingsModal = lazy(() => import("./AudioSettingsModal"));
 
 
 interface Props {
@@ -30,11 +34,13 @@ interface Props {
   togglePlay: () => void;
   onChange: (numeroId: string, updated: AudioFile, tag?: string) => void;
   onDelete: (numeroId: string, itemId: string) => void;
+  acts: ActTarget[];
+  onMove: (fromNumeroId: string, itemId: string, toNumeroId: string) => void;
 }
 
 function AudioItemInner({
   audio, numeroId, numeroIndex, itemIndex, projectPath, editMode, volumeEditable, isActive, isPlaying, isMissing,
-  activeFade, fileDuration, playAt, togglePlay, onChange: onChangeItem, onDelete: onDeleteItem,
+  activeFade, fileDuration, playAt, togglePlay, onChange: onChangeItem, onDelete: onDeleteItem, acts, onMove,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -50,11 +56,7 @@ function AudioItemInner({
     rootRef.current = node;
   };
 
-  useEffect(() => {
-    if (isActive) {
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [isActive]);
+  useFollowActive(rootRef, isActive);
 
   useEffect(() => {
     if (editingName) nameInputRef.current?.focus();
@@ -171,6 +173,8 @@ function AudioItemInner({
           </div>
         )}
 
+        {editMode && <MoveToActButton numeroId={numeroId} itemId={audio.id} acts={acts} onMove={onMove} />}
+
         {editMode && (
           <button className="btn-icon" onClick={() => setShowSettings(true)} title={t("common:settings")}>
             <Settings size={14} />
@@ -202,12 +206,14 @@ function AudioItemInner({
       )}
 
       {showSettings && (
-        <AudioSettingsModal
-          audio={audio}
-          projectPath={projectPath}
-          onSave={(updated) => onChange(updated)}
-          onClose={() => setShowSettings(false)}
-        />
+        <Suspense fallback={null}>
+          <AudioSettingsModal
+            audio={audio}
+            projectPath={projectPath}
+            onSave={(updated) => onChange(updated)}
+            onClose={() => setShowSettings(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

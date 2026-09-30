@@ -34,6 +34,11 @@
     "clickToCopy": "Click to copy",
     "copy": "Copy",
     "expiry": "Hosted on Litterbox — the file expires automatically after 72 hours.",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "backgroundHint": "You can close this window: the upload goes on, and you will be told when it is done.",
+    "copyFailed": "Could not copy. Select the code to copy it by hand.",
+    "readyToast": "Share finished. Code: {{code}}",
+    "showCode": "Show code",
+    "failedToast": "Share failed: {{detail}}"
   }
 }

@@ -46,7 +46,8 @@
     "missing": "File not found",
     "missingFile": "File not found: {{filename}}",
     "play": "Play",
-    "clickToRename": "Click to rename"
+    "clickToRename": "Click to rename",
+    "moveTo": "Move to another part"
   },
   "pause": {
     "label": "Pause",

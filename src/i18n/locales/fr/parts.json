@@ -20,5 +20,10 @@
     "hint": "Un moment d'annonce ou de transition."
   },
   "changeType": "Changer le type",
-  "emptyAct": "Aucun élément — ajoutez une musique ou une pause."
+  "emptyAct": "Aucun élément — ajoutez une musique ou une pause.",
+  "duration": {
+    "title": "Durée de lecture de cette partie",
+    "atLeast": "≥ {{duration}}",
+    "atLeastTitle": "Durée minimale : les pauses sans durée et les pistes pas encore mesurées ne sont pas comptées"
+  }
 }

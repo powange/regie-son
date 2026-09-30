@@ -40,6 +40,7 @@ export default interface Resources {
       "duration": "Durée",
       "missing": "Fichier introuvable",
       "missingFile": "Fichier introuvable : {{filename}}",
+      "moveTo": "Déplacer vers une autre partie",
       "play": "Lire",
       "volume": "Volume : {{percent}} %"
     },
@@ -147,6 +148,13 @@ export default interface Resources {
     "exportAct": "Exporter le numéro",
     "exportShow": "Exporter le projet",
     "retrySave": "Réessayer",
+    "runningTime": {
+      "remaining": "Reste {{duration}}",
+      "remainingAtLeast": "Reste au moins {{duration}}",
+      "title": "Durée de lecture, sans les enchaînements entre les parties ni les pauses sans durée",
+      "total": "Durée : {{duration}}",
+      "totalAtLeast": "Durée : au moins {{duration}}"
+    },
     "saveFailed": "Modifications non enregistrées : {{detail}}",
     "saved": "✓ Sauvegardé",
     "showMode": {
@@ -156,10 +164,22 @@ export default interface Resources {
       "inactive": "Mode spectacle",
       "inactiveTitle": "Activer le mode spectacle : couper les notifications et bloquer la mise en veille"
     },
+    "showView": {
+      "close": "Quitter la vue spectacle",
+      "endOfShow": "Fin du spectacle",
+      "idle": "Rien n'est en cours",
+      "now": "En cours",
+      "offer": "Mode spectacle activé. Passer en vue spectacle ?",
+      "open": "Vue spectacle",
+      "openTitle": "Ouvrir la vue spectacle : plein écran, gros caractères, sans édition",
+      "title": "Vue spectacle",
+      "upNext": "À suivre"
+    },
     "undo": {
       "partDeleted": "« {{name}} » supprimé",
       "redoTitle": "Rétablir la modification annulée (Ctrl+Y)",
       "stepDeleted": "Étape supprimée",
+      "stepMoved": "Étape déplacée vers « {{name}} »",
       "undo": "Annuler",
       "undoTitle": "Annuler la dernière modification (Ctrl+Z)"
     },
@@ -351,6 +371,11 @@ export default interface Resources {
       "label": "Numéro"
     },
     "changeType": "Changer le type",
+    "duration": {
+      "atLeast": "≥ {{duration}}",
+      "atLeastTitle": "Durée minimale : les pauses sans durée et les pistes pas encore mesurées ne sont pas comptées",
+      "title": "Durée de lecture de cette partie"
+    },
     "emptyAct": "Aucun élément — ajoutez une musique ou une pause.",
     "hostSegment": {
       "hint": "Un moment d'annonce ou de transition.",
@@ -450,10 +475,15 @@ export default interface Resources {
   },
   "share": {
     "cloudShare": {
+      "backgroundHint": "Vous pouvez fermer cette fenêtre : l'envoi continue, et vous serez prévenu à la fin.",
       "caption": "Communiquez ce code pour que votre destinataire récupère l'archive :",
       "clickToCopy": "Cliquer pour copier",
       "copy": "Copier",
+      "copyFailed": "Copie impossible. Sélectionnez le code pour le copier à la main.",
       "expiry": "Hébergé sur Litterbox — le fichier expire automatiquement au bout de 72 heures.",
+      "failedToast": "Échec du partage : {{detail}}",
+      "readyToast": "Partage terminé. Code : {{code}}",
+      "showCode": "Voir le code",
       "title": "Partage cloud",
       "unknownError": "Erreur inconnue",
       "uploading": "Téléversement en cours…"

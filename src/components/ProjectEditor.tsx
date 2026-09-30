@@ -14,6 +14,9 @@ import { translateError } from "../errorMessage";
 import { formatLongDuration } from "../duration";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
+import { useAutosave } from "../useAutosave";
+import { useProjectHistory } from "../useProjectHistory";
+import { remainingShowDuration } from "../runningTime";
 import { isModalOpen } from "../useModal";
 import {
   DndContext,
@@ -31,12 +34,13 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus, Share2, Settings, Pencil, MonitorPlay, Maximize2, Clock, ShieldCheck, Trash2, X, Undo2, Redo2, BatteryCharging, BatteryLow, BatteryMedium, BatteryFull, BatteryWarning } from "lucide-react";
 import { Project, Numero, NumeroType, PlaylistItem } from "../types";
 import { Settings as AppSettings } from "../useSettings";
 import NumeroCard from "./NumeroCard";
+import { ActTarget } from "./MoveToActButton";
 import PlayerBar from "./PlayerBar";
+import ShowView from "./ShowView";
 import { FadeState, usePlayer } from "../usePlayer";
 
 // What App needs from the open editor when a file is opened from the OS.
@@ -74,6 +78,12 @@ const STOP_CONFIRM_MS = 1000;
 
 interface VerifyResult { missing: string[]; orphans: string[] }
 
+interface ShareState {
+  status: "uploading" | "done" | "error";
+  code: string | null;
+  error: string | null;
+}
+
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
@@ -97,13 +107,12 @@ function filenamesIn(projects: Project[]): Set<string> {
 }
 
 export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings, onLiveChange }: Props) {
-  const { t } = useTranslation(["editor", "common"]);
+  const { t } = useTranslation(["editor", "common", "share"]);
   const isSingle = project.singleNumero === true;
-  const [saved, setSaved] = useState(true);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAddPart, setShowAddPart] = useState(false);
   const [editMode, setEditMode] = useState(readEditModePref);
   const [showMode, setShowMode] = useState(false);
+  const [showViewOpen, setShowViewOpen] = useState(false);
   const [confirm, setConfirm] = useState<"close" | "showModeOff" | "cleanup" | null>(null);
   // The show mode locks the running order: no edit, drag, delete or undo in
   // front of the audience, whatever the edit switch says.
@@ -114,30 +123,25 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const [preflightIssues, setPreflightIssues] = useState<PreflightIssue[] | null>(null);
   const [preflightConfirmActivation, setPreflightConfirmActivation] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [shareStatus, setShareStatus] = useState<"uploading" | "done" | "error" | null>(null);
-  const [shareCode, setShareCode] = useState<string | null>(null);
-  const [shareError, setShareError] = useState<string | null>(null);
+  const [share, setShare] = useState<ShareState | null>(null);
+  // The dialog can be closed while the upload goes on: its outcome then
+  // arrives as a toast.
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareOpenRef = useRef(shareOpen);
+  shareOpenRef.current = shareOpen;
   const [showImportNumeroCloud, setShowImportNumeroCloud] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
   const showError = useCallback((message: string) => setToast(makeToast("error", message)), []);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoStackRef = useRef<Project[]>([]);
-  const redoStackRef = useRef<Project[]>([]);
-  // Mirrors the stack sizes for the Undo / Redo buttons.
-  const [history, setHistory] = useState({ undo: 0, redo: 0 });
-  const syncHistory = useCallback(() => {
-    const undo = undoStackRef.current.length;
-    const redo = redoStackRef.current.length;
-    setHistory((h) => (h.undo === undo && h.redo === redo ? h : { undo, redo }));
-    // An "Undo" offered by a toast only makes sense until the next change.
-    setToast((cur) => (cur?.action ? null : cur));
+  const undoToastIdRef = useRef<number | null>(null);
+  const { saved, saveError, flushSave, scheduleSave } = useAutosave();
+  // An "Undo" offered by a toast only makes sense until the next change.
+  const dropUndoToast = useCallback(() => {
+    setToast((cur) => (cur && cur.id === undoToastIdRef.current ? null : cur));
   }, []);
-  const UNDO_LIMIT = 50;
-  const COALESCE_WINDOW_MS = 1500;
-  const lastUpdateTagRef = useRef<string | null>(null);
-  const lastUpdateAtRef = useRef(0);
   const projectRef = useRef(project);
   projectRef.current = project;
+  const { update, undo, redo, history, snapshots } =
+    useProjectHistory(projectRef, onProjectChange, scheduleSave, dropUndoToast);
 
   // verify_project checks every file on disk: only a change in the set of
   // audio files calls for it, not a keystroke in a cue or a slider step. The
@@ -162,9 +166,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   // Deleting a track keeps its file, so that undo can bring it back. Such a
   // file is only an orphan once no undo or redo step refers to it any more.
   const cleanableOrphans = useMemo(() => {
-    const inHistory = filenamesIn([...undoStackRef.current, ...redoStackRef.current]);
+    const inHistory = filenamesIn(snapshots());
     return verify.orphans.filter((f) => !inHistory.has(f));
-  }, [verify.orphans]);
+  }, [verify.orphans, snapshots]);
 
   async function cleanupOrphans() {
     setConfirm(null);
@@ -197,104 +201,6 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   const audioDurations = useAudioDurations(project);
   const battery = useBattery();
 
-  const onProjectChangeRef = useRef(onProjectChange);
-  onProjectChangeRef.current = onProjectChange;
-
-  const pendingSaveRef = useRef<Project | null>(null);
-  const saveChainRef = useRef<Promise<boolean>>(Promise.resolve(true));
-
-  // Writes the pending project now, one save at a time: two writes never
-  // overlap, and "saved" only shows once nothing newer is waiting. Resolves to
-  // false when the write failed; the project then stays pending for a retry.
-  const flushSave = useCallback((): Promise<boolean> => {
-    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    const p = pendingSaveRef.current;
-    if (!p) return saveChainRef.current;
-    pendingSaveRef.current = null;
-    saveChainRef.current = saveChainRef.current.then(async () => {
-      try {
-        await invoke("save_project", { project: p });
-        if (pendingSaveRef.current === null) setSaved(true);
-        setSaveError(null);
-        return true;
-      } catch (err) {
-        if (pendingSaveRef.current === null) pendingSaveRef.current = p;
-        setSaveError(translateError(err));
-        return false;
-      }
-    });
-    return saveChainRef.current;
-  }, []);
-
-  const scheduleSave = useCallback((p: Project) => {
-    setSaved(false);
-    pendingSaveRef.current = p;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { void flushSave(); }, 600);
-  }, [flushSave]);
-
-  // `tag` lets callers coalesce successive pushes from the same field/control
-  // (e.g. typing in a cue input) into a single undo entry, as long as they
-  // arrive within COALESCE_WINDOW_MS.
-  const update = useCallback((updated: Project, tag?: string) => {
-    const now = performance.now();
-    const sameSession = !!tag
-      && tag === lastUpdateTagRef.current
-      && now - lastUpdateAtRef.current < COALESCE_WINDOW_MS;
-    if (!sameSession) {
-      undoStackRef.current.push(projectRef.current);
-      if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
-      redoStackRef.current = [];
-    }
-    lastUpdateTagRef.current = tag ?? null;
-    lastUpdateAtRef.current = now;
-    // Ahead of the re-render, so that two updates in a row (files added one
-    // by one) each build on the previous one.
-    projectRef.current = updated;
-    onProjectChangeRef.current(updated);
-    scheduleSave(updated);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  const undo = useCallback(() => {
-    const prev = undoStackRef.current.pop();
-    if (!prev) return;
-    lastUpdateTagRef.current = null;
-    redoStackRef.current.push(projectRef.current);
-    projectRef.current = prev;
-    onProjectChangeRef.current(prev);
-    scheduleSave(prev);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  const redo = useCallback(() => {
-    const nxt = redoStackRef.current.pop();
-    if (!nxt) return;
-    lastUpdateTagRef.current = null;
-    undoStackRef.current.push(projectRef.current);
-    projectRef.current = nxt;
-    onProjectChangeRef.current(nxt);
-    scheduleSave(nxt);
-    syncHistory();
-  }, [scheduleSave, syncHistory]);
-
-  // Leaving the editor writes what the 600 ms debounce still held.
-  useEffect(() => () => { void flushSave(); }, [flushSave]);
-
-  // Same when the window itself is closed. Bounded, so that a hung write
-  // cannot keep the window open.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    getCurrentWindow()
-      .onCloseRequested(async () => {
-        await Promise.race([flushSave(), new Promise((r) => setTimeout(r, 3000))]);
-      })
-      .then((fn) => { if (cancelled) fn(); else unlisten = fn; })
-      .catch((err) => console.error("onCloseRequested:", err));
-    return () => { cancelled = true; unlisten?.(); };
-  }, [flushSave]);
-
   useEffect(() => {
     try { localStorage.setItem(EDIT_MODE_KEY, String(editMode)); } catch { /* preference only */ }
   }, [editMode]);
@@ -307,6 +213,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
 
   const showModeRef = useRef(showMode);
   showModeRef.current = showMode;
+  // The show view has no editing: undo and redo stay out of it too.
+  const showViewOpenRef = useRef(showViewOpen);
+  showViewOpenRef.current = showViewOpen;
   const undoRef = useRef(undo);
   undoRef.current = undo;
   const redoRef = useRef(redo);
@@ -323,7 +232,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       // moves a part or a track with the keyboard.
       if (target?.closest?.('[aria-roledescription="sortable"]')) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !showModeRef.current && !showViewOpenRef.current) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
         if ((e.key === "z" && e.shiftKey) || e.key === "y") { e.preventDefault(); redoRef.current(); return; }
       }
@@ -380,6 +289,12 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       setShowMode(active);
       setShowModeError(translateError(err));
     }
+    if (active && !showViewOpen) {
+      setToast(makeToast("info", t("editor:showView.offer"), {
+        label: t("editor:showView.open"),
+        run: () => setShowViewOpen(true),
+      }));
+    }
   }
 
   async function openPreflight(beforeActivatingShow: boolean) {
@@ -422,20 +337,34 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
   }
 
   async function handleExportCloud() {
+    // One upload at a time: asking again while one runs shows its progress.
+    if (share?.status === "uploading") { setShareOpen(true); return; }
     if (!(await flushSave())) return;
-    setShareStatus("uploading");
-    setShareCode(null);
-    setShareError(null);
+    setShare({ status: "uploading", code: null, error: null });
+    setShareOpen(true);
     try {
       const code = isSingle
         ? await invoke<string>("share_numero_on_cloud", { numeroPath: project.path })
         : await invoke<string>("share_project_on_cloud", { projectPath: project.path });
-      setShareCode(code);
-      setShareStatus("done");
+      setShare({ status: "done", code, error: null });
+      if (!shareOpenRef.current) {
+        setToast(makeToast(
+          "info",
+          i18next.t("share:cloudShare.readyToast", { code }),
+          { label: i18next.t("share:cloudShare.showCode"), run: () => setShareOpen(true) },
+          true,
+        ));
+      }
     } catch (err) {
-      setShareError(translateError(err));
-      setShareStatus("error");
+      const detail = translateError(err);
+      setShare({ status: "error", code: null, error: detail });
+      if (!shareOpenRef.current) showError(i18next.t("share:cloudShare.failedToast", { detail }));
     }
+  }
+
+  function closeShare() {
+    setShareOpen(false);
+    if (share?.status !== "uploading") setShare(null);
   }
 
   const importNumeroFile = useCallback(async (srcFile: string) => {
@@ -513,7 +442,9 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
 
   // A deletion is one click away from a mistake: it says so, with an Undo.
   const offerUndo = useCallback((message: string) => {
-    setToast(makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() }));
+    const toast = makeToast("info", message, { label: i18next.t("editor:undo.undo"), run: () => undoRef.current() });
+    undoToastIdRef.current = toast.id;
+    setToast(toast);
   }, []);
 
   const deleteNumero = useCallback((id: string) => {
@@ -564,7 +495,50 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
     update({ ...cur, numeros: arrayMove(cur.numeros, oldIdx, newIdx) });
   }, [editable, update]);
 
+  // Moves a track or a pause to the end of another part, as one undoable
+  // step. A menu entry rather than a drag between cards: a single DndContext
+  // for parts and items would need its own collision rules, a live move
+  // between lists during the drag and drop zones for empty parts, all on the
+  // screen used during the show. The player follows the item by id, so
+  // moving the one that plays does not disturb it.
+  const moveItem = useCallback((fromNumeroId: string, itemId: string, toNumeroId: string) => {
+    if (!editable || fromNumeroId === toNumeroId) return;
+    const cur = projectRef.current;
+    const from = cur.numeros.find((n) => n.id === fromNumeroId);
+    const item = from?.items.find((i) => i.id === itemId);
+    const to = cur.numeros.find((n) => n.id === toNumeroId);
+    if (!item || !to) return;
+    update({
+      ...cur,
+      numeros: cur.numeros.map((n) => {
+        if (n.id === fromNumeroId) return { ...n, items: n.items.filter((i) => i.id !== itemId) };
+        if (n.id === toNumeroId) return { ...n, items: [...n.items, item] };
+        return n;
+      }),
+    });
+    offerUndo(i18next.t("editor:undo.stepMoved", { name: to.name }));
+  }, [editable, update, offerUndo]);
+
   const numeroIds = useMemo(() => project.numeros.map((n) => n.id), [project.numeros]);
+  // Rebuilt only when a part is added, removed, renamed or moved, so that
+  // the memoised rows do not re-render at each keystroke in a cue.
+  const actsKey = JSON.stringify(project.numeros.map((n) => [n.id, n.name]));
+  const acts = useMemo<ActTarget[]>(
+    () => (JSON.parse(actsKey) as [string, string][]).map(([id, name]) => ({ id, name })),
+    [actsKey],
+  );
+
+  // Playing time still ahead, a floor when some steps have no known length.
+  const remaining = remainingShowDuration(project, audioDurations, playerState.position, playerState.progress);
+  const remainingLabel = remaining.seconds <= 0
+    ? null
+    : playerState.position
+      ? (remaining.complete
+        ? t("editor:runningTime.remaining", { duration: formatLongDuration(remaining.seconds) })
+        : t("editor:runningTime.remainingAtLeast", { duration: formatLongDuration(remaining.seconds) }))
+      : (remaining.complete
+        ? t("editor:runningTime.total", { duration: formatLongDuration(remaining.seconds) })
+        : t("editor:runningTime.totalAtLeast", { duration: formatLongDuration(remaining.seconds) }));
 
   // The player updates its state every 25 ms during a fade. Cards only see a
   // fade rounded to the tenth they display, so they re-render at 10 Hz, and
@@ -642,6 +616,13 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
           </div>
         )}
 
+        {remainingLabel && (
+          <span className="show-duration" title={t("editor:runningTime.title")}>
+            <Clock size={14} />
+            {remainingLabel}
+          </span>
+        )}
+
         {battery && (
           <div
             className={`battery-indicator${!batteryCharging && batteryPercent < LOW_BATTERY_PERCENT ? " battery-indicator--low" : ""}`}
@@ -678,6 +659,15 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         >
           <MonitorPlay size={15} />
           {showMode ? t("editor:showMode.active") : t("editor:showMode.inactive")}
+        </button>
+
+        <button
+          className="btn-icon"
+          onClick={() => setShowViewOpen(true)}
+          title={t("editor:showView.openTitle")}
+          aria-label={t("editor:showView.openTitle")}
+        >
+          <Maximize2 size={18} />
         </button>
 
         <button
@@ -771,6 +761,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
                 fade={nIdx === activeNumeroIndex ? displayFade : null}
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
+                acts={acts}
                 playAt={playAt}
                 togglePlay={togglePlay}
                 onAppendItems={appendItems}
@@ -778,6 +769,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
                 onChange={updateNumero}
                 onChangeItem={updateItem}
                 onDeleteItem={deleteItem}
+                onMoveItem={moveItem}
                 onDelete={deleteNumero}
                 canDelete={!isSingle}
                 canChangeType={!isSingle}
@@ -862,12 +854,24 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
         />
       )}
 
-      {shareStatus !== null && (
+      {share && shareOpen && (
         <CloudShareDialog
-          status={shareStatus}
-          code={shareCode}
-          error={shareError}
-          onClose={() => { setShareStatus(null); setShareCode(null); setShareError(null); }}
+          status={share.status}
+          code={share.code}
+          error={share.error}
+          onClose={closeShare}
+        />
+      )}
+
+      {showViewOpen && (
+        <ShowView
+          state={playerState}
+          project={project}
+          remainingLabel={remainingLabel}
+          onTogglePlay={togglePlay}
+          onNext={next}
+          onStop={stop}
+          onClose={() => setShowViewOpen(false)}
         />
       )}
 
