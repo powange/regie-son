@@ -1,6 +1,6 @@
 [package]
 name = "regie-son"
-version = "0.4.6"
+version = "0.4.7"
 description = "Régie son pour spectacles cabaret"
 authors = ["pcomble"]
 edition = "2021"
@@ -38,3 +38,10 @@ windows = { version = "0.58", features = [
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Power",
 ] }
+
+# Smaller binary for the installers. panic stays "unwind" on purpose: a panic
+# inside a command must fail that command, not kill the app mid-show.
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
@@ -19,6 +20,12 @@ function gitDescribe(): string {
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+
+  // Only the app's own tests: agent worktrees under .claude/ hold full copies
+  // of the repo, whose tests would otherwise run (and count) twice.
+  test: {
+    include: ["src/**/*.test.{ts,tsx}"],
+  },
 
   define: {
     __DEV_VERSION__: JSON.stringify(gitDescribe()),
