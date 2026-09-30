@@ -11,7 +11,6 @@ mod types;
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
 
 use tauri_plugin_dialog::DialogExt;
@@ -81,53 +80,32 @@ fn check_audio_path(path: &Path, allowed: impl Fn(&Path) -> bool) -> AppResult<(
 
 // ===== File system helpers =====
 
-fn pick_folder_zenity() -> Option<String> {
-    let out = Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--directory",
-            "--title",
-            "Choisir un dossier",
-        ])
+// zenity gives a native GTK picker where the portal dialog is poor. None
+// means "use the Tauri dialog instead": zenity is missing or could not run
+// (no display). Exit code 1 is a cancel, an empty selection. No --title:
+// zenity's own default is already in the desktop's language.
+#[cfg(target_os = "linux")]
+fn zenity_pick(extra: &[&str]) -> Option<Vec<String>> {
+    let out = std::process::Command::new("zenity")
+        .args(["--file-selection", "--separator", "\n"])
+        .args(extra)
         .output()
         .ok()?;
-    if out.status.success() {
-        let path = String::from_utf8(out.stdout).ok()?.trim().to_string();
-        if path.is_empty() {
-            None
-        } else {
-            Some(path)
-        }
-    } else {
-        None
+    match out.status.code() {
+        Some(0) => Some(parse_zenity_selection(&out.stdout)),
+        Some(1) => Some(vec![]),
+        _ => None,
     }
 }
 
-fn pick_audio_files_zenity() -> Vec<String> {
-    let out = match Command::new("zenity")
-        .args([
-            "--file-selection",
-            "--multiple",
-            "--title",
-            "Choisir des fichiers audio",
-            "--file-filter",
-            "Fichiers audio (mp3, ogg, wav...) | *.mp3 *.ogg *.wav *.flac *.aac *.m4a *.wma *.opus",
-            "--separator",
-            "|",
-        ])
-        .output()
-    {
-        Ok(o) => o,
-        Err(_) => return vec![],
-    };
-    if !out.status.success() {
-        return vec![];
-    }
-    let raw = String::from_utf8(out.stdout).unwrap_or_default();
-    raw.trim()
-        .split('|')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+// One path per line: "|", the old separator, is legal in file names.
+#[cfg(any(target_os = "linux", test))]
+fn parse_zenity_selection(stdout: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(stdout)
+        .split('\n')
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| !l.is_empty())
+        .map(String::from)
         .collect()
 }
 
@@ -157,13 +135,9 @@ fn get_default_numeros_dir() -> String {
 
 #[tauri::command(async)]
 fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
-    if Command::new("which")
-        .arg("zenity")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return Ok(pick_folder_zenity());
+    #[cfg(target_os = "linux")]
+    if let Some(picked) = zenity_pick(&["--directory"]) {
+        return Ok(picked.into_iter().next());
     }
     let result = app.dialog().file().blocking_pick_folder();
     Ok(result.map(|p| p.to_string()))
@@ -171,13 +145,13 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
 
 #[tauri::command(async)]
 fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
-    if Command::new("which")
-        .arg("zenity")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return pick_audio_files_zenity();
+    #[cfg(target_os = "linux")]
+    if let Some(picked) = zenity_pick(&[
+        "--multiple",
+        "--file-filter",
+        "Fichiers audio (mp3, ogg, wav...) | *.mp3 *.ogg *.wav *.flac *.aac *.m4a *.wma *.opus",
+    ]) {
+        return picked;
     }
     let files = app
         .dialog()
@@ -646,6 +620,15 @@ mod tests {
         assert!(open_project(dir.join("none").to_string_lossy().to_string()).is_err());
         assert!(take_granted().is_empty());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn zenity_selection_is_one_path_per_line() {
+        assert_eq!(
+            parse_zenity_selection(b"/m/a|b.mp3\n/m/c.mp3\n"),
+            vec!["/m/a|b.mp3".to_string(), "/m/c.mp3".to_string()]
+        );
+        assert!(parse_zenity_selection(b"\n").is_empty());
     }
 
     #[test]
