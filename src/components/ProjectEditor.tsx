@@ -364,6 +364,7 @@ export default function ProjectEditor({ ref, project, settings, onProjectChange,
       settings.audioOutputDeviceId,
       battery,
       estimateShowDuration(project, audioDurations),
+      audioDurations,
     );
     setPreflightIssues(issues);
     setPreflightConfirmActivation(beforeActivatingShow);

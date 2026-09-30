@@ -374,9 +374,11 @@ export default interface Resources {
     "batteryShorterThanShowAtLeast": "Autonomie restante {{left}}, inférieure à la durée du spectacle (au moins {{total}}). Branchez l'ordinateur sur le secteur.",
     "outputRoutingUnsupported": "Le choix de la sortie audio n'est pas pris en charge sur ce système : le son partira sur la sortie par défaut.",
     "title": "Vérification du spectacle",
+    "trackEndBeyondFile": "Fin au-delà de la fin du fichier sur {{label}} : la piste sera jouée jusqu'au bout",
     "trackFadesTooLong": "Fade in + fade out plus long que la durée de lecture sur {{label}}",
     "trackFileMissing": "Fichier manquant sur {{label}}",
     "trackStartAfterEnd": "Début ≥ fin sur {{label}}",
+    "trackStartBeyondFile": "Début au-delà de la fin du fichier sur {{label}} : rien ne sera joué",
     "trackVolumeZero": "Volume à 0 sur {{label}}"
   },
   "settings": {

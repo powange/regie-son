@@ -11,5 +11,7 @@
   "trackStartAfterEnd": "Start ≥ end on {{label}}",
   "trackFadesTooLong": "Fade in + fade out longer than the playback span on {{label}}",
   "trackVolumeZero": "Volume at 0 on {{label}}",
-  "outputRoutingUnsupported": "Choosing the audio output is not supported on this system: sound will go to the default output."
+  "outputRoutingUnsupported": "Choosing the audio output is not supported on this system: sound will go to the default output.",
+  "trackStartBeyondFile": "Start past the end of the file on {{label}}: nothing will play",
+  "trackEndBeyondFile": "End past the end of the file on {{label}}: the track will play to its end"
 }

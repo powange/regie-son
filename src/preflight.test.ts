@@ -222,3 +222,32 @@ describe("audio output preflight rule", () => {
     expect(outputCodes({ outputRoutingSupported: false, deviceListReliable: false })).toEqual([]);
   });
 });
+
+describe("track bounds against the file length", () => {
+  const codes = (item: Parameters<typeof audio>[1], length?: number) =>
+    runPreflight(makeProject([audio("a", item)]), {
+      ...baseCtx,
+      fileDurations: length === undefined ? undefined : new Map([["a.mp3", length]]),
+    }).map((i) => i.code);
+
+  it("flags a start at or past the end of the file as an error", () => {
+    expect(codes({ startTime: 200 }, 180)).toContain("trackStartBeyondFile");
+    expect(runPreflight(makeProject([audio("a", { startTime: 200 })]), {
+      ...baseCtx, fileDurations: new Map([["a.mp3", 180]]),
+    }).find((i) => i.code === "trackStartBeyondFile")?.severity).toBe("error");
+  });
+
+  it("warns about an end past the file, with a small tolerance for rounding", () => {
+    expect(codes({ endTime: 200 }, 180)).toContain("trackEndBeyondFile");
+    expect(codes({ endTime: 180.3 }, 180)).not.toContain("trackEndBeyondFile");
+  });
+
+  it("uses the file length when a bound is missing to check the fades", () => {
+    expect(codes({ startTime: 170, fadeIn: 5, fadeOut: 8 }, 180)).toContain("trackFadesTooLong");
+    expect(codes({ startTime: 100, fadeIn: 5, fadeOut: 8 }, 180)).not.toContain("trackFadesTooLong");
+  });
+
+  it("skips these checks for a file not measured yet", () => {
+    expect(codes({ startTime: 200, endTime: 900 })).toEqual([]);
+  });
+});

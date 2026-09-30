@@ -26,6 +26,8 @@ export type PreflightIssue = IssueLocation & { severity: PreflightSeverity } & (
   | { code: "batteryShorterThanActAtLeast"; left: number; total: number }
   | { code: "trackFileMissing"; track: string; act: string }
   | { code: "trackStartAfterEnd"; track: string; act: string }
+  | { code: "trackStartBeyondFile"; track: string; act: string }
+  | { code: "trackEndBeyondFile"; track: string; act: string }
   | { code: "trackFadesTooLong"; track: string; act: string }
   | { code: "trackVolumeZero"; track: string; act: string }
 );
@@ -81,7 +83,14 @@ interface PreflightContext {
   selectedDeviceId: string | null;
   battery: BatteryStatus | null;
   showDuration: ShowDuration;
+  // Measured file lengths, by filename; a file not measured yet is skipped
+  // by the checks that need its length.
+  fileDurations?: Map<string, number>;
 }
+
+// Metadata durations are rounded differently by each decoder: a cut point a
+// hair past the reported end is not a mistake.
+const DURATION_TOLERANCE = 0.5;
 
 function batteryShortfallCode(
   singleNumero: boolean,
@@ -144,11 +153,23 @@ export function runPreflight(project: Project, ctx: PreflightContext): Preflight
 
       const hasStart = typeof item.startTime === "number";
       const hasEnd = typeof item.endTime === "number";
+      const fileLength = ctx.fileDurations?.get(item.filename);
       if (hasStart && hasEnd && (item.startTime as number) >= (item.endTime as number)) {
         issues.push({ severity: "warning", code: "trackStartAfterEnd", ...track, ...where });
       }
-      if (hasStart && hasEnd) {
-        const effective = (item.endTime as number) - (item.startTime as number);
+      // Nothing would play at all: the track would end as soon as it starts.
+      if (fileLength !== undefined && hasStart && (item.startTime as number) >= fileLength - DURATION_TOLERANCE) {
+        issues.push({ severity: "error", code: "trackStartBeyondFile", ...track, ...where });
+      }
+      // Plays to the end of the file instead: worth knowing, not blocking.
+      if (fileLength !== undefined && hasEnd && (item.endTime as number) > fileLength + DURATION_TOLERANCE) {
+        issues.push({ severity: "warning", code: "trackEndBeyondFile", ...track, ...where });
+      }
+      // With a bound missing, the file length stands in for it.
+      const start = item.startTime ?? 0;
+      const end = item.endTime ?? fileLength;
+      if (end !== undefined) {
+        const effective = end - start;
         const fades = (item.fadeIn ?? 0) + (item.fadeOut ?? 0);
         if (effective > 0 && fades > effective) {
           issues.push({ severity: "warning", code: "trackFadesTooLong", ...track, ...where });
@@ -170,6 +191,7 @@ export async function gatherPreflight(
   selectedDeviceId: string | null,
   battery: BatteryStatus | null,
   showDuration: ShowDuration,
+  fileDurations?: Map<string, number>,
 ): Promise<PreflightIssue[]> {
   const availableDeviceIds = new Set<string>();
   let deviceListReliable = false;
@@ -191,5 +213,6 @@ export async function gatherPreflight(
     selectedDeviceId,
     battery,
     showDuration,
+    fileDurations,
   });
 }
