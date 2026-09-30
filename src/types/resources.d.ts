@@ -248,6 +248,7 @@ export default interface Resources {
       "writeFailed": "Erreur d'écriture : {{detail}}"
     },
     "project": {
+      "alreadyExists": "Le dossier {{path}} contient déjà un spectacle ou un numéro. Choisissez-en un autre.",
       "invalidFile": "Fichier projet invalide : {{detail}}",
       "invalidItems": "Items invalides pour « {{name}} » : {{detail}}"
     },

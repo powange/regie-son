@@ -13,7 +13,6 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::error::{fail, missing, AppError, AppResult};
@@ -108,7 +107,7 @@ fn get_default_numeros_dir() -> String {
     default_numeros_dir()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     if Command::new("which")
         .arg("zenity")
@@ -122,7 +121,7 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
     Ok(result.map(|p| p.to_string()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
     if Command::new("which")
         .arg("zenity")
@@ -148,9 +147,23 @@ fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
 
 // ===== Project commands =====
 
+// Creating or importing into a folder that already holds a show or an act
+// would overwrite it. Both kinds are checked: they would share musiques/ and
+// cleaning one's orphans would delete the other's audio.
+pub(crate) fn ensure_no_project(dir: &Path) -> AppResult<()> {
+    let taken = ["projet.json", "numero.json"]
+        .iter()
+        .any(|f| dir.join(f).exists() || dir.join(format!("{}.bak1", f)).exists());
+    if taken {
+        return Err(AppError::new("project.alreadyExists").with("path", dir.display()));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn create_project(name: String, folder_path: String) -> AppResult<Project> {
     let project_dir = PathBuf::from(&folder_path);
+    ensure_no_project(&project_dir)?;
     fs::create_dir_all(project_dir.join("musiques")).map_err(fail("io.createDirFailed"))?;
     let project = Project {
         name,
@@ -162,10 +175,18 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
     Ok(project)
 }
 
-pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
+fn read_project_file(folder: &Path, filename: &str) -> AppResult<Project> {
     let content =
         fs::read_to_string(folder.join(filename)).map_err(fail("io.readProjectFailed"))?;
     migrate_project(&content, folder.to_string_lossy().to_string())
+}
+
+// A missing or unparsable file falls back to the most recent backup, so an
+// interrupted save never loses the show. The original error wins if the
+// backup is no better.
+pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult<Project> {
+    read_project_file(folder, filename)
+        .or_else(|err| read_project_file(folder, &format!("{}.bak1", filename)).map_err(|_| err))
 }
 
 #[tauri::command]
@@ -181,6 +202,7 @@ fn save_project(project: Project) -> AppResult<()> {
 #[tauri::command]
 fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
     let numero_dir = PathBuf::from(&folder_path);
+    ensure_no_project(&numero_dir)?;
     fs::create_dir_all(numero_dir.join("musiques")).map_err(fail("io.createDirFailed"))?;
     let numero = Numero {
         id: uuid::Uuid::new_v4().to_string(),
@@ -208,7 +230,7 @@ fn save_numero(project: Project) -> AppResult<()> {
     save_project_to_disk(&project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFile> {
     let src = Path::new(&src_path);
     let original_name = src
@@ -251,7 +273,7 @@ fn delete_audio_file(project_path: String, filename: String) -> AppResult<()> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn verify_project(project: Project) -> AppResult<VerifyResult> {
     let musiques_dir = PathBuf::from(&project.path).join("musiques");
     let mut referenced: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -285,7 +307,7 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
     Ok(VerifyResult { missing, orphans })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResult<u32> {
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let mut deleted = 0u32;
@@ -301,7 +323,7 @@ fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResu
     Ok(deleted)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
@@ -326,21 +348,43 @@ fn rotate_backups(dir: &Path, filename: &str) {
     let _ = fs::remove_file(bak(3));
     let _ = fs::rename(bak(2), bak(3));
     let _ = fs::rename(bak(1), bak(2));
+    // Copied, not renamed: the target must exist at every instant, in case
+    // the final rename fails (file held by an antivirus, disk full).
     let current = dir.join(filename);
     if current.exists() {
-        let _ = fs::rename(&current, bak(1));
+        let _ = fs::copy(&current, bak(1));
     }
 }
 
 pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
+    use std::io::Write;
+    use std::sync::Mutex;
+
+    // Imports run off the main thread and save too: two writers must never
+    // share the same .tmp file.
+    static SAVE_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     let content = serde_json::to_string_pretty(project).map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);
     let filename = project_json_filename(project);
     let target = dir.join(filename);
     let tmp = dir.join(format!("{}.tmp", filename));
-    fs::write(&tmp, &content).map_err(fail("io.saveFailed"))?;
+    {
+        let mut file = fs::File::create(&tmp).map_err(fail("io.saveFailed"))?;
+        file.write_all(content.as_bytes())
+            .map_err(fail("io.saveFailed"))?;
+        // Without it a power cut after the rename can leave an empty file.
+        file.sync_all().map_err(fail("io.saveFailed"))?;
+    }
     rotate_backups(dir, filename);
     fs::rename(&tmp, &target).map_err(fail("io.saveFailed"))?;
+    // Persist the rename itself. Directories cannot be opened this way on
+    // Windows, where NTFS journals the metadata anyway.
+    #[cfg(unix)]
+    if let Ok(d) = fs::File::open(dir) {
+        let _ = d.sync_all();
+    }
     Ok(())
 }
 
@@ -361,14 +405,9 @@ pub fn run() {
     // Hot start: focus existing window + forward file via event
     #[cfg(desktop)]
     {
-        use tauri::Manager;
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(file) = file_assoc::extract_file_from_args(&args) {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                    let _ = window.emit("open-file", file);
-                }
+                file_assoc::deliver_open_file(app, file);
             }
         }));
     }
@@ -419,6 +458,117 @@ pub fn run() {
             show_mode::set_show_mode,
             battery::get_battery_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS passes double-clicked files as an Apple Event, not argv,
+            // both at cold start and while running.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                let file = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(|path| path.to_string_lossy().to_string())
+                    .find(|path| file_assoc::is_openable(path));
+                if let Some(file) = file {
+                    file_assoc::deliver_open_file(_app, file);
+                }
+            }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("regie-son-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn show(dir: &Path, name: &str) -> Project {
+        Project {
+            name: name.into(),
+            path: dir.to_string_lossy().to_string(),
+            numeros: vec![],
+            single_numero: None,
+        }
+    }
+
+    #[test]
+    fn save_keeps_the_previous_version_as_backup() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "v2"
+        );
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v1"
+        );
+        assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_falls_back_to_the_backup_when_the_file_is_missing() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        fs::remove_file(dir.join("projet.json")).unwrap();
+        let project = open_project_from_file(&dir, "projet.json").unwrap();
+        assert_eq!(project.name, "v1");
+        assert_eq!(project.path, dir.to_string_lossy());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_falls_back_to_the_backup_when_the_file_is_corrupt() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "v1")).unwrap();
+        save_project_to_disk(&show(&dir, "v2")).unwrap();
+        fs::write(dir.join("projet.json"), "{ trunc").unwrap();
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "v1"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn create_refuses_a_folder_that_holds_a_show_or_an_act() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "existing")).unwrap();
+        let folder = dir.to_string_lossy().to_string();
+        let err = create_project("new".into(), folder.clone()).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        let err = create_numero("new".into(), folder).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        assert_eq!(
+            open_project_from_file(&dir, "projet.json").unwrap().name,
+            "existing"
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn create_accepts_an_empty_folder() {
+        let dir = scratch_dir();
+        let project = create_project("new".into(), dir.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.name, "new");
+        assert!(dir.join("musiques").is_dir());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn open_reports_the_original_error_without_a_backup() {
+        let dir = scratch_dir();
+        fs::write(dir.join("projet.json"), "{ trunc").unwrap();
+        let err = open_project_from_file(&dir, "projet.json").unwrap_err();
+        assert_eq!(err.code, "project.invalidFile");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

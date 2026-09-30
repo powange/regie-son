@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::archive::{export_to_zip, extract_zip_to, import_numero_into_project};
 use crate::error::{fail, missing, AppError, AppResult};
+use crate::file_assoc::pick_unique_path;
 use crate::types::{migrate_project, Project};
-use crate::{open_project_from_file, save_project_to_disk};
+use crate::{ensure_no_project, open_project_from_file, save_project_to_disk};
 
 // Litterbox (sister of catbox.moe) — anonymous uploads, no account required,
 // files expire after the chosen retention. We use 72h, the maximum.
@@ -192,7 +193,10 @@ pub async fn import_project_from_cloud(code: String, dest_folder: String) -> App
     let outcome = async {
         download_file(&code, &tmp).await?;
         validate_zip_archive(&tmp, "projet.json")?;
-        let dest = PathBuf::from(&dest_folder);
+        // The same code imported twice must not overwrite the first copy,
+        // which may have been edited since.
+        let dest = pick_unique_path(&PathBuf::from(&dest_folder));
+        ensure_no_project(&dest)?;
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
         open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
     }
@@ -223,7 +227,10 @@ pub async fn import_numero_from_cloud(code: String, dest_folder: String) -> AppR
     let outcome = async {
         download_file(&code, &tmp).await?;
         validate_zip_archive(&tmp, "numero.json")?;
-        let dest = PathBuf::from(&dest_folder);
+        // The same code imported twice must not overwrite the first copy,
+        // which may have been edited since.
+        let dest = pick_unique_path(&PathBuf::from(&dest_folder));
+        ensure_no_project(&dest)?;
         extract_zip_to(&tmp.to_string_lossy(), &dest)?;
         let mut project =
             open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;

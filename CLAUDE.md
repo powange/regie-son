@@ -79,11 +79,11 @@ archive.by_name(name).map_err(|e| AppError::new("archive.readNamedFailed").with(
 
 ### Où en est la migration
 
-Terminée. **322 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
+Terminée. **323 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
 
 Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i18n:check`, `tsc` et les tests avant les quatre builds.
 
-**Attention aux branches `#[cfg]`** : sous Linux, `cargo check` ne compile ni le code Windows ni le code macOS de [show_mode.rs](src-tauri/src/show_mode.rs) et [sleep_guard.rs](src-tauri/src/sleep_guard.rs), et le toolchain MSVC n'est pas installable sous WSL. Une modification de ces branches n'est réellement vérifiée que par le build de release.
+**Attention aux branches `#[cfg]`** : sous Linux, `cargo check` ne compile ni le code Windows ni le code macOS de [show_mode.rs](src-tauri/src/show_mode.rs) et [sleep_guard.rs](src-tauri/src/sleep_guard.rs), et le toolchain MSVC n'est pas installable sous WSL. Une modification de ces branches n'est vérifiée que par la CI (job `rust`, matrice des trois OS) ou le build de release.
 
 ## Stack
 
@@ -148,7 +148,7 @@ Frontend écoute avec `listen("yt-dlp-progress", …)` dans un `useEffect`. Nett
 
 ### Écritures atomiques
 
-`save_project_to_disk` écrit dans `projet.json.tmp` puis `fs::rename` — atomique sur Windows (MOVEFILE_REPLACE_EXISTING) et Unix. Reproduire ce pattern pour toute écriture critique.
+`save_project_to_disk` écrit dans `projet.json.tmp` (avec `sync_all`) puis `fs::rename` — atomique sur Windows (MOVEFILE_REPLACE_EXISTING) et Unix. La sauvegarde `.bak1` est une **copie**, pas un rename : le fichier cible existe à tout instant, même si le rename final échoue. `open_project_from_file` retombe sur `.bak1` si le fichier principal manque ou est illisible. Reproduire ce pattern pour toute écriture critique.
 
 ### Fermeture silencieuse des subprocess
 
@@ -159,9 +159,9 @@ Sur Windows, utiliser `silent_command(path)` (helper dans lib.rs) qui ajoute `CR
 - Tag `v*` déclenche [.github/workflows/release.yml](.github/workflows/release.yml)
 - Matrice : Linux x86_64, Windows x86_64, macOS x86_64/aarch64
 - Patch automatique de la version dans `tauri.conf.json` ET `Cargo.toml` depuis le tag
-- yt-dlp téléchargé par plateforme avant le build (sidecar via `externalBin`)
+- yt-dlp téléchargé par plateforme avant le build (sidecar via `externalBin`), à la version épinglée par `YTDLP_VERSION` en tête du workflow et vérifié contre le `SHA2-256SUMS` de la release. Pour l'actualiser, changer cette seule variable : elle fait aussi partie de la clé de cache.
 - Signature minisign via secrets GitHub (`TAURI_SIGNING_PRIVATE_KEY` + password)
-- Pas de CI sur push — juste sur tag
+- CI sur chaque push et PR ([ci.yml](.github/workflows/ci.yml)) : i18n, types i18n, ESLint, tests, build Vite, puis rustfmt, clippy `-D warnings` et `cargo test` sous Linux, Windows et macOS
 
 ### Clé de signature
 
@@ -174,7 +174,7 @@ La clé publique est dans [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json)
 - Le mode spectacle a deux volets indépendants, toujours tentés tous les deux : couper les notifications ([show_mode.rs](src-tauri/src/show_mode.rs)) et bloquer la mise en veille ([sleep_guard.rs](src-tauri/src/sleep_guard.rs)). Leurs erreurs sont concaténées par ` · ` dans un seul bandeau.
 - Le blocage de veille est conçu pour **se relâcher tout seul si le processus meurt** : thread parqué sous Windows (`ES_CONTINUOUS` est lié au thread), `caffeinate -w <pid>` sous macOS, EOF du tube `systemd-inhibit … cat` sous Linux. Ne pas remplacer par un mécanisme process-wide (`PowerCreateRequest`, D-Bus sans fd) sans conserver cette propriété.
 - La coupure des notifications, elle, n'a **pas** cette propriété : un crash ou un kill laisse les notifications muettes définitivement (dconf sous GNOME, DND macOS, session SystemSounds Windows). Connu, non corrigé.
-- `set_show_mode` est un `#[tauri::command(async)]` : les commandes non-async tournent sur le thread principal, et ses deux volets bloquent plusieurs centaines de ms. Retirer l'attribut fige l'UI.
+- `set_show_mode` est un `#[tauri::command(async)]` : les commandes non-async tournent sur le thread principal, et ses deux volets bloquent plusieurs centaines de ms. Retirer l'attribut fige l'UI. Même règle pour toute commande qui lit ou écrit beaucoup (`read_audio_file`, imports/exports, `verify_project`…) et pour les dialogues `blocking_*`, que la doc du plugin interdit sur le thread principal. `save_project_to_disk` est protégé par un verrou, puisque les imports sauvegardent hors du thread principal.
 - `setSinkId` n'est dispo qu'en Chrome/Edge (WebView2 sur Windows). Silent fail sur les autres.
 - `response.bytes().await` buffer tout en mémoire — utiliser `chunk()` en boucle pour stream.
 - Les projets existants avec l'ancien schéma (`audio_files[]` au lieu de `items[]`) sont migrés automatiquement via `migrate_project`.

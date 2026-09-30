@@ -15,7 +15,8 @@
   },
   "project": {
     "invalidFile": "Invalid project file: {{detail}}",
-    "invalidItems": "Invalid items on \"{{name}}\": {{detail}}"
+    "invalidItems": "Invalid items on \"{{name}}\": {{detail}}",
+    "alreadyExists": "The folder {{path}} already holds a show or an act. Choose another one."
   },
   "archive": {
     "createFailed": "Could not create the archive: {{detail}}",

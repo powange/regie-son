@@ -6,9 +6,9 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::error::{fail, missing, AppError, AppResult};
 use crate::types::{migrate_project, PlaylistItem, Project};
-use crate::{open_project_from_file, safe_filename, save_project_to_disk};
+use crate::{ensure_no_project, open_project_from_file, safe_filename, save_project_to_disk};
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
     app.dialog()
         .file()
@@ -17,7 +17,7 @@ pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_regieson_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
     app.dialog()
         .file()
@@ -27,7 +27,7 @@ pub fn save_regieson_file(app: tauri::AppHandle, default_name: String) -> Option
         .map(|p| p.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pick_regiesonnumero_file(app: tauri::AppHandle) -> Option<String> {
     app.dialog()
         .file()
@@ -36,7 +36,7 @@ pub fn pick_regiesonnumero_file(app: tauri::AppHandle) -> Option<String> {
         .map(|p| p.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> Option<String> {
     app.dialog()
         .file()
@@ -92,12 +92,12 @@ pub(crate) fn export_to_zip(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_project(project_path: String, dest_file: String) -> AppResult<()> {
     export_to_zip(Path::new(&project_path), &dest_file, "projet.json")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_numero(numero_path: String, dest_file: String) -> AppResult<()> {
     export_to_zip(Path::new(&numero_path), &dest_file, "numero.json")
 }
@@ -166,16 +166,18 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_project(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
+    ensure_no_project(&dest)?;
     extract_zip_to(&src_file, &dest)?;
     open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_numero_standalone(src_file: String, dest_folder: String) -> AppResult<Project> {
     let dest = PathBuf::from(&dest_folder);
+    ensure_no_project(&dest)?;
     extract_zip_to(&src_file, &dest)?;
     let mut project =
         open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;
@@ -184,7 +186,7 @@ pub fn import_numero_standalone(src_file: String, dest_folder: String) -> AppRes
     Ok(project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_numero_into_project(src_file: String, project_path: String) -> AppResult<Project> {
     let mut project = open_project_from_file(Path::new(&project_path), "projet.json")
         .map_err(fail("archive.targetProjectInvalid"))?;
@@ -341,6 +343,45 @@ mod tests {
             b"audio"
         );
         assert!(!dest.join("__MACOSX").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn import_refuses_to_overwrite_a_show() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(
+            &src,
+            &[("projet.json", b"{\"name\":\"imported\",\"numeros\":[]}")],
+        );
+        let dest = dir.join("out");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("projet.json"), b"original").unwrap();
+        let src_file = src.to_string_lossy().to_string();
+        let dest_folder = dest.to_string_lossy().to_string();
+        let err = import_project(src_file.clone(), dest_folder.clone()).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        let err = import_numero_standalone(src_file, dest_folder).unwrap_err();
+        assert_eq!(err.code, "project.alreadyExists");
+        assert_eq!(fs::read(dest.join("projet.json")).unwrap(), b"original");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn import_into_a_fresh_folder() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(
+            &src,
+            &[("projet.json", b"{\"name\":\"imported\",\"numeros\":[]}")],
+        );
+        let dest = dir.join("out");
+        let project = import_project(
+            src.to_string_lossy().to_string(),
+            dest.to_string_lossy().to_string(),
+        )
+        .unwrap();
+        assert_eq!(project.name, "imported");
         fs::remove_dir_all(&dir).unwrap();
     }
 
