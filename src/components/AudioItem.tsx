@@ -82,7 +82,7 @@ function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive
           </span>
         )}
 
-        <button className="audio-play-btn" onClick={onPlay} disabled={isMissing} title={isMissing ? "Fichier introuvable" : isPlaying ? "En lecture" : "Lire"}>
+        <button className="audio-play-btn" onClick={onPlay} disabled={isMissing} title={isMissing ? t("audio:item.missing") : isPlaying ? t("audio:player.pause") : t("audio:item.play")}>
           {isMissing ? <AlertTriangle size={13} /> : isPlaying ? <Pause size={13} /> : isActive ? <Play size={13} /> : <Music size={13} />}
         </button>
 
@@ -116,7 +116,7 @@ function AudioItemInner({ audio, projectPath, editMode, volumeEditable, isActive
         ) : (
           <span
             className="audio-name"
-            title={isMissing ? `Fichier introuvable : ${audio.filename}` : editMode ? "Cliquer pour renommer" : audio.original_name}
+            title={isMissing ? t("audio:item.missingFile", { filename: audio.filename }) : editMode ? t("audio:item.clickToRename") : audio.original_name}
             onClick={editMode ? () => { setNameDraft(audio.original_name); setEditingName(true); } : undefined}
             style={editMode ? { cursor: "text" } : undefined}
           >

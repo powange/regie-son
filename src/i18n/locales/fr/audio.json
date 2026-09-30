@@ -42,7 +42,11 @@
     "duration": "Durée",
     "cue": "Top de départ",
     "cuePlaceholder": "Top de départ…",
-    "volume": "Volume : {{percent}} %"
+    "volume": "Volume : {{percent}} %",
+    "missing": "Fichier introuvable",
+    "missingFile": "Fichier introuvable : {{filename}}",
+    "play": "Lire",
+    "clickToRename": "Cliquer pour renommer"
   },
   "pause": {
     "label": "Pause",

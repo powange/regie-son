@@ -34,9 +34,13 @@ export default interface Resources {
     },
     "fromUrl": "Depuis une URL",
     "item": {
+      "clickToRename": "Cliquer pour renommer",
       "cue": "Top de départ",
       "cuePlaceholder": "Top de départ…",
       "duration": "Durée",
+      "missing": "Fichier introuvable",
+      "missingFile": "Fichier introuvable : {{filename}}",
+      "play": "Lire",
       "volume": "Volume : {{percent}} %"
     },
     "pause": {

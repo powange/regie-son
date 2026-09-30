@@ -42,7 +42,11 @@
     "duration": "Length",
     "cue": "Cue",
     "cuePlaceholder": "Cue…",
-    "volume": "Volume: {{percent}}%"
+    "volume": "Volume: {{percent}}%",
+    "missing": "File not found",
+    "missingFile": "File not found: {{filename}}",
+    "play": "Play",
+    "clickToRename": "Click to rename"
   },
   "pause": {
     "label": "Pause",
