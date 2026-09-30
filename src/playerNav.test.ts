@@ -26,6 +26,7 @@ const idleState: PlayerState = {
   isPlaying: false,
   progress: { position: 0, duration: 0 },
   audioError: null,
+  outputError: null,
   fade: null,
 };
 

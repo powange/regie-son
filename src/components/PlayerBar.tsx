@@ -22,7 +22,7 @@ function formatTime(secs: number): string {
 
 export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop, onSeek }: Props) {
   const { t } = useTranslation(["audio"]);
-  const { position, isPlaying, progress, audioError } = state;
+  const { position, isPlaying, progress, audioError, outputError } = state;
 
   const nextContext = getNextContext(state, project);
   const nextCue = nextContext?.item.cue ?? null;
@@ -128,9 +128,18 @@ export default function PlayerBar({ state, project, onTogglePlay, onNext, onStop
               style={{ left: onPause && !isTimedPause ? "0%" : `${progressPct}%` }}
             />
           </div>
-          <span className="player-time">
-            {onPause ? (isTimedPause ? formatTime(dur) : "--:--") : dur > 0 ? formatTime(dur) : "--:--"}
+          {/* Time left in the excerpt, what the operator watches for the cue;
+              the full length stays in the tooltip. */}
+          <span className="player-time" title={dur > 0 ? formatTime(dur) : undefined}>
+            {onPause ? (isTimedPause ? formatTime(dur) : "--:--") : dur > 0 ? `−${formatTime(dur - pos)}` : "--:--"}
           </span>
+        </div>
+      )}
+
+      {outputError && (
+        <div className="player-error">
+          <AlertTriangle size={13} />
+          {outputError}
         </div>
       )}
     </div>

@@ -11,6 +11,8 @@ export function preflightMessage(t: PreflightTFunction, issue: PreflightIssue): 
   switch (issue.code) {
     case "audioDeviceMissing":
       return t("preflight:audioDeviceMissing");
+    case "outputRoutingUnsupported":
+      return t("preflight:outputRoutingUnsupported");
     case "batteryLowNoEstimate":
       return t("preflight:batteryLowNoEstimate", { percent: issue.percent });
     case "batteryShorterThanShow":
