@@ -497,6 +497,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
                 playAt={playAt}
+                togglePlay={togglePlay}
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
