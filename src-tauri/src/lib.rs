@@ -192,6 +192,7 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
         path: project_dir.to_string_lossy().to_string(),
         numeros: vec![],
         single_numero: None,
+        extra: Default::default(),
     };
     save_project_to_disk(&project)?;
     grant_audio_access(&project_dir);
@@ -234,12 +235,14 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
         numero_type: "numero".into(),
         name: name.clone(),
         items: vec![],
+        extra: Default::default(),
     };
     let project = Project {
         name,
         path: numero_dir.to_string_lossy().to_string(),
         numeros: vec![numero],
         single_numero: Some(true),
+        extra: Default::default(),
     };
     save_project_to_disk(&project)?;
     grant_audio_access(&numero_dir);
@@ -284,6 +287,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFil
         fade_in: None,
         fade_out: None,
         cue: None,
+        extra: Default::default(),
     })
 }
 
@@ -567,6 +571,7 @@ mod tests {
             path: dir.to_string_lossy().to_string(),
             numeros: vec![],
             single_numero: None,
+            extra: Default::default(),
         }
     }
 

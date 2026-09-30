@@ -424,6 +424,7 @@ pub async fn download_youtube_audio(
         fade_in: None,
         fade_out: None,
         cue: None,
+        extra: Default::default(),
     })
 }
 
@@ -563,6 +564,7 @@ pub async fn download_audio_from_url(
         fade_in: None,
         fade_out: None,
         cue: None,
+        extra: Default::default(),
     })
 }
 

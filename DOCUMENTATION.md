@@ -98,6 +98,8 @@ interface Project { name: string; path: string; numeros: Numero[]; singleNumero?
 
 **Migration** : `migrate_project` lit tout fichier de projet. Il convertit l'ancien schéma (`audio_files[]` dans chaque numéro) en `items[]`, et accepte `note` comme ancien nom de `cue`. Ses cas sont couverts par les tests de `types.rs`.
 
+**Champs inconnus** : `Project`, `Numero`, `AudioFile` et `PauseItem` gardent dans `extra` (`#[serde(flatten)]`) les champs qu'ils ne connaissent pas. Une version plus ancienne de l'application qui ouvre puis sauvegarde un projet n'efface donc pas ce qu'une version plus récente y a ajouté.
+
 ---
 
 ## 3. Backend
