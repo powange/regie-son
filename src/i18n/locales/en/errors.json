@@ -12,7 +12,8 @@
     "serializeFailed": "Serialisation error: {{detail}}",
     "writeFailed": "Write error: {{detail}}",
     "readFailed": "Read error: {{detail}}",
-    "pathNotAllowed": "Access denied: this file does not belong to an open show or act."
+    "pathNotAllowed": "Access denied: this file does not belong to an open show or act.",
+    "fileTooLarge": "File too large to read ({{size}} MB). Limit: {{limit}} MB."
   },
   "project": {
     "invalidFile": "Invalid project file: {{detail}}",

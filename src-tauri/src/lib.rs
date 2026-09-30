@@ -375,7 +375,7 @@ fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
     })?;
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
-        return Err(AppError::new("download.fileTooLarge")
+        return Err(AppError::new("io.fileTooLarge")
             .with("size", metadata.len() / (1024 * 1024))
             .with("limit", download::MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
     }
