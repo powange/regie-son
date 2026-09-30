@@ -55,7 +55,9 @@
     "waiting": "En attente — appuyez sur Play pour continuer",
     "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> restantes",
     "fadeIn": "Fade in",
-    "fadeOut": "Fade out"
+    "fadeOut": "Fade out",
+    "playbackError": "Lecture impossible : le fichier est introuvable ou dans un format non pris en charge.",
+    "outputFailed": "Sortie audio choisie indisponible ({{detail}}) : le son part sur la sortie par défaut du système."
   },
   "errors": {
     "add": "Erreur lors de l'ajout audio : {{detail}}"

@@ -55,7 +55,9 @@
     "waiting": "Waiting — press Play to carry on",
     "pauseRemaining": "Pause — <strong>{{seconds}} s</strong> left",
     "fadeIn": "Fade in",
-    "fadeOut": "Fade out"
+    "fadeOut": "Fade out",
+    "playbackError": "Cannot play: the file is missing or in an unsupported format.",
+    "outputFailed": "The selected audio output is unavailable ({{detail}}): sound goes to the system default output."
   },
   "errors": {
     "add": "Could not add audio: {{detail}}"

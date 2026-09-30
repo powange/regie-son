@@ -10,5 +10,6 @@
   "trackFileMissing": "Fichier manquant sur {{label}}",
   "trackStartAfterEnd": "Début ≥ fin sur {{label}}",
   "trackFadesTooLong": "Fade in + fade out plus long que la durée de lecture sur {{label}}",
-  "trackVolumeZero": "Volume à 0 sur {{label}}"
+  "trackVolumeZero": "Volume à 0 sur {{label}}",
+  "outputRoutingUnsupported": "Le choix de la sortie audio n'est pas pris en charge sur ce système : le son partira sur la sortie par défaut."
 }
