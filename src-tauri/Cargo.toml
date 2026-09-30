@@ -1,6 +1,6 @@
 [package]
 name = "regie-son"
-version = "0.4.13"
+version = "0.4.14"
 description = "Régie son pour spectacles cabaret"
 authors = ["pcomble"]
 edition = "2021"
