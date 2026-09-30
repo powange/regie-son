@@ -56,6 +56,10 @@ function newNumero(type: NumeroType, index: number): Numero {
 
 interface VerifyResult { missing: string[]; orphans: string[] }
 
+function sameList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 const EDIT_MODE_KEY = "regieson.editMode";
 
 function readEditModePref(): boolean {
@@ -104,16 +108,25 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
   const projectRef = useRef(project);
   projectRef.current = project;
 
-  async function runVerify() {
-    try {
-      const result = await invoke<VerifyResult>("verify_project", { project });
-      setVerify(result);
-    } catch (err) {
-      console.error("verify_project:", err);
-    }
-  }
-
-  useEffect(() => { runVerify(); }, [project]);
+  // verify_project checks every file on disk: only a change in the set of
+  // audio files calls for it, not a keystroke in a cue or a slider step. The
+  // version guard drops a slow answer overtaken by a newer one, and an
+  // unchanged answer keeps the same object so that the cards do not re-render.
+  const filenamesKey = useMemo(() => [...filenamesIn([project])].sort().join("\n"), [project]);
+  const verifyVersionRef = useRef(0);
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const version = ++verifyVersionRef.current;
+      try {
+        const result = await invoke<VerifyResult>("verify_project", { project: projectRef.current });
+        if (version !== verifyVersionRef.current) return;
+        setVerify((prev) => (sameList(prev.missing, result.missing) && sameList(prev.orphans, result.orphans) ? prev : result));
+      } catch (err) {
+        console.error("verify_project:", err);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filenamesKey, project.path]);
 
   // Deleting a track keeps its file, so that undo can bring it back. Such a
   // file is only an orphan once no undo or redo step refers to it any more.
