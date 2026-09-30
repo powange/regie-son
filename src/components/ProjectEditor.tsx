@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AddPartModal from "./AddPartModal";
 import PreflightModal from "./PreflightModal";
 import ExportModal from "./ExportModal";
@@ -37,7 +37,18 @@ import NumeroCard from "./NumeroCard";
 import PlayerBar from "./PlayerBar";
 import { FadeState, usePlayer } from "../usePlayer";
 
+// What App needs from the open editor when a file is opened from the OS.
+export interface EditorHandle {
+  /** Writes pending edits now; false when the write failed. */
+  flushSave: () => Promise<boolean>;
+  /** Turns the show mode off before the editor goes away. */
+  leaveShowMode: () => Promise<void>;
+  /** Imports a .regiesonnumero into the open show, as one undoable step. */
+  importNumeroFile: (srcFile: string) => Promise<void>;
+}
+
 interface Props {
+  ref?: Ref<EditorHandle>;
   project: Project;
   settings: AppSettings;
   onProjectChange: (p: Project) => void;
@@ -74,7 +85,7 @@ function filenamesIn(projects: Project[]): Set<string> {
   return names;
 }
 
-export default function ProjectEditor({ project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
+export default function ProjectEditor({ ref, project, settings, onProjectChange, onClose, onOpenSettings }: Props) {
   const { t } = useTranslation(["editor", "common"]);
   const isSingle = project.singleNumero === true;
   const [saved, setSaved] = useState(true);
@@ -386,21 +397,35 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
     }
   }
 
+  const importNumeroFile = useCallback(async (srcFile: string) => {
+    // The import starts from projet.json on disk: flush first, or it would
+    // drop pending edits, and a pending save would then drop the import.
+    if (!(await flushSave())) return;
+    try {
+      const updated = await invoke<Project>("import_numero_into_project", {
+        srcFile, projectPath: projectRef.current.path,
+      });
+      update(updated);
+    } catch (err) {
+      showError(i18next.t("editor:errors.import", { detail: translateError(err) }));
+    }
+  }, [flushSave, update, showError]);
+
   async function handleImportNumero() {
     try {
       const srcFile = await invoke<string | null>("pick_regiesonnumero_file");
-      if (!srcFile) return;
-      // The import starts from projet.json on disk: flush first, or it would
-      // drop pending edits, and a pending save would then drop the import.
-      if (!(await flushSave())) return;
-      const updated = await invoke<Project>("import_numero_into_project", {
-        srcFile, projectPath: project.path,
-      });
-      update(updated);
+      if (srcFile) await importNumeroFile(srcFile);
     } catch (err) {
       showError(t("editor:errors.import", { detail: translateError(err) }));
     }
   }
+
+  const leaveShowMode = useCallback(async () => {
+    if (!showModeRef.current) return;
+    try { await invoke("set_show_mode", { active: false }); } catch (err) { console.error("set_show_mode off:", err); }
+  }, []);
+
+  useImperativeHandle(ref, () => ({ flushSave, leaveShowMode, importNumeroFile }), [flushSave, leaveShowMode, importNumeroFile]);
 
   async function handleImportNumeroCloudSubmit(code: string) {
     if (!(await flushSave())) return;

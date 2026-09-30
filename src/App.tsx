@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { translateError } from "./errorMessage";
 import { Project } from "./types";
 import HomePage from "./components/HomePage";
-import ProjectEditor from "./components/ProjectEditor";
+import ProjectEditor, { EditorHandle } from "./components/ProjectEditor";
 import SettingsModal from "./components/SettingsModal";
 import UpdateBanner from "./components/UpdateBanner";
 import Toast, { ToastData, makeToast } from "./components/Toast";
@@ -32,6 +32,7 @@ function App() {
 
   const projectRef = useRef(project);
   projectRef.current = project;
+  const editorRef = useRef<EditorHandle>(null);
 
   function handleProjectOpen(p: Project) {
     addRecent(p.name, p.path);
@@ -51,17 +52,10 @@ function App() {
 
     const current = projectRef.current;
 
-    // Projet complet déjà ouvert + .regiesonnumero → import direct dans ce projet
+    // A show is open and an act comes in: the editor imports it, after
+    // writing its pending edits, as a step that undo can take back.
     if (current && !current.singleNumero && isNumero) {
-      try {
-        const updated = await invoke<Project>("import_numero_into_project", {
-          srcFile: path,
-          projectPath: current.path,
-        });
-        setProject(updated);
-      } catch (err) {
-        setToast(makeToast("error", t("app:errors.import", { detail: translateError(err) })));
-      }
+      await editorRef.current?.importNumeroFile(path);
       return;
     }
 
@@ -74,16 +68,16 @@ function App() {
         : t("app:replace.replaceAct");
       const ok = await ask(message, { title: t("app:replace.title"), kind: "warning" });
       if (!ok) return;
+      // The editor is about to be replaced: its edits must be on disk first.
+      // A failed write keeps it open, with its banner.
+      if (editorRef.current && !(await editorRef.current.flushSave())) return;
     }
 
     try {
-      if (isRegieson) {
-        const p = await invoke<Project>("auto_import_regieson", { srcFile: path });
-        handleProjectOpen(p);
-      } else {
-        const p = await invoke<Project>("auto_import_regiesonnumero", { srcFile: path });
-        handleNumeroOpen(p);
-      }
+      const p = await invoke<Project>(isRegieson ? "auto_import_regieson" : "auto_import_regiesonnumero", { srcFile: path });
+      // The new editor starts with the show mode off: so must the system.
+      await editorRef.current?.leaveShowMode();
+      if (isRegieson) handleProjectOpen(p); else handleNumeroOpen(p);
     } catch (err) {
       setToast(makeToast("error", t("app:errors.open", { detail: translateError(err) })));
     }
@@ -122,7 +116,11 @@ function App() {
           onOpenSettings={() => setShowSettings(true)}
         />
       ) : (
+        // Keyed by folder: another project gets a fresh editor, with its own
+        // undo history, player and show mode, instead of inheriting them.
         <ProjectEditor
+          key={project.path}
+          ref={editorRef}
           project={project}
           settings={settings}
           onProjectChange={setProject}
