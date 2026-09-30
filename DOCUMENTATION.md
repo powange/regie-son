@@ -93,10 +93,12 @@ interface PauseItem {
 type NumeroType = "numero" | "entracte" | "presentation";  // valeurs persistées, jamais traduites
 
 interface Numero { id: string; type: NumeroType; name: string; items: (AudioFile | PauseItem)[] }
-interface Project { name: string; path: string; numeros: Numero[]; singleNumero?: boolean }
+interface Project { name: string; path: string; numeros: Numero[]; singleNumero?: boolean }  // path : absent des fichiers sur disque
 ```
 
 **Migration** : `migrate_project` lit tout fichier de projet. Il convertit l'ancien schéma (`audio_files[]` dans chaque numéro) en `items[]`, et accepte `note` comme ancien nom de `cue`. Ses cas sont couverts par les tests de `types.rs`.
+
+**Champs inconnus** : `Project`, `Numero`, `AudioFile` et `PauseItem` gardent dans `extra` (`#[serde(flatten)]`) les champs qu'ils ne connaissent pas. Une version plus ancienne de l'application qui ouvre puis sauvegarde un projet n'efface donc pas ce qu'une version plus récente y a ajouté.
 
 ---
 
@@ -134,13 +136,14 @@ Créer ou importer dans un dossier qui contient déjà `projet.json` ou `numero.
 
 ### 3.4 Archives
 
-- **Export** : `projet.json` est lu et validé avant de toucher la destination. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
+- **Export** : `projet.json` est lu et validé avant de toucher la destination, puis réécrit sans chemin absolu. L'archive est écrite dans `<dest>.tmp` puis renommée. Seules les pistes référencées y entrent, stockées sans recompression.
 - **Import** : `entry_target` n'accepte que `projet.json`, `numero.json` et `musiques/<fichier>`, et ignore le reste. Un nom qui sortirait du dossier fait échouer l'import : `..`, lettre de lecteur, flux NTFS, barre oblique inverse. Plafonds : 500 Mo par piste, 16 Mo par JSON, 16 Go par archive.
+- **Double-clic** : l'archive est importée dans `Documents/Spectacles/<nom>` (ou `Numéros`), `-2`, `-3`… si le dossier existe. Une copie laissée intacte par un double-clic précédent (même projet, pistes de même taille) est rouverte au lieu d'être dupliquée. Relancer l'application sans fichier remet la fenêtre existante au premier plan.
 
 ### 3.5 Téléchargements
 
 - **URL directe** : une page web ou un JSON est refusé, et rien n'est écrit tant que les premiers octets ne sont pas reconnus comme de l'audio. Le nom de fichier est décodé en UTF-8 et l'extension passe par une liste blanche.
-- **yt-dlp** : l'URL est passée après `--` et doit être en http(s). La phase de téléchargement s'annule par `cancel_download` (`CancelToken` + `DownloadGuard`), et la progression part dans l'événement `yt-dlp-progress`.
+- **yt-dlp** : l'URL est passée après `--` et doit être en http(s). Un seul appel donne le titre (`--print before_dl`), le fichier écrit (`--print after_move:filepath`) et la progression (`--progress-template`), repérés par un préfixe `regieson-` sur stdout comme sur stderr. L'événement `yt-dlp-progress` porte `step`, `title` et, une fois la taille connue, `percent`. `cancel_download` (`CancelToken` + `DownloadGuard`) vaut aussi pour une annulation reçue avant le démarrage ; il arrête toute l'arborescence de yt-dlp (`taskkill /T` sous Windows, SIGTERM relayé par le bootloader PyInstaller ailleurs) avant d'effacer les fichiers partiels.
 - **Délais** : un transfert échoue s'il est bloqué (15 s pour se connecter, 60 s sans données), pas s'il est lent.
 - **Mise à jour de yt-dlp** : `update_yt_dlp` compare la dernière version publiée à la version installée. Si elle est plus récente, il télécharge le binaire et `SHA2-256SUMS` du même tag, vérifie l'empreinte, puis l'installe. Un verrou global empêche deux mises à jour simultanées.
 - **Sidecar embarqué** : sa version est fixée par `YTDLP_VERSION` dans le workflow de release. Sous Linux, c'est la version Python de yt-dlp : elle demande `python3` sur la machine.
@@ -232,8 +235,7 @@ Les tests ([usePlayer.test.tsx](src/usePlayer.test.tsx)) tournent sous jsdom ave
   - `core:window:allow-destroy`, pour que la fenêtre se ferme après la sauvegarde ;
   - `dialog:default` ;
   - `updater:default` ;
-  - `process:allow-restart`, pour relancer après une mise à jour ;
-  - `opener:default`.
+  - `process:allow-restart`, pour relancer après une mise à jour.
 - **[Cargo.toml](src-tauri/Cargo.toml)**
   - Profil release : LTO, une seule unité de compilation, symboles retirés, `panic = "unwind"` conservé, pour qu'une panique dans une commande ne tue pas l'application en plein spectacle.
   - `windows` 0.61 et `zip` 4, alignés sur les versions de Tauri.

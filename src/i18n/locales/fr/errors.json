@@ -12,7 +12,8 @@
     "serializeFailed": "Erreur de sérialisation : {{detail}}",
     "writeFailed": "Erreur d'écriture : {{detail}}",
     "readFailed": "Erreur de lecture : {{detail}}",
-    "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert."
+    "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert.",
+    "fileTooLarge": "Fichier trop volumineux pour être lu ({{size}} Mo). Limite : {{limit}} Mo."
   },
   "project": {
     "invalidFile": "Fichier projet invalide : {{detail}}",

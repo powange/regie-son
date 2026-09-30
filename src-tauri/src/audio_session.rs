@@ -15,6 +15,11 @@ const DISPLAY_NAME: &str = "Régie Son";
 #[cfg(target_os = "windows")]
 const POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
+// The PIDs already classified are forgotten this often, in case one was
+// reused by an unrelated process.
+#[cfg(target_os = "windows")]
+const FORGET_EVERY: u32 = 30;
+
 #[cfg(not(target_os = "windows"))]
 pub fn start_session_namer() {}
 
@@ -35,8 +40,12 @@ pub fn start_session_namer() {
             .ok()
             .map(|exe| wide(&format!("{},0", exe.display())));
 
-        loop {
-            let _ = name_own_sessions(&display, icon.as_deref());
+        let mut known = std::collections::HashMap::new();
+        for poll in 0u32.. {
+            if poll % FORGET_EVERY == 0 {
+                known.clear();
+            }
+            let _ = name_own_sessions(&display, icon.as_deref(), &mut known);
             std::thread::sleep(POLL);
         }
     });
@@ -48,7 +57,11 @@ fn wide(s: &str) -> Vec<u16> {
 }
 
 #[cfg(target_os = "windows")]
-fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String> {
+fn name_own_sessions(
+    display: &[u16],
+    icon: Option<&[u16]>,
+    known: &mut std::collections::HashMap<u32, bool>,
+) -> Result<(), String> {
     use windows::core::{Interface, PCWSTR};
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator,
@@ -77,9 +90,11 @@ fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String
             .GetCount()
             .map_err(|e| format!("GetCount : {}", e))?;
 
-        // Built lazily: most polls find nothing to rename, and a ToolHelp
-        // snapshot is by far the most expensive part of this pass.
+        // A ToolHelp snapshot is by far the most expensive part of this
+        // pass, and almost every session has a PID: it is only taken for a
+        // PID not classified by an earlier poll.
         let mut tree: Option<ProcessTree> = None;
+        let mut seen = std::collections::HashSet::new();
 
         for i in 0..count {
             let ctrl = match session_enum.GetSession(i) {
@@ -96,7 +111,11 @@ fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String
                 _ => continue,
             };
 
-            if !tree.get_or_insert_with(ProcessTree::snapshot).is_ours(pid) {
+            seen.insert(pid);
+            let ours = *known
+                .entry(pid)
+                .or_insert_with(|| tree.get_or_insert_with(ProcessTree::snapshot).is_ours(pid));
+            if !ours {
                 continue;
             }
 
@@ -121,6 +140,7 @@ fn name_own_sessions(display: &[u16], icon: Option<&[u16]>) -> Result<(), String
             }
         }
 
+        known.retain(|pid, _| seen.contains(pid));
         Ok(())
     }
 }

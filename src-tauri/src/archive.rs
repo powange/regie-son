@@ -6,7 +6,10 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::error::{fail, missing, AppError, AppResult};
 use crate::types::{migrate_project, PlaylistItem, Project};
-use crate::{ensure_no_project, open_project_from_file, safe_filename, save_project_to_disk};
+use crate::{
+    ensure_no_project, open_numero_folder, open_project_from_file, open_show_folder, safe_filename,
+    save_project_to_disk,
+};
 
 #[tauri::command(async)]
 pub fn pick_regieson_file(app: tauri::AppHandle) -> Option<String> {
@@ -48,7 +51,7 @@ pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> 
 
 /// Audio files the project references, in a stable order. Orphans, leftover
 /// `.part` downloads and anything else in musiques/ stay out of the archive.
-fn referenced_audio(project: &Project) -> std::collections::BTreeSet<String> {
+pub(crate) fn referenced_audio(project: &Project) -> std::collections::BTreeSet<String> {
     project
         .numeros
         .iter()
@@ -122,6 +125,9 @@ pub(crate) fn export_to_zip(
     })?;
     let project = migrate_project(&String::from_utf8_lossy(&json), String::new())?;
     let files = referenced_audio(&project);
+    // Re-serialised rather than copied: a file saved by an older version
+    // still holds the author's absolute path, which must not be shared.
+    let json = serde_json::to_vec_pretty(&project).map_err(fail("io.serializeFailed"))?;
 
     // Written aside then renamed, so a failure halfway leaves the previous
     // archive (or nothing) rather than a truncated one.
@@ -308,24 +314,42 @@ fn extract_zip_with_limits(
     Ok(())
 }
 
+// An archive without its JSON would otherwise surface as an unreadable
+// project. Errors from the JSON itself keep their own code.
+fn require_json(dest: &Path, json_filename: &str) -> AppResult<()> {
+    if dest.join(json_filename).is_file() {
+        Ok(())
+    } else {
+        Err(AppError::new("archive.missingFile").with("name", json_filename))
+    }
+}
+
+/// Unpacks a show archive into a folder that must not hold a project yet.
+pub(crate) fn unpack_project(src_file: &str, dest: &Path) -> AppResult<Project> {
+    ensure_no_project(dest)?;
+    extract_zip_to(src_file, dest)?;
+    require_json(dest, "projet.json")?;
+    open_show_folder(dest)
+}
+
+/// Unpacks an act archive into a folder that must not hold a project yet.
+pub(crate) fn unpack_numero(src_file: &str, dest: &Path) -> AppResult<Project> {
+    ensure_no_project(dest)?;
+    extract_zip_to(src_file, dest)?;
+    require_json(dest, "numero.json")?;
+    let project = open_numero_folder(dest)?;
+    save_project_to_disk(&project)?;
+    Ok(project)
+}
+
 #[tauri::command(async)]
 pub fn import_project(src_file: String, dest_folder: String) -> AppResult<Project> {
-    let dest = PathBuf::from(&dest_folder);
-    ensure_no_project(&dest)?;
-    extract_zip_to(&src_file, &dest)?;
-    open_project_from_file(&dest, "projet.json").map_err(fail("archive.invalid"))
+    unpack_project(&src_file, Path::new(&dest_folder))
 }
 
 #[tauri::command(async)]
 pub fn import_numero_standalone(src_file: String, dest_folder: String) -> AppResult<Project> {
-    let dest = PathBuf::from(&dest_folder);
-    ensure_no_project(&dest)?;
-    extract_zip_to(&src_file, &dest)?;
-    let mut project =
-        open_project_from_file(&dest, "numero.json").map_err(fail("archive.invalid"))?;
-    project.single_numero = Some(true);
-    save_project_to_disk(&project)?;
-    Ok(project)
+    unpack_numero(&src_file, Path::new(&dest_folder))
 }
 
 #[tauri::command(async)]
@@ -533,6 +557,28 @@ mod tests {
     }
 
     #[test]
+    fn import_reports_what_is_wrong_with_the_archive() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(&src, &[("musiques/a.mp3", b"audio")]);
+        let err = import_project(
+            src.to_string_lossy().to_string(),
+            dir.join("a").to_string_lossy().to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "archive.missingFile");
+
+        write_zip(&src, &[("numero.json", b"{ trunc")]);
+        let err = import_numero_standalone(
+            src.to_string_lossy().to_string(),
+            dir.join("b").to_string_lossy().to_string(),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "project.invalidFile");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn extract_refuses_an_entry_over_the_file_cap() {
         let dir = scratch_dir();
         let src = dir.join("big.regieson");
@@ -624,6 +670,27 @@ mod tests {
         let mut names: Vec<&str> = archive.file_names().collect();
         names.sort();
         assert_eq!(names, ["musiques/a.mp3", "projet.json"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn export_leaves_the_author_s_path_behind() {
+        let dir = scratch_dir();
+        let show = dir.join("show");
+        fs::create_dir_all(show.join("musiques")).unwrap();
+        fs::write(
+            show.join("projet.json"),
+            r#"{"name":"s","path":"/home/alice/Spectacles/s","numeros":[],"future":1}"#,
+        )
+        .unwrap();
+        let dest = dir.join("show.regieson");
+        export_to_zip(&show, dest.to_str().unwrap(), "projet.json").unwrap();
+
+        let mut archive = zip::ZipArchive::new(fs::File::open(&dest).unwrap()).unwrap();
+        let json = read_json_entry(&mut archive.by_name("projet.json").unwrap(), "p").unwrap();
+        assert!(!json.contains("alice"), "{json}");
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!((&value["name"], &value["future"]), (&"s".into(), &1.into()));
         fs::remove_dir_all(&dir).unwrap();
     }
 

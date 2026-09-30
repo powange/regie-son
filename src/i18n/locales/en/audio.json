@@ -8,6 +8,7 @@
   "addPause": "Add a pause",
   "download": {
     "downloadingTitle": "Downloading “{{title}}”…",
+    "downloadingTitlePercent": "Downloading “{{title}}”: {{percent}}%",
     "fetchingInfo": "Fetching the video details…",
     "inProgress": "Downloading…",
     "initializing": "Starting…",

@@ -19,6 +19,7 @@ export default interface Resources {
     "categoryPause": "Pause",
     "download": {
       "downloadingTitle": "Téléchargement de « {{title}} »…",
+      "downloadingTitlePercent": "Téléchargement de « {{title}} » : {{percent}} %",
       "fetchingInfo": "Récupération des informations de la vidéo…",
       "inProgress": "Téléchargement en cours…",
       "initializing": "Initialisation…",
@@ -287,6 +288,7 @@ export default interface Resources {
       "copyFailed": "Impossible de copier le fichier : {{detail}}",
       "createDirFailed": "Impossible de créer le dossier : {{detail}}",
       "deleteFailed": "Impossible de supprimer : {{detail}}",
+      "fileTooLarge": "Fichier trop volumineux pour être lu ({{size}} Mo). Limite : {{limit}} Mo.",
       "invalidFilename": "Nom de fichier invalide",
       "pathNotAllowed": "Accès refusé : ce fichier n'appartient pas à un spectacle ou un numéro ouvert.",
       "readFailed": "Erreur de lecture : {{detail}}",

@@ -137,6 +137,16 @@ mod imp {
     pub fn set(active: bool) -> AppResult<()> {
         let mut guard = GUARD.lock().unwrap_or_else(|e| e.into_inner());
 
+        // Already held, as under Windows: releasing it first would leave the
+        // machine free to sleep if the new request failed.
+        if active {
+            if let Some(child) = guard.as_mut() {
+                if matches!(child.try_wait(), Ok(None)) {
+                    return Ok(());
+                }
+            }
+        }
+
         if let Some(mut child) = guard.take() {
             // Fermer notre bout du tube donne un EOF à `cat`, ce qui relâche
             // le verrou proprement ; le kill n'est qu'un filet de sécurité.
@@ -192,6 +202,13 @@ mod imp {
         });
 
         if rx.recv_timeout(HANDSHAKE_TIMEOUT) == Ok(true) {
+            // stderr only matters for a failed handshake. Drained from now
+            // on, so that nothing it writes later can fill the pipe.
+            if let Some(mut stderr) = child.stderr.take() {
+                thread::spawn(move || {
+                    let _ = std::io::copy(&mut stderr, &mut std::io::sink());
+                });
+            }
             *guard = Some(child);
             return Ok(());
         }
@@ -216,5 +233,29 @@ mod imp {
     use crate::error::{AppError, AppResult};
     pub fn set(_active: bool) -> AppResult<()> {
         Err(AppError::new("sleep.unsupportedOs"))
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    // Needs logind, which CI runners and containers lack: run with --ignored.
+    #[test]
+    #[ignore]
+    fn activating_twice_keeps_one_lock_held() {
+        let held = || {
+            let out = std::process::Command::new("systemd-inhibit")
+                .arg("--list")
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout)
+                .matches("Régie Son")
+                .count()
+        };
+        super::set_sleep_inhibited(true).unwrap();
+        super::set_sleep_inhibited(true).unwrap();
+        assert_eq!(held(), 1);
+        super::set_sleep_inhibited(false).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert_eq!(held(), 0);
     }
 }

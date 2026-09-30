@@ -192,6 +192,7 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
         path: project_dir.to_string_lossy().to_string(),
         numeros: vec![],
         single_numero: None,
+        extra: Default::default(),
     };
     save_project_to_disk(&project)?;
     grant_audio_access(&project_dir);
@@ -214,9 +215,24 @@ pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult
     Ok(project)
 }
 
+// The file name says what a folder holds, whatever the flag inside says: a
+// numero.json without it (older version, hand edit) would otherwise be saved
+// into a projet.json next to it, and the next open would find the old act.
+pub(crate) fn open_show_folder(folder: &Path) -> AppResult<Project> {
+    let mut project = open_project_from_file(folder, "projet.json")?;
+    project.single_numero = None;
+    Ok(project)
+}
+
+pub(crate) fn open_numero_folder(folder: &Path) -> AppResult<Project> {
+    let mut project = open_project_from_file(folder, "numero.json")?;
+    project.single_numero = Some(true);
+    Ok(project)
+}
+
 #[tauri::command]
 fn open_project(project_path: String) -> AppResult<Project> {
-    open_project_from_file(Path::new(&project_path), "projet.json")
+    open_show_folder(Path::new(&project_path))
 }
 
 #[tauri::command]
@@ -234,12 +250,14 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
         numero_type: "numero".into(),
         name: name.clone(),
         items: vec![],
+        extra: Default::default(),
     };
     let project = Project {
         name,
         path: numero_dir.to_string_lossy().to_string(),
         numeros: vec![numero],
         single_numero: Some(true),
+        extra: Default::default(),
     };
     save_project_to_disk(&project)?;
     grant_audio_access(&numero_dir);
@@ -248,7 +266,7 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
 
 #[tauri::command]
 fn open_numero(numero_path: String) -> AppResult<Project> {
-    open_project_from_file(Path::new(&numero_path), "numero.json")
+    open_numero_folder(Path::new(&numero_path))
 }
 
 #[tauri::command]
@@ -274,17 +292,7 @@ fn copy_audio_file(src_path: String, project_path: String) -> AppResult<AudioFil
         .join("musiques")
         .join(&new_filename);
     fs::copy(src, &dest).map_err(fail("io.copyFailed"))?;
-    Ok(AudioFile {
-        id,
-        filename: new_filename,
-        original_name,
-        volume: 100.0,
-        start_time: None,
-        end_time: None,
-        fade_in: None,
-        fade_out: None,
-        cue: None,
-    })
+    Ok(AudioFile::new(id, new_filename, original_name))
 }
 
 #[tauri::command]
@@ -297,6 +305,19 @@ fn delete_audio_file(project_path: String, filename: String) -> AppResult<()> {
         fs::remove_file(&path).map_err(fail("io.deleteFailed"))?;
     }
     Ok(())
+}
+
+// A download in progress (<id>.webm.part, <id>.ytdl…), or one just finished
+// and not yet in the project, looks like an orphan. Nothing written this
+// recently is treated as one; a real orphan shows up on a later check.
+const ORPHAN_MIN_AGE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+fn settled(path: &Path, now: std::time::SystemTime) -> bool {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| now.duration_since(t).ok())
+        .is_some_and(|age| age >= ORPHAN_MIN_AGE)
 }
 
 #[tauri::command(async)]
@@ -318,13 +339,14 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
     missing.sort();
 
     let mut orphans: Vec<String> = Vec::new();
+    let now = std::time::SystemTime::now();
     if let Ok(entries) = fs::read_dir(&musiques_dir) {
         for e in entries.filter_map(|e| e.ok()) {
             if !e.file_type().map(|t| t.is_file()).unwrap_or(false) {
                 continue;
             }
             let name = e.file_name().to_string_lossy().to_string();
-            if !referenced.contains(&name) {
+            if !referenced.contains(&name) && settled(&e.path(), now) {
                 orphans.push(name);
             }
         }
@@ -337,12 +359,14 @@ fn verify_project(project: Project) -> AppResult<VerifyResult> {
 fn cleanup_orphan_files(project_path: String, filenames: Vec<String>) -> AppResult<u32> {
     let musiques_dir = PathBuf::from(&project_path).join("musiques");
     let mut deleted = 0u32;
+    // Checked again: the list comes from a verification that may be old.
+    let now = std::time::SystemTime::now();
     for name in filenames {
         if safe_filename(&name).is_err() {
             continue;
         }
         let p = musiques_dir.join(&name);
-        if p.exists() && fs::remove_file(&p).is_ok() {
+        if p.exists() && settled(&p, now) && fs::remove_file(&p).is_ok() {
             deleted += 1;
         }
     }
@@ -356,7 +380,7 @@ fn read_audio_file(path: String) -> AppResult<tauri::ipc::Response> {
     })?;
     let metadata = fs::metadata(&path).map_err(fail("io.readFileFailed"))?;
     if metadata.len() > download::MAX_AUDIO_FILE_SIZE {
-        return Err(AppError::new("download.fileTooLarge")
+        return Err(AppError::new("io.fileTooLarge")
             .with("size", metadata.len() / (1024 * 1024))
             .with("limit", download::MAX_AUDIO_FILE_SIZE / (1024 * 1024)));
     }
@@ -411,7 +435,13 @@ pub(crate) fn save_project_to_disk(project: &Project) -> AppResult<()> {
     static SAVE_LOCK: Mutex<()> = Mutex::new(());
     let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
-    let content = serde_json::to_string_pretty(project).map_err(fail("io.serializeFailed"))?;
+    // The absolute path names the user's account: written into the file, it
+    // would travel with every export and cloud share.
+    let on_disk = Project {
+        path: String::new(),
+        ..project.clone()
+    };
+    let content = serde_json::to_string_pretty(&on_disk).map_err(fail("io.serializeFailed"))?;
     let dir = Path::new(&project.path);
     let filename = project_json_filename(project);
     let target = dir.join(filename);
@@ -452,6 +482,8 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Launched again without a file, the app must still show itself.
+            file_assoc::focus_main_window(app);
             if let Some(file) = file_assoc::extract_file_from_args(&args) {
                 file_assoc::deliver_open_file(app, file);
             }
@@ -459,7 +491,6 @@ pub fn run() {
     }
 
     builder
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -568,6 +599,7 @@ mod tests {
             path: dir.to_string_lossy().to_string(),
             numeros: vec![],
             single_numero: None,
+            extra: Default::default(),
         }
     }
 
@@ -585,6 +617,23 @@ mod tests {
             "v1"
         );
         assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_absolute_path_stays_out_of_the_file() {
+        let dir = scratch_dir();
+        save_project_to_disk(&show(&dir, "s")).unwrap();
+        let raw = fs::read_to_string(dir.join("projet.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(json.get("path").is_none(), "{raw}");
+        // The frontend still gets it, from the folder.
+        let project = open_project_from_file(&dir, "projet.json").unwrap();
+        assert_eq!(project.path, dir.to_string_lossy());
+        assert_eq!(
+            serde_json::to_value(&project).unwrap()["path"],
+            project.path
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -692,6 +741,58 @@ mod tests {
         // A failed open grants nothing.
         assert!(open_project(dir.join("none").to_string_lossy().to_string()).is_err());
         assert!(take_granted().is_empty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_file_name_decides_between_show_and_act() {
+        let dir = scratch_dir();
+        let act = dir.join("act");
+        fs::create_dir_all(&act).unwrap();
+        fs::write(act.join("numero.json"), r#"{"name":"a","numeros":[]}"#).unwrap();
+        let project = open_numero(act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.single_numero, Some(true));
+        save_project_to_disk(&project).unwrap();
+        assert!(!act.join("projet.json").exists());
+
+        let show = dir.join("show");
+        fs::create_dir_all(&show).unwrap();
+        fs::write(
+            show.join("projet.json"),
+            r#"{"name":"s","numeros":[],"singleNumero":true}"#,
+        )
+        .unwrap();
+        let project = open_project(show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.single_numero, None);
+        save_project_to_disk(&project).unwrap();
+        assert!(!show.join("numero.json").exists());
+        take_granted();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_file_being_downloaded_is_not_an_orphan() {
+        let dir = scratch_dir();
+        let musiques = dir.join("musiques");
+        fs::create_dir_all(&musiques).unwrap();
+        let old = std::time::SystemTime::now() - ORPHAN_MIN_AGE * 2;
+        for name in ["old.mp3", "new.webm.part"] {
+            fs::write(musiques.join(name), b"x").unwrap();
+        }
+        fs::OpenOptions::new()
+            .write(true)
+            .open(musiques.join("old.mp3"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        let result = verify_project(show(&dir, "s")).unwrap();
+        assert_eq!(result.orphans, vec!["old.mp3".to_string()]);
+
+        let folder = dir.to_string_lossy().to_string();
+        let names = vec!["old.mp3".to_string(), "new.webm.part".to_string()];
+        assert_eq!(cleanup_orphan_files(folder, names).unwrap(), 1);
+        assert!(musiques.join("new.webm.part").exists());
         fs::remove_dir_all(&dir).unwrap();
     }
 

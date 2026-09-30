@@ -14,6 +14,8 @@ type View = "list" | "url" | "youtube";
 interface YtDlpStep {
   step: "fetchingInfo" | "downloading";
   title?: string;
+  // Whole percent, once yt-dlp has reported its first progress line.
+  percent?: number;
 }
 
 function stepLabel(t: TFunction<["audio", "common"]>, s: YtDlpStep): string {
@@ -21,7 +23,9 @@ function stepLabel(t: TFunction<["audio", "common"]>, s: YtDlpStep): string {
     case "fetchingInfo":
       return t("audio:download.fetchingInfo");
     case "downloading":
-      return t("audio:download.downloadingTitle", { title: s.title ?? "" });
+      return s.percent === undefined
+        ? t("audio:download.downloadingTitle", { title: s.title ?? "" })
+        : t("audio:download.downloadingTitlePercent", { title: s.title ?? "", percent: s.percent });
   }
 }
 
