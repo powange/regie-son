@@ -101,18 +101,9 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
-      # Warnings fail the build on Linux, which is checked locally too. On
-      # Windows and macOS the platform branches have never been through clippy:
-      # they must compile, and their warnings are reported without failing
-      # until a first pass has cleaned them up.
       - name: Clippy
         working-directory: src-tauri
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            cargo clippy --all-targets --locked -- -D warnings
-          else
-            cargo clippy --all-targets --locked
-          fi
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Tests
         working-directory: src-tauri
