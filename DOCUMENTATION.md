@@ -183,6 +183,7 @@ Le réglage d'avant est relu à l'activation et restauré à la désactivation, 
 | [trackTimes](src/trackTimes.ts), [slug](src/slug.ts), [duration](src/duration.ts), [mime](src/mime.ts) | Utilitaires purs, testés. |
 | [errorMessage](src/errorMessage.ts) | `translateError` pour les `AppError`. |
 | useSettings, useRecentProjects, useRecentNumeros, useUpdater, useBattery | Réglages, listes récentes, mise à jour (inaccessible pendant le spectacle), batterie. |
+| [storage](src/storage.ts) | Lecture validée du `localStorage` (listes récentes, raccourcis) et écriture qui ne lève jamais. Ce qui ne correspond pas au format attendu est ignoré. |
 
 ### 4.3 CSS
 
