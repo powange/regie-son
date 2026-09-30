@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getNextContext } from "./playerNav";
+import { getNextContext, findItemPosition, itemAtOrAfter } from "./playerNav";
 import { Project, AudioFile, PauseItem } from "./types";
 import { PlayerState } from "./usePlayer";
 
@@ -130,5 +130,50 @@ describe("getNextContext", () => {
     const ctx = getNextContext(state, p);
     expect(ctx?.item.id).toBe("a2");
     expect(ctx?.numero.name).toBe("N2");
+  });
+});
+
+describe("findItemPosition", () => {
+  const p = makeProject([
+    { name: "N1", items: [audio("a1"), pause("p1")] },
+    { name: "N2", items: [] },
+    { name: "N3", items: [audio("a2")] },
+  ]);
+
+  it("locates an item by id across acts", () => {
+    expect(findItemPosition(p, "p1")).toEqual({ numeroIndex: 0, audioIndex: 1 });
+    expect(findItemPosition(p, "a2")).toEqual({ numeroIndex: 2, audioIndex: 0 });
+  });
+
+  it("follows the item when the list is edited around it", () => {
+    const edited = makeProject([
+      { name: "N1", items: [audio("new"), pause("p1"), audio("a1")] },
+      { name: "N3", items: [audio("a2")] },
+    ]);
+    expect(findItemPosition(edited, "a1")).toEqual({ numeroIndex: 0, audioIndex: 2 });
+  });
+
+  it("returns null for a deleted item", () => {
+    expect(findItemPosition(p, "gone")).toBeNull();
+  });
+});
+
+describe("itemAtOrAfter", () => {
+  const p = makeProject([
+    { name: "N1", items: [audio("a1"), audio("a2")] },
+    { name: "N2", items: [] },
+    { name: "N3", items: [audio("a3")] },
+  ]);
+
+  it("keeps the old index when something now sits there", () => {
+    expect(itemAtOrAfter(p, { numeroIndex: 0, audioIndex: 1 })).toEqual({ numeroIndex: 0, audioIndex: 1 });
+  });
+
+  it("moves to the next non-empty act past the end of an act", () => {
+    expect(itemAtOrAfter(p, { numeroIndex: 0, audioIndex: 2 })).toEqual({ numeroIndex: 2, audioIndex: 0 });
+  });
+
+  it("returns null past the end of the show", () => {
+    expect(itemAtOrAfter(p, { numeroIndex: 2, audioIndex: 1 })).toBeNull();
   });
 });

@@ -36,6 +36,7 @@ interface Props {
   missingFiles: Set<string>;
   audioDurations: Map<string, number>;
   playAt: (numeroIndex: number, audioIndex: number) => void;
+  togglePlay: () => void;
   onChange: (updated: Numero, tag?: string) => void;
   onDelete: () => void;
   canDelete?: boolean;
@@ -45,7 +46,7 @@ interface Props {
 
 function NumeroCardInner({
   numero, numeroIndex, projectPath, editMode,
-  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt,
+  playerPosition, isPlaying, playerFade, missingFiles, audioDurations, playAt, togglePlay,
   onChange, onDelete,
   canDelete = true,
   canChangeType = true,
@@ -304,7 +305,8 @@ function NumeroCardInner({
                   isPlaying={isActiveNumero && playerPosition?.audioIndex === iIdx && isPlaying}
                   isMissing={missingFiles.has(item.filename)}
                   activeFade={isActiveNumero && playerPosition?.audioIndex === iIdx ? playerFade : null}
-                  onPlay={() => playAt(numeroIndex, iIdx)}
+                  // On the current track the button shows Pause: it must pause, not restart from the top.
+                  onPlay={() => (isActiveNumero && playerPosition?.audioIndex === iIdx ? togglePlay() : playAt(numeroIndex, iIdx))}
                   onChange={(updated, tag) => updateAudio(updated, iIdx, tag)}
                   onDelete={() => deleteItem(item)}
                 />

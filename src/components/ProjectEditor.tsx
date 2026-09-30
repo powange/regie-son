@@ -179,10 +179,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       // stop the show, and Space or the arrows typed in it must not reach the player.
       if (isModalOpen()) return;
       const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
-      }
+      if (target && isTextEntry(target)) return;
       // Undo / Redo — hardcoded, take priority over custom bindings
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undoRef.current(); return; }
@@ -191,6 +188,12 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       const action = resolveAction(e, bindingsRef.current);
       if (!action) return;
       e.preventDefault();
+      // A held key auto-repeats about 30 times a second: only seeking may
+      // repeat, anything else would skip through several tracks.
+      if (e.repeat && action !== "seekForward" && action !== "seekBackward") return;
+      // A button keeps focus after a click; Space would also activate it on
+      // key-up. Taking the focus away leaves the shortcut as the only action.
+      if (target instanceof HTMLButtonElement) target.blur();
       switch (action) {
         case "playPause": togglePlay(); break;
         case "next": next(); break;
@@ -494,6 +497,7 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
                 missingFiles={missingSet}
                 audioDurations={audioDurations}
                 playAt={playAt}
+                togglePlay={togglePlay}
                 onChange={updateNumero}
                 onDelete={deleteNumeroById(n.id)}
                 canDelete={!isSingle}
@@ -561,4 +565,15 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
       )}
     </div>
   );
+}
+
+// Fields where the keyboard types text: shortcuts must leave them alone. A
+// volume slider or a checkbox is not one of them, or the transport would go
+// dead the moment the operator touched a slider mid-show.
+const NON_TEXT_INPUTS = new Set(["range", "checkbox", "radio", "button", "submit", "reset", "color"]);
+
+function isTextEntry(el: HTMLElement): boolean {
+  if (el.isContentEditable) return true;
+  if (el instanceof HTMLInputElement) return !NON_TEXT_INPUTS.has(el.type);
+  return el.tagName === "TEXTAREA" || el.tagName === "SELECT";
 }

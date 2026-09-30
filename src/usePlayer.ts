@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Project, PlaylistItem } from "./types";
+import { Project } from "./types";
 import { audioMimeType } from "./mime";
 import { translateError } from "./errorMessage";
+import { findItemPosition, itemAtOrAfter } from "./playerNav";
 
 export interface PlayerPosition {
   numeroIndex: number;
@@ -28,30 +29,43 @@ export interface PlayerState {
   fade: FadeState | null;
 }
 
+// The current item is held by id; `position` is derived from it on each render
+// so that editing the list during the show never shifts what is playing.
+interface InternalState extends Omit<PlayerState, "position"> {
+  itemId: string | null;
+}
+
+const IDLE: InternalState = {
+  itemId: null,
+  isPlaying: false,
+  progress: { position: 0, duration: 0 },
+  audioError: null,
+  fade: null,
+};
+
 // Fades and timed pauses run on timers rather than requestAnimationFrame: rAF
 // stops altogether while the window is minimised or covered, which froze a
 // fade mid-volume and left the next track waiting until the window came back.
 const TICK_MS = 25;
 
 export function usePlayer(project: Project, audioDeviceId: string | null) {
-  const [state, setState] = useState<PlayerState>({
-    position: null,
-    isPlaying: false,
-    progress: { position: 0, duration: 0 },
-    audioError: null,
-    fade: null,
-  });
+  const [state, setState] = useState<InternalState>(IDLE);
   const stateRef = useRef(state);
   stateRef.current = state;
   const projectRef = useRef(project);
   projectRef.current = project;
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const posRef = useRef<PlayerPosition | null>(null);
+  const itemIdRef = useRef<string | null>(null);
+  // Last index the current item was seen at: where Next resumes if it is deleted.
+  const lastPosRef = useRef<PlayerPosition | null>(null);
+  // Item whose file is loaded in the <audio> element, null while loading or after an error.
+  const loadedItemIdRef = useRef<string | null>(null);
+  const loadingRef = useRef(false);
   const blobUrlRef = useRef<string | null>(null);
   const loadVersionRef = useRef(0);
   const playAtRef = useRef<(nIdx: number, iIdx: number) => void>(() => {});
-  const endTimeRef = useRef<number | null>(null);
-  const nextRef = useRef<() => void>(() => {});
+  const advanceRef = useRef<(fadeSeconds?: number) => void>(() => {});
+  const stopRef = useRef<() => void>(() => {});
   const fadeTimerRef = useRef<number | null>(null);
   const fadingOutRef = useRef(false);
   const ignoreSrcErrorRef = useRef(false);
@@ -59,6 +73,14 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   // that `next` switches tracks without an IPC round-trip.
   const preloadCacheRef = useRef<Map<string, ArrayBuffer>>(new Map());
   const preloadInFlightRef = useRef<Set<string>>(new Set());
+
+  function currentPosition(): PlayerPosition | null {
+    const id = itemIdRef.current;
+    if (id === null) return null;
+    const pos = findItemPosition(projectRef.current, id);
+    if (pos) lastPosRef.current = pos;
+    return pos;
+  }
 
   function preloadAfter(pos: PlayerPosition) {
     const proj = projectRef.current;
@@ -153,11 +175,25 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       if (totalElapsed >= cur.duration) {
         cancelPauseTimer();
         setState((s) => ({ ...s, progress: { position: cur.duration, duration: cur.duration } }));
-        nextRef.current();
+        advanceRef.current();
         return;
       }
       setState((s) => ({ ...s, progress: { position: totalElapsed, duration: cur.duration } }));
     }, TICK_MS);
+  }
+
+  // Drops whatever file the <audio> element holds, so that play() can never
+  // resume a previous track once the player has moved on.
+  function unloadAudio(audio: HTMLAudioElement) {
+    audio.pause();
+    // Emptying src raises an "error" event, but only if there was a source:
+    // arming the flag otherwise would swallow the next real error.
+    if (audio.getAttribute("src")) {
+      ignoreSrcErrorRef.current = true;
+      audio.src = "";
+    }
+    loadedItemIdRef.current = null;
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
   }
 
   const playAt = useCallback((nIdx: number, iIdx: number) => {
@@ -169,19 +205,22 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     const item = proj.numeros[nIdx]?.items[iIdx];
     if (!item) return;
 
+    // The target becomes current right away, before it has loaded: if the
+    // load fails, Next moves past it instead of retrying it forever.
+    itemIdRef.current = item.id;
+    lastPosRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
+    // Any audio load still in flight must not start over the new item.
+    const version = ++loadVersionRef.current;
+
     if (item.type === "pause") {
-      // An audio load still in flight must not start over the pause.
-      loadVersionRef.current++;
-      audio.pause();
-      ignoreSrcErrorRef.current = true;
-      audio.src = "";
-      posRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
+      loadingRef.current = false;
+      unloadAudio(audio);
       const duration = item.duration && item.duration > 0 ? item.duration : 0;
       if (duration > 0) {
         pauseTimerRef.current = { duration, elapsed: 0, startedAt: performance.now(), timerId: null };
         setState((s) => ({
           ...s,
-          position: { numeroIndex: nIdx, audioIndex: iIdx },
+          itemId: item.id,
           isPlaying: true,
           progress: { position: 0, duration },
           audioError: null,
@@ -190,7 +229,7 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       } else {
         setState((s) => ({
           ...s,
-          position: { numeroIndex: nIdx, audioIndex: iIdx },
+          itemId: item.id,
           isPlaying: false,
           progress: { position: 0, duration: 0 },
           audioError: null,
@@ -200,8 +239,16 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     }
 
     const filePath = proj.path + "/musiques/" + item.filename;
-    const version = ++loadVersionRef.current;
     audio.pause();
+    loadedItemIdRef.current = null;
+    loadingRef.current = true;
+    setState((s) => ({
+      ...s,
+      itemId: item.id,
+      isPlaying: false,
+      progress: { position: 0, duration: 0 },
+      audioError: null,
+    }));
 
     const targetVolume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
 
@@ -221,21 +268,16 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
         audio.src = url;
         audio.load();
         audio.currentTime = item.startTime ?? 0;
-        endTimeRef.current = item.endTime ?? null;
         audio.volume = (item.fadeIn && item.fadeIn > 0) ? 0 : targetVolume;
+        loadedItemIdRef.current = item.id;
         return audio.play();
       })
       .then(() => {
         if (version !== loadVersionRef.current) return;
-        posRef.current = { numeroIndex: nIdx, audioIndex: iIdx };
-        setState((s) => ({
-          ...s,
-          position: { numeroIndex: nIdx, audioIndex: iIdx },
-          isPlaying: true,
-          audioError: null,
-        }));
+        loadingRef.current = false;
+        setState((s) => ({ ...s, isPlaying: true, audioError: null }));
         preloadAfter({ numeroIndex: nIdx, audioIndex: iIdx });
-        if (item.type === "audio" && item.fadeIn && item.fadeIn > 0) {
+        if (item.fadeIn && item.fadeIn > 0) {
           runFade(
             "in",
             item.fadeIn,
@@ -249,6 +291,8 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       })
       .catch((err) => {
         if (version !== loadVersionRef.current) return;
+        loadingRef.current = false;
+        unloadAudio(audio);
         setState((s) => ({ ...s, isPlaying: false, audioError: translateError(err) }));
       });
   }, []);
@@ -260,11 +304,20 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     audioRef.current = audio;
 
     audio.addEventListener("timeupdate", () => {
-      const endTime = endTimeRef.current;
-      if (endTime !== null && audio.currentTime >= endTime) {
-        endTimeRef.current = null;
-        nextRef.current();
-        return;
+      const id = itemIdRef.current;
+      if (id !== null && loadedItemIdRef.current === id && !fadingOutRef.current) {
+        const pos = findItemPosition(projectRef.current, id);
+        const item = pos ? projectRef.current.numeros[pos.numeroIndex].items[pos.audioIndex] : null;
+        if (item?.type === "audio") {
+          const end = item.endTime ?? (isFinite(audio.duration) ? audio.duration : null);
+          if (end !== null) {
+            const left = end - audio.currentTime;
+            // Start the fade-out early enough that it ends on the cut point.
+            const fadeOut = item.fadeOut ?? 0;
+            if (fadeOut > 0 && left <= fadeOut) { advanceRef.current(Math.max(left, 0)); return; }
+            if (item.endTime !== undefined && left <= 0) { advanceRef.current(0); return; }
+          }
+        }
       }
       setState((s) => ({
         ...s,
@@ -276,12 +329,12 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     });
 
     audio.addEventListener("ended", () => {
-      if (!fadingOutRef.current) nextRef.current();
+      if (!fadingOutRef.current) advanceRef.current(0);
     });
 
     audio.addEventListener("error", () => {
       if (ignoreSrcErrorRef.current) { ignoreSrcErrorRef.current = false; return; }
-      if (!posRef.current) return;
+      if (!itemIdRef.current) return;
       setState((s) => ({ ...s, isPlaying: false, audioError: "Erreur de lecture audio" }));
     });
 
@@ -310,38 +363,40 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   // Sync volume in real-time when the project changes (e.g. user drags volume slider)
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !posRef.current || fadingOutRef.current || fadeTimerRef.current !== null) return;
-    const { numeroIndex, audioIndex } = posRef.current;
-    const item = project.numeros[numeroIndex]?.items[audioIndex];
+    const id = itemIdRef.current;
+    if (!audio || id === null || loadedItemIdRef.current !== id) return;
+    if (fadingOutRef.current || fadeTimerRef.current !== null) return;
+    const pos = findItemPosition(project, id);
+    const item = pos ? project.numeros[pos.numeroIndex].items[pos.audioIndex] : null;
     if (item?.type === "audio") {
       audio.volume = Math.max(0, Math.min(1, (item.volume ?? 100) / 100));
     }
   }, [project]);
 
   const togglePlay = useCallback(() => {
-    const { position, isPlaying } = stateRef.current;
     const audio = audioRef.current;
     if (!audio) return;
+    const id = itemIdRef.current;
 
-    if (!position) {
+    if (id === null) {
       const first = firstAudioPosition(projectRef.current);
       if (first) playAtRef.current(first.numeroIndex, first.audioIndex);
       return;
     }
 
-    const item = projectRef.current.numeros[position.numeroIndex]?.items[position.audioIndex];
-    if (!item) return;
+    const pos = currentPosition();
+    const item = pos ? projectRef.current.numeros[pos.numeroIndex].items[pos.audioIndex] : null;
 
-    if (item.type === "pause") {
+    if (item?.type === "pause") {
       const t = pauseTimerRef.current;
       // Untimed pause: same behaviour as before — jump to the next audio item.
       if (!t || t.duration <= 0) {
-        const nxt = nextAudioPosition(projectRef.current, position);
+        const nxt = nextAudioPosition(projectRef.current, pos!);
         if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
         return;
       }
       // Timed pause: toggle the countdown.
-      if (isPlaying) {
+      if (stateRef.current.isPlaying) {
         if (t.timerId !== null) { window.clearInterval(t.timerId); t.timerId = null; }
         if (t.startedAt !== null) {
           t.elapsed += (performance.now() - t.startedAt) / 1000;
@@ -356,45 +411,63 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
       return;
     }
 
-    if (isPlaying) {
+    if (loadingRef.current) return;
+
+    // Nothing of this item in the <audio> element (its load failed): load it
+    // again rather than resume whatever played before.
+    if (loadedItemIdRef.current !== id) {
+      if (pos) playAtRef.current(pos.numeroIndex, pos.audioIndex);
+      return;
+    }
+
+    if (stateRef.current.isPlaying) {
       audio.pause();
       setState((s) => ({ ...s, isPlaying: false }));
     } else {
-      audio.play().then(() => setState((s) => ({ ...s, isPlaying: true })));
+      audio.play()
+        .then(() => setState((s) => ({ ...s, isPlaying: true, audioError: null })))
+        .catch((err) => setState((s) => ({ ...s, isPlaying: false, audioError: translateError(err) })));
     }
   }, []);
 
-  const next = useCallback((): void => {
+  // Moves to the next item, fading the current track out first when it is
+  // audible. `fadeSeconds` overrides the item's own fadeOut: 0 when the track
+  // has already ended, the time left when an automatic fade starts late.
+  const advance = useCallback((fadeSeconds?: number): void => {
     if (fadingOutRef.current) return;
 
-    const pos = stateRef.current.position;
-    if (!pos) {
+    const id = itemIdRef.current;
+    if (id === null) {
       const first = firstItemPosition(projectRef.current);
       if (first) playAtRef.current(first.numeroIndex, first.audioIndex);
       return;
     }
 
     const audio = audioRef.current;
-    const item = projectRef.current.numeros[pos.numeroIndex]?.items[pos.audioIndex];
+    const pos = currentPosition();
+    const item = pos ? projectRef.current.numeros[pos.numeroIndex].items[pos.audioIndex] : null;
 
+    // Resolved when the fade is over: the list may have changed meanwhile.
     const doAdvance = () => {
-      const nxt = nextItemPosition(projectRef.current, pos);
+      const proj = projectRef.current;
+      const cur = currentPosition();
+      const last = lastPosRef.current;
+      const nxt = cur ? nextItemPosition(proj, cur) : last ? itemAtOrAfter(proj, last) : null;
       if (nxt) playAtRef.current(nxt.numeroIndex, nxt.audioIndex);
+      // End of the show: stop cleanly instead of leaving a silent track playing.
+      else stopRef.current();
     };
 
-    if (
-      audio &&
-      stateRef.current.isPlaying &&
-      item?.type === "audio" &&
-      item.fadeOut && item.fadeOut > 0
-    ) {
+    const audible = !!audio && loadedItemIdRef.current === id && !audio.paused && !audio.ended;
+    const duration = fadeSeconds ?? (item?.type === "audio" ? item.fadeOut ?? 0 : 0);
+    if (audio && audible && duration > 0) {
       // A fade-in still running would fight this one for the volume.
       cancelFade();
       fadingOutRef.current = true;
       const startVolume = audio.volume;
       runFade(
         "out",
-        item.fadeOut,
+        duration,
         (t) => { const r = 1 - t; audio.volume = startVolume * r * r; }, // courbe quadratique descendante
         () => {
           fadingOutRef.current = false;
@@ -407,7 +480,9 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     }
   }, []);
 
-  nextRef.current = next;
+  advanceRef.current = advance;
+
+  const next = useCallback(() => advance(), [advance]);
 
   const seek = useCallback((position: number) => {
     const audio = audioRef.current;
@@ -417,14 +492,14 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
   const stop = useCallback(() => {
     // Invalidate any load in flight, or the track would start after Stop.
     loadVersionRef.current++;
+    loadingRef.current = false;
     const audio = audioRef.current;
     const wasPlaying = !!audio && !audio.paused && audio.volume > 0;
     const finalize = () => {
-      if (audio) { audio.pause(); audio.currentTime = 0; audio.src = ""; }
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-      posRef.current = null;
-      endTimeRef.current = null;
-      setState({ position: null, isPlaying: false, progress: { position: 0, duration: 0 }, audioError: null, fade: null });
+      if (audio) { unloadAudio(audio); audio.currentTime = 0; }
+      itemIdRef.current = null;
+      lastPosRef.current = null;
+      setState(IDLE);
     };
 
     cancelFade();
@@ -449,7 +524,24 @@ export function usePlayer(project: Project, audioDeviceId: string | null) {
     );
   }, []);
 
-  return { state, playAt, togglePlay, next, stop, seek };
+  stopRef.current = stop;
+
+  const position = useMemo(
+    () => (state.itemId === null ? null : findItemPosition(project, state.itemId)),
+    [state.itemId, project],
+  );
+  const publicState = useMemo<PlayerState>(
+    () => ({
+      position,
+      isPlaying: state.isPlaying,
+      progress: state.progress,
+      audioError: state.audioError,
+      fade: state.fade,
+    }),
+    [position, state.isPlaying, state.progress, state.audioError, state.fade],
+  );
+
+  return { state: publicState, playAt, togglePlay, next, stop, seek };
 }
 
 function firstAudioPosition(project: Project): PlayerPosition | null {
@@ -487,5 +579,3 @@ function nextAudioPosition(project: Project, pos: PlayerPosition): PlayerPositio
   if (item.type === "audio") return nxt;
   return nextAudioPosition(project, nxt);
 }
-
-void (null as unknown as PlaylistItem); // keep type import
