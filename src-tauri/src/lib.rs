@@ -372,16 +372,33 @@ fn project_json_filename(project: &Project) -> &'static str {
     }
 }
 
+// Rotating on every save left .bak1 to .bak3 a few seconds apart after a
+// burst of edits, all equally recent. A new generation is only started once
+// .bak1 is this old; saves in between leave the backups alone.
+const BACKUP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
 fn rotate_backups(dir: &Path, filename: &str) {
     let bak = |n: u8| dir.join(format!("{}.bak{}", filename, n));
+    let now = std::time::SystemTime::now();
+    let recent = fs::metadata(bak(1))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| now.duration_since(t).ok())
+        .is_some_and(|age| age < BACKUP_INTERVAL);
+    if recent {
+        return;
+    }
     let _ = fs::remove_file(bak(3));
     let _ = fs::rename(bak(2), bak(3));
     let _ = fs::rename(bak(1), bak(2));
     // Copied, not renamed: the target must exist at every instant, in case
     // the final rename fails (file held by an antivirus, disk full).
     let current = dir.join(filename);
-    if current.exists() {
-        let _ = fs::copy(&current, bak(1));
+    if current.exists() && fs::copy(&current, bak(1)).is_ok() {
+        // The copy may keep the source's mtime (macOS, Windows): date it now.
+        if let Ok(f) = fs::OpenOptions::new().write(true).open(bak(1)) {
+            let _ = f.set_modified(now);
+        }
     }
 }
 
@@ -544,6 +561,38 @@ mod tests {
             "v1"
         );
         assert!(!dir.join("projet.json.tmp").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn backups_rotate_at_most_every_interval() {
+        let dir = scratch_dir();
+        for name in ["v1", "v2", "v3"] {
+            save_project_to_disk(&show(&dir, name)).unwrap();
+        }
+        // A burst of saves keeps the first backup instead of cycling.
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v1"
+        );
+        assert!(!dir.join("projet.json.bak2").exists());
+
+        let old = std::time::SystemTime::now() - BACKUP_INTERVAL * 2;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(dir.join("projet.json.bak1"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        save_project_to_disk(&show(&dir, "v4")).unwrap();
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak1").unwrap().name,
+            "v3"
+        );
+        assert_eq!(
+            read_project_file(&dir, "projet.json.bak2").unwrap().name,
+            "v1"
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
