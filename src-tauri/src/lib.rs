@@ -215,9 +215,24 @@ pub(crate) fn open_project_from_file(folder: &Path, filename: &str) -> AppResult
     Ok(project)
 }
 
+// The file name says what a folder holds, whatever the flag inside says: a
+// numero.json without it (older version, hand edit) would otherwise be saved
+// into a projet.json next to it, and the next open would find the old act.
+pub(crate) fn open_show_folder(folder: &Path) -> AppResult<Project> {
+    let mut project = open_project_from_file(folder, "projet.json")?;
+    project.single_numero = None;
+    Ok(project)
+}
+
+pub(crate) fn open_numero_folder(folder: &Path) -> AppResult<Project> {
+    let mut project = open_project_from_file(folder, "numero.json")?;
+    project.single_numero = Some(true);
+    Ok(project)
+}
+
 #[tauri::command]
 fn open_project(project_path: String) -> AppResult<Project> {
-    open_project_from_file(Path::new(&project_path), "projet.json")
+    open_show_folder(Path::new(&project_path))
 }
 
 #[tauri::command]
@@ -251,7 +266,7 @@ fn create_numero(name: String, folder_path: String) -> AppResult<Project> {
 
 #[tauri::command]
 fn open_numero(numero_path: String) -> AppResult<Project> {
-    open_project_from_file(Path::new(&numero_path), "numero.json")
+    open_numero_folder(Path::new(&numero_path))
 }
 
 #[tauri::command]
@@ -719,6 +734,32 @@ mod tests {
         // A failed open grants nothing.
         assert!(open_project(dir.join("none").to_string_lossy().to_string()).is_err());
         assert!(take_granted().is_empty());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_file_name_decides_between_show_and_act() {
+        let dir = scratch_dir();
+        let act = dir.join("act");
+        fs::create_dir_all(&act).unwrap();
+        fs::write(act.join("numero.json"), r#"{"name":"a","numeros":[]}"#).unwrap();
+        let project = open_numero(act.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.single_numero, Some(true));
+        save_project_to_disk(&project).unwrap();
+        assert!(!act.join("projet.json").exists());
+
+        let show = dir.join("show");
+        fs::create_dir_all(&show).unwrap();
+        fs::write(
+            show.join("projet.json"),
+            r#"{"name":"s","numeros":[],"singleNumero":true}"#,
+        )
+        .unwrap();
+        let project = open_project(show.to_string_lossy().to_string()).unwrap();
+        assert_eq!(project.single_numero, None);
+        save_project_to_disk(&project).unwrap();
+        assert!(!show.join("numero.json").exists());
+        take_granted();
         fs::remove_dir_all(&dir).unwrap();
     }
 
