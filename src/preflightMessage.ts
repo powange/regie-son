@@ -27,6 +27,10 @@ export function preflightMessage(t: PreflightTFunction, issue: PreflightIssue): 
       return t("preflight:trackFileMissing", { label: trackLabel(t, issue) });
     case "trackStartAfterEnd":
       return t("preflight:trackStartAfterEnd", { label: trackLabel(t, issue) });
+    case "trackStartBeyondFile":
+      return t("preflight:trackStartBeyondFile", { label: trackLabel(t, issue) });
+    case "trackEndBeyondFile":
+      return t("preflight:trackEndBeyondFile", { label: trackLabel(t, issue) });
     case "trackFadesTooLong":
       return t("preflight:trackFadesTooLong", { label: trackLabel(t, issue) });
     case "trackVolumeZero":

@@ -9,13 +9,17 @@
     "refresh": "Refresh the list",
     "systemDefault": "System default",
     "unnamedDevice": "Audio device",
-    "missingDevice": "Device not found (unplugged?)"
+    "missingDevice": "Device not found (unplugged?)",
+    "previewTitle": "Preview output",
+    "previewHint": "Used to listen to a track in its settings, for example headphones, so that a preview never goes out on the PA."
   },
   "keyBindings": {
     "title": "Controls",
     "playPause": "Play / Pause",
     "next": "Next track",
+    "previous": "Previous item / back to the start of the track",
     "stop": "Stop",
+    "panicFade": "Emergency fade (2 s) then stop",
     "seekForward": "Forward 5 s",
     "seekBackward": "Back 5 s",
     "pressAKey": "Press a key…",
@@ -47,5 +51,12 @@
     "updating": "Updating…",
     "update": "Update",
     "autoUpdate": "Update automatically on startup"
+  },
+  "playback": {
+    "title": "Playback",
+    "crossfade": "Crossfade between two tracks (seconds)",
+    "crossfadeHint": "0 to turn it off. The next track starts while the previous one fades out; a pause keeps its silence.",
+    "protectStop": "Protect Stop: press twice to stop",
+    "protectStopHint": "Keeps a reflex press on the Stop key from cutting the show. The emergency fade still works with a single press."
   }
 }

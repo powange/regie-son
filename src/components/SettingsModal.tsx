@@ -236,6 +236,58 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             <RefreshCw size={13} />
             {t("settings:audioOutput.refresh")}
           </button>
+
+          <label className="settings-field-label" htmlFor="settings-preview-output">
+            {t("settings:audioOutput.previewTitle")}
+          </label>
+          {!loading && (
+            <select
+              id="settings-preview-output"
+              className="settings-select"
+              value={settings.previewDeviceId ?? "default"}
+              onChange={(e) => onUpdate({ previewDeviceId: e.target.value === "default" ? null : e.target.value })}
+            >
+              {devices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+              ))}
+            </select>
+          )}
+          <p className="settings-hint">{t("settings:audioOutput.previewHint")}</p>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <Volume2 size={15} />
+            {t("settings:playback.title")}
+          </div>
+
+          <label className="settings-field-label" htmlFor="settings-crossfade">
+            {t("settings:playback.crossfade")}
+          </label>
+          <input
+            id="settings-crossfade"
+            className="settings-number"
+            type="number"
+            min={0}
+            max={10}
+            step={0.5}
+            value={settings.crossfadeSeconds ?? 0}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              onUpdate({ crossfadeSeconds: isFinite(v) ? Math.max(0, Math.min(10, v)) : 0 });
+            }}
+          />
+          <p className="settings-hint">{t("settings:playback.crossfadeHint")}</p>
+
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={settings.protectStop === true}
+              onChange={(e) => onUpdate({ protectStop: e.target.checked })}
+            />
+            {t("settings:playback.protectStop")}
+          </label>
+          <p className="settings-hint">{t("settings:playback.protectStopHint")}</p>
         </div>
 
         <div className="settings-section">

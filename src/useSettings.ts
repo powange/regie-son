@@ -8,6 +8,13 @@ export interface Settings {
   // Explicit language choice. Absent or null means "follow the OS", which is
   // what an existing install gets on first launch after the i18n migration.
   language?: string | null;
+  // Stop needs two presses within a second, against a reflex Escape.
+  protectStop?: boolean;
+  // Overlap between two consecutive tracks, in seconds; 0 or absent = off.
+  crossfadeSeconds?: number;
+  // Output used to preview a track in its settings, e.g. headphones, so that
+  // it never goes out on the PA. Absent or null = system default.
+  previewDeviceId?: string | null;
 }
 
 const KEY = "regie-son:settings";

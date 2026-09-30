@@ -64,7 +64,12 @@
     "fadeIn": "Fade in",
     "fadeOut": "Fade out",
     "playbackError": "Cannot play: the file is missing or in an unsupported format.",
-    "outputFailed": "The selected audio output is unavailable ({{detail}}): sound goes to the system default output."
+    "outputFailed": "The selected audio output is unavailable ({{detail}}): sound goes to the system default output.",
+    "previous": "Previous (or back to the start of the track)",
+    "stopArmed": "Press Stop again to stop",
+    "resumeOffer": "Playback was interrupted on “{{track}}” at {{time}}.",
+    "resume": "Resume",
+    "dismissResume": "Dismiss"
   },
   "errors": {
     "add": "Could not add audio: {{detail}}"

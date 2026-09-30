@@ -7,6 +7,7 @@ import { AudioFile } from "../types";
 import { audioMimeType } from "../mime";
 import { useTranslation } from "react-i18next";
 import Modal from "./Modal";
+import { loadSettings } from "../useSettings";
 import { TrackTimesError, formatTime, parseTime, validateTrackTimes } from "../trackTimes";
 
 
@@ -68,6 +69,10 @@ export default function AudioSettingsModal({ audio, projectPath, onSave, onClose
           plugins: [regions],
         });
         wavesurferRef.current = ws;
+
+        // The preview goes to its own output (headphones), never the PA.
+        const media = ws.getMediaElement() as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
+        media.setSinkId?.(loadSettings().previewDeviceId ?? "").catch(() => {});
 
         ws.on("ready", () => {
           if (cancelled) return;

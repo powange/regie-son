@@ -1,6 +1,6 @@
 import i18next from "i18next";
 
-export type KeyAction = "playPause" | "next" | "stop" | "seekForward" | "seekBackward";
+export type KeyAction = "playPause" | "next" | "previous" | "stop" | "panicFade" | "seekForward" | "seekBackward";
 
 export interface KeyBinding {
   key: string; // e.key value; empty string = action disabled
@@ -18,7 +18,9 @@ export interface KeyActionDef {
 export const KEY_ACTIONS = [
   { id: "playPause", labelKey: "settings:keyBindings.playPause" },
   { id: "next", labelKey: "settings:keyBindings.next" },
+  { id: "previous", labelKey: "settings:keyBindings.previous" },
   { id: "stop", labelKey: "settings:keyBindings.stop" },
+  { id: "panicFade", labelKey: "settings:keyBindings.panicFade" },
   { id: "seekForward", labelKey: "settings:keyBindings.seekForward" },
   { id: "seekBackward", labelKey: "settings:keyBindings.seekBackward" },
 ] as const satisfies readonly KeyActionDef[];
@@ -26,7 +28,10 @@ export const KEY_ACTIONS = [
 export const DEFAULT_BINDINGS: Record<KeyAction, KeyBinding> = {
   playPause: { key: " " },
   next: { key: "ArrowRight" },
+  previous: { key: "ArrowLeft" },
   stop: { key: "Escape" },
+  // A way out that does not cut the sound dead in front of the audience.
+  panicFade: { key: "Escape", shift: true },
   seekForward: { key: "ArrowUp" },
   seekBackward: { key: "ArrowDown" },
 };
@@ -67,7 +72,9 @@ export function mergeWithDefaults(
   return {
     playPause: overrides?.playPause ?? DEFAULT_BINDINGS.playPause,
     next: overrides?.next ?? DEFAULT_BINDINGS.next,
+    previous: overrides?.previous ?? DEFAULT_BINDINGS.previous,
     stop: overrides?.stop ?? DEFAULT_BINDINGS.stop,
+    panicFade: overrides?.panicFade ?? DEFAULT_BINDINGS.panicFade,
     seekForward: overrides?.seekForward ?? DEFAULT_BINDINGS.seekForward,
     seekBackward: overrides?.seekBackward ?? DEFAULT_BINDINGS.seekBackward,
   };
