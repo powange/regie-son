@@ -46,50 +46,100 @@ pub fn save_regiesonnumero_file(app: tauri::AppHandle, default_name: String) -> 
         .map(|p| p.to_string())
 }
 
+/// Audio files the project references, in a stable order. Orphans, leftover
+/// `.part` downloads and anything else in musiques/ stay out of the archive.
+fn referenced_audio(project: &Project) -> std::collections::BTreeSet<String> {
+    project
+        .numeros
+        .iter()
+        .flat_map(|n| n.items.iter())
+        .filter_map(|item| match item {
+            PlaylistItem::Audio(a) if safe_filename(&a.filename).is_ok() => {
+                Some(a.filename.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn write_zip(
+    out: &Path,
+    json_filename: &str,
+    json: &[u8],
+    musiques_dir: &Path,
+    files: &std::collections::BTreeSet<String>,
+) -> AppResult<()> {
+    let file = fs::File::create(out).map_err(fail("archive.createFailed"))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let deflated: zip::write::FileOptions<()> =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(json_filename, deflated)
+        .map_err(fail("archive.zipFailed"))?;
+    zip.write_all(json).map_err(fail("io.writeFailed"))?;
+
+    for name in files {
+        // A referenced file that is missing is reported by verify_project;
+        // the export carries what exists, as before.
+        let Ok(mut src) = fs::File::open(musiques_dir.join(name)) else {
+            continue;
+        };
+        let len = src.metadata().map(|m| m.len()).unwrap_or(0);
+        // mp3, m4a, ogg… are already compressed: deflate would cost time for
+        // nothing. Streamed from disk, never held in memory whole.
+        let stored: zip::write::FileOptions<()> = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored)
+            .large_file(len >= u32::MAX as u64);
+        zip.start_file(format!("musiques/{}", name), stored)
+            .map_err(fail("archive.zipFailed"))?;
+        std::io::copy(&mut src, &mut zip).map_err(|e| {
+            AppError::new("archive.readNamedFailed")
+                .with("name", name)
+                .detail(e)
+        })?;
+    }
+
+    let file = zip.finish().map_err(fail("archive.finishFailed"))?;
+    file.sync_all().map_err(fail("archive.finishFailed"))?;
+    Ok(())
+}
+
 pub(crate) fn export_to_zip(
     src_path: &Path,
     dest_file: &str,
     json_filename: &str,
 ) -> AppResult<()> {
-    let file = fs::File::create(dest_file).map_err(fail("archive.createFailed"))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<()> =
-        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-
+    // Everything that can fail cheaply is checked before the destination is
+    // touched: an export that cannot happen must not destroy the last one.
     let json_path = src_path.join(json_filename);
-    if !json_path.exists() {
-        return Err(AppError::new("archive.missingFile").with("name", json_filename));
-    }
-    let content = fs::read(&json_path).map_err(|e| {
-        AppError::new("archive.readNamedFailed")
-            .with("name", json_filename)
-            .detail(e)
-    })?;
-    zip.start_file(json_filename, options)
-        .map_err(fail("archive.zipFailed"))?;
-    zip.write_all(&content).map_err(fail("io.writeFailed"))?;
-
-    let musiques_dir = src_path.join("musiques");
-    if musiques_dir.exists() {
-        let entries = fs::read_dir(&musiques_dir).map_err(fail("archive.readDirFailed"))?;
-        for entry in entries.filter_map(|e| e.ok()) {
-            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let content = fs::read(entry.path()).map_err(|e| {
-                AppError::new("archive.readNamedFailed")
-                    .with("name", &name)
-                    .detail(e)
-            })?;
-            zip.start_file(format!("musiques/{}", name), options)
-                .map_err(fail("archive.zipFailed"))?;
-            zip.write_all(&content).map_err(fail("io.writeFailed"))?;
+    let json = fs::read(&json_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AppError::new("archive.missingFile").with("name", json_filename)
+        } else {
+            AppError::new("archive.readNamedFailed")
+                .with("name", json_filename)
+                .detail(e)
         }
-    }
+    })?;
+    let project = migrate_project(&String::from_utf8_lossy(&json), String::new())?;
+    let files = referenced_audio(&project);
 
-    zip.finish().map_err(fail("archive.finishFailed"))?;
-    Ok(())
+    // Written aside then renamed, so a failure halfway leaves the previous
+    // archive (or nothing) rather than a truncated one.
+    let tmp = PathBuf::from(format!("{}.tmp", dest_file));
+    if let Err(e) = write_zip(
+        &tmp,
+        json_filename,
+        &json,
+        &src_path.join("musiques"),
+        &files,
+    ) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    fs::rename(&tmp, dest_file).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        AppError::new("archive.createFailed").detail(e)
+    })
 }
 
 #[tauri::command(async)]
@@ -548,6 +598,45 @@ mod tests {
             read_json_entry(&mut &b"{}"[..], "projet.json").unwrap(),
             "{}"
         );
+    }
+
+    #[test]
+    fn export_carries_only_the_referenced_audio() {
+        let dir = scratch_dir();
+        let show = dir.join("show");
+        fs::create_dir_all(show.join("musiques")).unwrap();
+        fs::write(
+            show.join("projet.json"),
+            r#"{"name":"s","numeros":[{"id":"n","type":"numero","name":"n","items":[
+                {"type":"audio","id":"a","filename":"a.mp3","original_name":"a.mp3","volume":100}
+            ]}]}"#,
+        )
+        .unwrap();
+        fs::write(show.join("musiques").join("a.mp3"), b"audio").unwrap();
+        fs::write(show.join("musiques").join("orphan.mp3"), b"x").unwrap();
+        fs::write(show.join("musiques").join("b.m4a.part"), b"x").unwrap();
+
+        let dest = dir.join("show.regieson");
+        export_to_zip(&show, dest.to_str().unwrap(), "projet.json").unwrap();
+        assert!(!dir.join("show.regieson.tmp").exists());
+
+        let archive = zip::ZipArchive::new(fs::File::open(&dest).unwrap()).unwrap();
+        let mut names: Vec<&str> = archive.file_names().collect();
+        names.sort();
+        assert_eq!(names, ["musiques/a.mp3", "projet.json"]);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_failed_export_leaves_the_previous_archive_alone() {
+        let dir = scratch_dir();
+        let dest = dir.join("show.regieson");
+        fs::write(&dest, b"previous export").unwrap();
+        let err =
+            export_to_zip(&dir.join("gone"), dest.to_str().unwrap(), "projet.json").unwrap_err();
+        assert_eq!(err.code, "archive.missingFile");
+        assert_eq!(fs::read(&dest).unwrap(), b"previous export");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
