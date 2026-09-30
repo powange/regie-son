@@ -94,3 +94,38 @@ pub fn auto_import_regiesonnumero(src_file: String) -> AppResult<Project> {
     let dest = pick_unique_path(&base_dir);
     import_numero_standalone(src_file, dest.to_string_lossy().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn picks_the_first_show_or_act_after_the_program_name() {
+        assert_eq!(
+            extract_file_from_args(&args(&[
+                "regie-son",
+                "--flag",
+                "/home/me/Show.REGIESON",
+                "/b.regiesonnumero"
+            ])),
+            Some("/home/me/Show.REGIESON".into())
+        );
+        assert_eq!(
+            extract_file_from_args(&args(&["regie-son", "C:\\Users\\me\\Act.regiesonnumero"])),
+            Some("C:\\Users\\me\\Act.regiesonnumero".into())
+        );
+    }
+
+    #[test]
+    fn ignores_the_program_itself_and_other_files() {
+        assert_eq!(extract_file_from_args(&args(&["/opt/x.regieson"])), None);
+        assert_eq!(
+            extract_file_from_args(&args(&["regie-son", "song.mp3", "notes.regieson.txt"])),
+            None
+        );
+    }
+}

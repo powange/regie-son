@@ -79,7 +79,7 @@ archive.by_name(name).map_err(|e| AppError::new("archive.readNamedFailed").with(
 
 ### Où en est la migration
 
-Terminée. **323 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
+Terminée. **363 clés**, 11 namespaces (`app`, `audio`, `common`, `editor`, `errors`, `home`, `parts`, `preflight`, `settings`, `share`, `updater`), `fr` et `en` complets. Plus une seule chaîne française codée en dur hors de la liste « à ne pas traduire » ci-dessus.
 
 Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i18n:check`, `tsc` et les tests avant les quatre builds.
 
@@ -87,10 +87,10 @@ Le job `checks` de [release.yml](.github/workflows/release.yml) fait tourner `i1
 
 ## Stack
 
-- **Backend** : Rust + Tauri 2 (tout dans [src-tauri/src/lib.rs](src-tauri/src/lib.rs))
-- **Frontend** : React 18 + TypeScript + Vite
-- **State** : hooks custom (`usePlayer`, `useSettings`, `useRecentProjects`, `useUpdater`) + prop drilling. Pas de Redux/Zustand.
-- **Audio** : HTML5 `<audio>` via blob URLs (pas de rodio/cpal côté Rust)
+- **Backend** : Rust + Tauri 2, découpé en modules dans [src-tauri/src/](src-tauri/src/) (`lib.rs` pour les projets et `run()`, puis `archive`, `cloud`, `download`, `file_assoc`, `show_mode`, `sleep_guard`, `audio_session`, `battery`, `types`, `error`). Architecture détaillée dans [DOCUMENTATION.md](DOCUMENTATION.md).
+- **Frontend** : React 19 + TypeScript + Vite, i18next, wavesurfer.js (forme d'onde)
+- **State** : hooks custom (`usePlayer`, `useSettings`, `useRecentProjects`, `useUpdater`…) + prop drilling. Pas de Redux/Zustand.
+- **Audio** : HTML5 `<audio>` lu en flux par le protocole asset (`convertFileSrc(<projet>/musiques/<fichier>)`), pas de rodio/cpal côté Rust. Le scope asset est vide par défaut : **tout chemin qui renvoie un `Project` au frontend doit appeler `grant_audio_access`** (c'est le cas de `open_project_from_file`, `create_project`, `create_numero`), sinon rien ne se lit.
 - **Icons** : lucide-react
 - **D&D** : @dnd-kit
 - **Updater** : tauri-plugin-updater avec signature minisign
@@ -129,7 +129,11 @@ Les fonctions `next`, `togglePlay`, etc. lisent `stateRef.current`/`projectRef.c
 
 ### Cross-refs pour rompre les cycles
 
-`nextRef.current = next` et `playAtRef.current = playAt` permettent à des callbacks définis avant d'appeler ceux définis après. Pattern nécessaire parce que `playAt` est utilisé dans le listener `ended` configuré au montage.
+`playAtRef`, `advanceRef` et `stopRef` permettent à des callbacks définis avant d'appeler ceux définis après. Pattern nécessaire parce que les listeners `ended` et `timeupdate` sont installés au montage.
+
+### Piste courante suivie par id
+
+`usePlayer` retient l'`id` de l'item en cours, pas son index ; `state.position` en est dérivé à chaque rendu (`findItemPosition`). Éditer la liste pendant la lecture ne déplace donc pas la piste. La navigation (« ce qui vient après ») n'est définie qu'une fois, dans [playerNav.ts](src/playerNav.ts), et partagée par Suivant, Espace et l'aperçu.
 
 ### Commandes Tauri par plateforme
 
@@ -152,7 +156,7 @@ Frontend écoute avec `listen("yt-dlp-progress", …)` dans un `useEffect`. Nett
 
 ### Fermeture silencieuse des subprocess
 
-Sur Windows, utiliser `silent_command(path)` (helper dans lib.rs) qui ajoute `CREATE_NO_WINDOW` pour éviter qu'une fenêtre console clignote quand on spawn yt-dlp ou une commande système.
+Sur Windows, utiliser `silent_command(path)` (helper dans [download.rs](src-tauri/src/download.rs)) qui ajoute `CREATE_NO_WINDOW` pour éviter qu'une fenêtre console clignote quand on spawn yt-dlp ou une commande système.
 
 ## Pipeline de release
 
@@ -173,15 +177,15 @@ La clé publique est dans [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json)
 - La session SystemSounds n'existe parfois pas au premier lancement — l'utilisateur peut avoir à produire un son système d'abord.
 - Le mode spectacle a deux volets indépendants, toujours tentés tous les deux : couper les notifications ([show_mode.rs](src-tauri/src/show_mode.rs)) et bloquer la mise en veille ([sleep_guard.rs](src-tauri/src/sleep_guard.rs)). Leurs erreurs sont concaténées par ` · ` dans un seul bandeau.
 - Le blocage de veille est conçu pour **se relâcher tout seul si le processus meurt** : thread parqué sous Windows (`ES_CONTINUOUS` est lié au thread), `caffeinate -w <pid>` sous macOS, EOF du tube `systemd-inhibit … cat` sous Linux. Ne pas remplacer par un mécanisme process-wide (`PowerCreateRequest`, D-Bus sans fd) sans conserver cette propriété.
-- La coupure des notifications, elle, n'a **pas** cette propriété : un crash ou un kill laisse les notifications muettes définitivement (dconf sous GNOME, DND macOS, session SystemSounds Windows). Connu, non corrigé.
+- La coupure des notifications, elle, n'a **pas** cette propriété. Le réglage d'avant est donc mémorisé et restauré à la désactivation, à la fermeture (`release_on_exit`) et, après un crash, au lancement suivant grâce à un marqueur dans le dossier de données de l'application. Entre un crash et ce lancement, les notifications restent coupées.
 - `set_show_mode` est un `#[tauri::command(async)]` : les commandes non-async tournent sur le thread principal, et ses deux volets bloquent plusieurs centaines de ms. Retirer l'attribut fige l'UI. Même règle pour toute commande qui lit ou écrit beaucoup (`read_audio_file`, imports/exports, `verify_project`…) et pour les dialogues `blocking_*`, que la doc du plugin interdit sur le thread principal. `save_project_to_disk` est protégé par un verrou, puisque les imports sauvegardent hors du thread principal.
-- `setSinkId` n'est dispo qu'en Chrome/Edge (WebView2 sur Windows). Silent fail sur les autres.
+- `setSinkId` n'est dispo qu'en Chrome/Edge (WebView2 sur Windows). Ailleurs, le preflight signale que le choix de sortie est ignoré (`outputRoutingUnsupported`) ; un échec de routage remplit `state.outputError`.
 - `response.bytes().await` buffer tout en mémoire — utiliser `chunk()` en boucle pour stream.
 - Les projets existants avec l'ancien schéma (`audio_files[]` au lieu de `items[]`) sont migrés automatiquement via `migrate_project`.
 
 ## CSS
 
-Tout dans [src/App.css](src/App.css), ~1400 lignes. Variables CSS dans `:root` (var(--accent), etc.). Chaîne de hauteur critique : `html, body, #root` → `height: 100%; overflow: hidden`. Toute dérogation casse le scroll de `.editor-body`.
+Fichiers par zone dans [src/styles/](src/styles/), importés par [src/App.css](src/App.css). Variables CSS dans `:root` de `base.css` (`var(--accent)`, `var(--primary)`…). Chaîne de hauteur critique : `html, body, #root` → `height: 100%; overflow: hidden`. Toute dérogation casse le scroll de `.editor-body`.
 
 ## Ce qu'il ne faut PAS faire
 

@@ -538,6 +538,24 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    #[test]
+    fn safe_filename_accepts_bare_names_only() {
+        for ok in ["a1b2.mp3", "Intro finale.wav", "été.m4a"] {
+            assert!(safe_filename(ok).is_ok(), "{ok:?} should be accepted");
+        }
+        for bad in [
+            "",
+            "..",
+            ".",
+            "../a.mp3",
+            "musiques/a.mp3",
+            "/etc/passwd",
+            "a/../b.mp3",
+        ] {
+            assert!(safe_filename(bad).is_err(), "{bad:?} should be refused");
+        }
+    }
+
     fn scratch_dir() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("regie-son-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
