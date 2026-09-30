@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { translateError } from "../errorMessage";
+import { useModal } from "../useModal";
 
 type View = "list" | "url" | "youtube";
 
@@ -138,6 +139,7 @@ interface Props {
 export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSelectYoutube, onSelectPause, onClose }: Props) {
   const { t } = useTranslation(["audio", "common"]);
   const [view, setView] = useState<View>("list");
+  useModal(onClose, view === "list");
 
   function back() { setView("list"); }
 

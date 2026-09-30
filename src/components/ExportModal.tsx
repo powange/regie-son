@@ -1,5 +1,6 @@
 import { FileOutput, Cloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useModal } from "../useModal";
 
 
 export type ExportKind = "project" | "numero";
@@ -13,6 +14,7 @@ interface Props {
 
 export default function ExportModal({ kind, onSelectFile, onSelectCloud, onClose }: Props) {
   const { t } = useTranslation(["share"]);
+  useModal(onClose);
   const isProject = kind === "project";
   const title = isProject ? t("share:export.showTitle") : t("share:export.actTitle");
   const extLabel = isProject ? ".regieson" : ".regiesonnumero";

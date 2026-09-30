@@ -6,6 +6,7 @@ import RegionsPlugin, { Region } from "wavesurfer.js/dist/plugins/regions";
 import { AudioFile } from "../types";
 import { audioMimeType } from "../mime";
 import { useTranslation } from "react-i18next";
+import { useModal } from "../useModal";
 
 
 function formatTime(seconds: number | undefined): string {
@@ -44,6 +45,7 @@ interface Props {
 
 export default function AudioSettingsModal({ audio, projectPath, onSave, onClose }: Props) {
   const { t } = useTranslation(["audio", "common"]);
+  useModal(onClose);
   const [startRaw, setStartRaw] = useState(formatTime(audio.startTime));
   const [endRaw, setEndRaw] = useState(formatTime(audio.endTime));
   const [fadeInRaw, setFadeInRaw] = useState(audio.fadeIn !== undefined ? String(audio.fadeIn) : "");

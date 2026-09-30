@@ -8,6 +8,7 @@ import { RecentProject } from "../useRecentProjects";
 import { RecentNumero } from "../useRecentNumeros";
 import OpenProjectModal, { OpenKind } from "./OpenProjectModal";
 import CloudImportDialog from "./CloudImportDialog";
+import { useModal } from "../useModal";
 
 interface Props {
   recents: RecentProject[];
@@ -273,6 +274,7 @@ function slugify(name: string) {
 
 function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
   const { t } = useTranslation(["home", "common"]);
+  useModal(onClose);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -373,6 +375,7 @@ function CreateProjectModal({ onClose, onCreated }: CreateModalProps) {
 
 function CreateNumeroModal({ onClose, onCreated }: CreateModalProps) {
   const { t } = useTranslation(["home", "common"]);
+  useModal(onClose);
   const [name, setName] = useState("");
   const [baseDir, setBaseDir] = useState("");
   const [folderPath, setFolderPath] = useState("");
