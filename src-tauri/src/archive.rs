@@ -85,6 +85,32 @@ pub fn export_numero(numero_path: String, dest_file: String) -> AppResult<()> {
     export_to_zip(Path::new(&numero_path), &dest_file, "numero.json")
 }
 
+/// Where a zip entry lands, relative to the extraction folder.
+///
+/// An archive only ever holds `projet.json` or `numero.json` and the files of
+/// `musiques/`: anything else is skipped (`Ok(None)`). A name that tries to
+/// leave the folder is refused outright (`Err`). The checks are spelled out
+/// rather than left to `Path`, because `Path` parses by the host's rules: on
+/// Linux `C:/…` or `a\..\b` are ordinary names, on Windows they escape.
+fn entry_target(name: &str) -> Result<Option<PathBuf>, ()> {
+    if name.contains('\0') || name.starts_with('/') || name.starts_with('\\') {
+        return Err(());
+    }
+    let parts: Vec<&str> = name.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    // ':' covers drive letters (`C:`) and NTFS alternate streams (`a.mp3:x`).
+    if parts.iter().any(|p| *p == ".." || *p == "." || p.contains(':')) {
+        return Err(());
+    }
+    match parts.as_slice() {
+        [json @ ("projet.json" | "numero.json")] => Ok(Some(PathBuf::from(*json))),
+        ["musiques", file] => {
+            safe_filename(file).map_err(|_| ())?;
+            Ok(Some(Path::new("musiques").join(file)))
+        }
+        _ => Ok(None),
+    }
+}
+
 pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()> {
     fs::create_dir_all(dest_folder).map_err(fail("io.createDirFailed"))?;
 
@@ -94,19 +120,24 @@ pub(crate) fn extract_zip_to(src_file: &str, dest_folder: &Path) -> AppResult<()
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(fail("archive.readEntryFailed"))?;
         let name = entry.name().to_string();
-        if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
-            return Err(AppError::new("archive.unsafePath").with("name", &name));
+        let unsafe_path = || AppError::new("archive.unsafePath").with("name", &name);
+        // Second opinion from the zip crate, which also judges by the host's rules.
+        if entry.enclosed_name().is_none() {
+            return Err(unsafe_path());
         }
-        let out_path = dest_folder.join(&name);
+        let Some(relative) = entry_target(&name).map_err(|_| unsafe_path())? else { continue };
         if entry.is_dir() {
-            fs::create_dir_all(&out_path).map_err(fail("io.createDirFailed"))?;
-        } else {
-            if let Some(parent) = out_path.parent() {
-                fs::create_dir_all(parent).map_err(fail("io.createDirFailed"))?;
-            }
-            let mut out = fs::File::create(&out_path).map_err(fail("archive.createEntryFailed"))?;
-            std::io::copy(&mut entry, &mut out).map_err(fail("archive.extractFailed"))?;
+            continue;
         }
+        let out_path = dest_folder.join(relative);
+        if !out_path.starts_with(dest_folder) {
+            return Err(unsafe_path());
+        }
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).map_err(fail("io.createDirFailed"))?;
+        }
+        let mut out = fs::File::create(&out_path).map_err(fail("archive.createEntryFailed"))?;
+        std::io::copy(&mut entry, &mut out).map_err(fail("archive.extractFailed"))?;
     }
     Ok(())
 }
@@ -182,4 +213,95 @@ pub fn import_numero_into_project(src_file: String, project_path: String) -> App
 
     save_project_to_disk(&project)?;
     Ok(project)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_target_keeps_the_archive_layout() {
+        assert_eq!(entry_target("projet.json"), Ok(Some(PathBuf::from("projet.json"))));
+        assert_eq!(entry_target("numero.json"), Ok(Some(PathBuf::from("numero.json"))));
+        assert_eq!(
+            entry_target("musiques/1f0e.mp3"),
+            Ok(Some(Path::new("musiques").join("1f0e.mp3")))
+        );
+        assert_eq!(
+            entry_target("musiques\\1f0e.mp3"),
+            Ok(Some(Path::new("musiques").join("1f0e.mp3")))
+        );
+    }
+
+    #[test]
+    fn entry_target_skips_foreign_entries() {
+        assert_eq!(entry_target("musiques/"), Ok(None));
+        assert_eq!(entry_target("__MACOSX/._projet.json"), Ok(None));
+        assert_eq!(entry_target("readme.txt"), Ok(None));
+        assert_eq!(entry_target("musiques/sub/a.mp3"), Ok(None));
+    }
+
+    #[test]
+    fn entry_target_refuses_escapes() {
+        for name in [
+            "../evil.bat",
+            "musiques/../../evil.bat",
+            "musiques\\..\\..\\evil.bat",
+            "/etc/passwd",
+            "\\Windows\\evil.bat",
+            "C:/Users/x/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/evil.bat",
+            "C:evil.bat",
+            "musiques/a.mp3:stream",
+            "\\\\?\\C:\\evil.bat",
+            "musiques/./a.mp3",
+            "projet.json\0",
+        ] {
+            assert_eq!(entry_target(name), Err(()), "{name:?} should be refused");
+        }
+    }
+
+    fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+        let mut zip = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        let options: zip::write::FileOptions<()> = zip::write::FileOptions::default();
+        for (name, data) in entries {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    fn scratch_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("regie-son-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn extract_writes_the_expected_files_only() {
+        let dir = scratch_dir();
+        let src = dir.join("show.regieson");
+        write_zip(&src, &[
+            ("projet.json", b"{}"),
+            ("musiques/a.mp3", b"audio"),
+            ("__MACOSX/._a.mp3", b"junk"),
+        ]);
+        let dest = dir.join("out");
+        extract_zip_to(src.to_str().unwrap(), &dest).unwrap();
+        assert_eq!(fs::read(dest.join("projet.json")).unwrap(), b"{}");
+        assert_eq!(fs::read(dest.join("musiques").join("a.mp3")).unwrap(), b"audio");
+        assert!(!dest.join("__MACOSX").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn extract_refuses_an_escaping_entry() {
+        let dir = scratch_dir();
+        let src = dir.join("evil.regieson");
+        write_zip(&src, &[("projet.json", b"{}"), ("musiques/../../evil.bat", b"x")]);
+        let dest = dir.join("out");
+        let err = extract_zip_to(src.to_str().unwrap(), &dest).unwrap_err();
+        assert_eq!(err.code, "archive.unsafePath");
+        assert!(!dir.join("evil.bat").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }
