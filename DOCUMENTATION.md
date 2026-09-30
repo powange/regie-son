@@ -232,8 +232,7 @@ Les tests ([usePlayer.test.tsx](src/usePlayer.test.tsx)) tournent sous jsdom ave
   - `core:window:allow-destroy`, pour que la fenêtre se ferme après la sauvegarde ;
   - `dialog:default` ;
   - `updater:default` ;
-  - `process:allow-restart`, pour relancer après une mise à jour ;
-  - `opener:default`.
+  - `process:allow-restart`, pour relancer après une mise à jour.
 - **[Cargo.toml](src-tauri/Cargo.toml)**
   - Profil release : LTO, une seule unité de compilation, symboles retirés, `panic = "unwind"` conservé, pour qu'une panique dans une commande ne tue pas l'application en plein spectacle.
   - `windows` 0.61 et `zip` 4, alignés sur les versions de Tauri.
