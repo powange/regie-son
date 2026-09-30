@@ -33,7 +33,7 @@
 .numero-drag-handle:active { cursor: grabbing; }
 
 .numero-type-badge {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
