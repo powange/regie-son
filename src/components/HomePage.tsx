@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { isNotFoundError, translateError } from "../errorMessage";
-import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings } from "lucide-react";
+import { FolderOpen, Plus, Music2, Clock, X, AlertCircle, Settings, PlayCircle } from "lucide-react";
 import { Project } from "../types";
 import { RecentProject } from "../useRecentProjects";
 import { RecentNumero } from "../useRecentNumeros";
@@ -10,6 +10,7 @@ import OpenProjectModal, { OpenKind } from "./OpenProjectModal";
 import CloudImportDialog from "./CloudImportDialog";
 import Modal from "./Modal";
 import { folderNameFor, joinPath } from "../slug";
+import { isMobile } from "../platform";
 
 interface Props {
   recents: RecentProject[];
@@ -33,6 +34,20 @@ export default function HomePage({
   const [openError, setOpenError] = useState<string | null>(null);
   const [showOpen, setShowOpen] = useState<OpenKind | null>(null);
   const [showCloudImport, setShowCloudImport] = useState<OpenKind | null>(null);
+
+  // Android cannot import a show yet (plan step 3): a generated one lets a
+  // fresh install be tried out at once.
+  async function handleCreateDemo() {
+    setOpenError(null);
+    try {
+      const project = await invoke<Project>("create_demo_project", {
+        name: t("home:demo.name"), actName: t("home:demo.act"),
+      });
+      onProjectOpen(project);
+    } catch (err) {
+      setOpenError(t("home:errors.openProject", { detail: translateError(err) }));
+    }
+  }
 
   async function handleOpenProject() {
     setOpenError(null);
@@ -157,6 +172,12 @@ export default function HomePage({
             <FolderOpen size={18} />
             {t("home:show.open")}
           </button>
+          {isMobile && (
+            <button className="btn-secondary" onClick={handleCreateDemo}>
+              <PlayCircle size={18} />
+              {t("home:demo.create")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -375,7 +396,7 @@ function CreateModal({ kind, onClose, onCreated }: CreateModalProps) {
             onChange={(e) => setFolderOverride(e.target.value)}
             placeholder={t("home:folderPlaceholder")}
           />
-          <button className="btn-secondary" onClick={pickFolder}>{t("common:actions.browse")}</button>
+          {!isMobile && <button className="btn-secondary" onClick={pickFolder}>{t("common:actions.browse")}</button>}
         </div>
         <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>
           {t("home:folderWillBeCreated")}

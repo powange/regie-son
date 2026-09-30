@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { translateError } from "../errorMessage";
 import Modal from "./Modal";
+import { isMobile } from "../platform";
 
 type View = "list" | "url" | "youtube";
 
@@ -154,18 +155,22 @@ export default function AddAudioSourceModal({ onSelectLocal, onSelectUrl, onSele
         {view === "list" && (
           <div className="source-list">
             <div className="source-category-title">{t("audio:categoryMusic")}</div>
-            <button className="source-option" onClick={() => { onClose(); onSelectLocal(); }}>
-              <Monitor size={20} />
-              <span>{t("audio:thisComputer")}</span>
-            </button>
+            {!isMobile && (
+              <button className="source-option" onClick={() => { onClose(); onSelectLocal(); }}>
+                <Monitor size={20} />
+                <span>{t("audio:thisComputer")}</span>
+              </button>
+            )}
             <button className="source-option" onClick={() => setView("url")}>
               <Link size={20} />
               <span>{t("audio:fromUrl")}</span>
             </button>
-            <button className="source-option" onClick={() => setView("youtube")}>
-              <FileVideo size={20} />
-              <span>{t("audio:youtube")}</span>
-            </button>
+            {!isMobile && (
+              <button className="source-option" onClick={() => setView("youtube")}>
+                <FileVideo size={20} />
+                <span>{t("audio:youtube")}</span>
+              </button>
+            )}
 
             <div className="source-category-title">{t("audio:categoryPause")}</div>
             <button className="source-option" onClick={() => { onClose(); onSelectPause(); }}>

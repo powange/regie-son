@@ -1,6 +1,7 @@
 import { FolderOpen, FileInput, Cloud } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import Modal from "./Modal";
+import { isMobile } from "../platform";
 
 
 export type OpenKind = "project" | "numero";
@@ -33,20 +34,24 @@ export default function OpenProjectModal({ kind, onSelectFolder, onSelectFile, o
     <Modal title={title} onClose={onClose} style={{ maxWidth: 440 }}>
 
         <div className="source-list">
-          <button className="source-option part-option" onClick={() => pick(onSelectFolder)}>
-            <FolderOpen size={22} />
-            <div className="part-option-text">
-              <strong>{t("share:open.folder")}</strong>
-              <span>{folderDesc}</span>
-            </div>
-          </button>
-          <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
-            <FileInput size={22} />
-            <div className="part-option-text">
-              <strong>{t("share:open.file", { ext: extLabel })}</strong>
-              <span>{fileDesc}</span>
-            </div>
-          </button>
+          {!isMobile && (
+            <button className="source-option part-option" onClick={() => pick(onSelectFolder)}>
+              <FolderOpen size={22} />
+              <div className="part-option-text">
+                <strong>{t("share:open.folder")}</strong>
+                <span>{folderDesc}</span>
+              </div>
+            </button>
+          )}
+          {!isMobile && (
+            <button className="source-option part-option" onClick={() => pick(onSelectFile)}>
+              <FileInput size={22} />
+              <div className="part-option-text">
+                <strong>{t("share:open.file", { ext: extLabel })}</strong>
+                <span>{fileDesc}</span>
+              </div>
+            </button>
+          )}
           <button className="source-option part-option" onClick={() => pick(onSelectCloud)}>
             <Cloud size={22} />
             <div className="part-option-text">

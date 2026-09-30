@@ -20,6 +20,7 @@ import {
   mergeWithDefaults,
 } from "../keyBindings";
 import Modal from "./Modal";
+import { isMobile } from "../platform";
 
 // Device labels are only given once the page may use the microphone. Asking
 // for it means an OS prompt and a recording indicator: done once per session,
@@ -212,6 +213,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           </select>
         </div>
 
+        {!isMobile && (
         <div className="settings-section">
           <div className="settings-section-title">
             <Volume2 size={15} />
@@ -254,6 +256,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           )}
           <p className="settings-hint">{t("settings:audioOutput.previewHint")}</p>
         </div>
+        )}
 
         <div className="settings-section">
           <div className="settings-section-title">
@@ -337,6 +340,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
           {captureError && <p className="modal-error">{captureError}</p>}
         </div>
 
+        {!isMobile && (
         <div className="settings-section">
           <div className="settings-section-title">
             <Download size={15} />
@@ -380,7 +384,9 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             )}
           </div>
         </div>
+        )}
 
+        {!isMobile && (
         <div className="settings-section">
           <div className="settings-section-title">
             <FileVideo size={15} />
@@ -415,6 +421,7 @@ export default function SettingsModal({ settings, onUpdate, onClose, updaterStat
             <span>{t("settings:ytDlp.autoUpdate")}</span>
           </label>
         </div>
+        )}
 
         <div className="modal-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
           {version && <span style={{ fontSize: "0.8rem", color: "var(--text2)" }}>v{version}</span>}

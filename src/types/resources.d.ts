@@ -304,6 +304,9 @@ export default interface Resources {
       "serializeFailed": "Erreur de sérialisation : {{detail}}",
       "writeFailed": "Erreur d'écriture : {{detail}}"
     },
+    "platform": {
+      "unsupported": "Cette fonction n'est pas disponible sur cet appareil."
+    },
     "project": {
       "alreadyExists": "Le dossier {{path}} contient déjà un spectacle ou un numéro. Choisissez-en un autre.",
       "invalidFile": "Fichier projet invalide : {{detail}}",
@@ -352,6 +355,11 @@ export default interface Resources {
       "namePlaceholder": "Ex : Cabaret de printemps 2025",
       "nameRequired": "Veuillez saisir un nom de spectacle.",
       "title": "Nouveau spectacle"
+    },
+    "demo": {
+      "act": "Sons de test",
+      "create": "Spectacle de démonstration",
+      "name": "Démonstration"
     },
     "errors": {
       "actNotFound": "Numéro introuvable : \"{{name}}\". Il a peut-être été déplacé ou supprimé.",

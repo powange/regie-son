@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { translateError } from "./errorMessage";
+import { isMobile } from "./platform";
 
 export interface UpdaterState {
   update: Update | null;
@@ -21,7 +22,8 @@ export function useUpdater() {
   });
 
   function checkUpdate() {
-    if (import.meta.env.DEV) {
+    // Mobile builds have no updater: a new APK is installed over the old one.
+    if (import.meta.env.DEV || isMobile) {
       setState((s) => ({ ...s, checking: false, update: null, error: null }));
       return;
     }
