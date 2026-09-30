@@ -128,5 +128,8 @@
     "http403": "Access denied by the server (403).",
     "http404": "URL not found (404).",
     "http5xx": "Server-side error, try again later."
+  },
+  "platform": {
+    "unsupported": "This feature is not available on this device."
   }
 }

@@ -116,9 +116,17 @@ fn parse_zenity_selection(stdout: &[u8]) -> Vec<String> {
 const SHOWS_FOLDER: &str = "Spectacles";
 const ACTS_FOLDER: &str = "Numéros";
 
-// The one place that decides where new shows and acts go by default. Android
-// has no user Documents folder; its port will give this a mobile branch.
+// Android has no user Documents folder: shows live in the app's own storage,
+// known once the app has started (see run()).
+#[cfg(mobile)]
+static MOBILE_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+// The one place that decides where new shows and acts go by default.
 fn default_dir(folder: &str) -> PathBuf {
+    #[cfg(mobile)]
+    if let Some(dir) = MOBILE_DATA_DIR.get() {
+        return dir.join(folder);
+    }
     let base = dirs::document_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
@@ -145,6 +153,12 @@ fn get_default_numeros_dir() -> String {
 
 #[tauri::command(async)]
 fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
+    // Android hands out content:// URIs, not folders the app can write to.
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        return Err(AppError::new("platform.unsupported"));
+    }
     #[cfg(target_os = "linux")]
     if let Some(picked) = zenity_pick(&["--directory"]) {
         return Ok(picked.into_iter().next());
@@ -155,6 +169,13 @@ fn pick_folder(app: tauri::AppHandle) -> AppResult<Option<String>> {
 
 #[tauri::command(async)]
 fn pick_audio_files(app: tauri::AppHandle) -> Vec<String> {
+    // Picked files arrive as content:// URIs on Android: copying them into a
+    // show comes with the import work (Android plan, step 3).
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        return Vec::new();
+    }
     #[cfg(target_os = "linux")]
     if let Some(picked) = zenity_pick(&[
         "--multiple",
@@ -201,6 +222,72 @@ fn create_project(name: String, folder_path: String) -> AppResult<Project> {
         name,
         path: project_dir.to_string_lossy().to_string(),
         numeros: vec![],
+        single_numero: None,
+        extra: Default::default(),
+    };
+    save_project_to_disk(&project)?;
+    grant_audio_access(&project_dir);
+    Ok(project)
+}
+
+// A mono 16-bit WAV of a pure tone, fading in and out so it never clicks.
+fn tone_wav(freq: f64, seconds: u32) -> Vec<u8> {
+    const RATE: u32 = 22_050;
+    let samples = RATE * seconds;
+    let data_len = samples * 2;
+    let mut wav = Vec::with_capacity(44 + data_len as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_len).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&RATE.to_le_bytes());
+    wav.extend_from_slice(&(RATE * 2).to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_len.to_le_bytes());
+    let ramp = (RATE / 10) as f64;
+    for i in 0..samples {
+        let edge = (i as f64).min((samples - i) as f64);
+        let envelope = (edge / ramp).min(1.0);
+        let t = i as f64 / RATE as f64;
+        let v = (t * freq * std::f64::consts::TAU).sin() * envelope * 8000.0;
+        wav.extend_from_slice(&(v as i16).to_le_bytes());
+    }
+    wav
+}
+
+// A small show made of test tones, so that a fresh install (on Android, where
+// importing arrives later) has something to play. The names come from the
+// frontend, in the user's language.
+#[tauri::command(async)]
+fn create_demo_project(name: String, act_name: String) -> AppResult<Project> {
+    let project_dir = file_assoc::pick_unique_path(&default_dir(SHOWS_FOLDER).join(&name));
+    ensure_no_project(&project_dir)?;
+    let musiques = project_dir.join("musiques");
+    fs::create_dir_all(&musiques).map_err(fail("io.createDirFailed"))?;
+    let mut items = Vec::new();
+    for freq in [440.0, 554.0, 659.0] {
+        let id = uuid::Uuid::new_v4().to_string();
+        let filename = format!("{id}.wav");
+        fs::write(musiques.join(&filename), tone_wav(freq, 12)).map_err(fail("io.writeFailed"))?;
+        let mut audio = AudioFile::new(id, filename, format!("{freq} Hz"));
+        audio.fade_in = Some(1.0);
+        audio.fade_out = Some(1.0);
+        items.push(PlaylistItem::Audio(audio));
+    }
+    let project = Project {
+        name,
+        path: project_dir.to_string_lossy().to_string(),
+        numeros: vec![Numero {
+            id: uuid::Uuid::new_v4().to_string(),
+            numero_type: "numero".into(),
+            name: act_name,
+            items,
+            extra: Default::default(),
+        }],
         single_numero: None,
         extra: Default::default(),
     };
@@ -491,6 +578,9 @@ pub fn run() {
     // Hot start: focus existing window + forward file via event
     #[cfg(desktop)]
     {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Launched again without a file, the app must still show itself.
             file_assoc::focus_main_window(app);
@@ -502,12 +592,12 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             use tauri::Manager;
             let _ = ASSET_SCOPE.set(app.asset_protocol_scope());
             if let Ok(dir) = app.path().app_data_dir() {
+                #[cfg(mobile)]
+                let _ = MOBILE_DATA_DIR.set(dir.clone());
                 show_mode::init(dir);
             }
             Ok(())
@@ -518,6 +608,7 @@ pub fn run() {
             pick_folder,
             pick_audio_files,
             create_project,
+            create_demo_project,
             open_project,
             save_project,
             create_numero,
@@ -578,6 +669,16 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tone_is_a_well_formed_wav() {
+        let wav = tone_wav(440.0, 1);
+        assert_eq!(&wav[0..4], b"RIFF");
+        assert_eq!(&wav[8..16], b"WAVEfmt ");
+        assert_eq!(wav.len(), 44 + 22_050 * 2);
+        // Silent at both ends: the envelope keeps it from clicking.
+        assert_eq!(&wav[44..46], &[0, 0]);
+    }
 
     #[test]
     fn default_folders_sit_side_by_side_under_documents() {
