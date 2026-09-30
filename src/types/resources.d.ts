@@ -215,6 +215,8 @@ export default interface Resources {
     },
     "download": {
       "cancelled": "Téléchargement annulé.",
+      "checksumMismatch": "Le yt-dlp téléchargé ne correspond pas à sa somme de contrôle : mise à jour abandonnée.",
+      "checksumMissing": "La somme de contrôle de yt-dlp est absente de la publication : mise à jour abandonnée.",
       "chmodFailed": "chmod : {{detail}}",
       "createFileFailed": "Impossible de créer le fichier : {{detail}}",
       "createPathFailed": "Impossible de créer {{path}} : {{detail}}",
@@ -228,6 +230,7 @@ export default interface Resources {
       "invalidUrl": "Lien invalide : collez une adresse qui commence par http:// ou https://.",
       "metadataFailed": "metadata : {{detail}}",
       "notExecutable": "Le binaire téléchargé n'est pas exécutable sur ce système.",
+      "releaseInfoInvalid": "Impossible de lire la dernière version de yt-dlp : {{detail}}",
       "replaceBinaryFailed": "Impossible de remplacer l'ancien binaire : {{detail}}",
       "unexpected": "Erreur : {{detail}}",
       "ytDlpBroken": "yt-dlp ne démarre pas correctement.",

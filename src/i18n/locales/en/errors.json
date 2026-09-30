@@ -77,7 +77,10 @@
     "chmodFailed": "chmod: {{detail}}",
     "notExecutable": "The downloaded binary is not executable on this system.",
     "replaceBinaryFailed": "Could not replace the old binary: {{detail}}",
-    "invalidUrl": "Invalid link: paste an address that starts with http:// or https://."
+    "invalidUrl": "Invalid link: paste an address that starts with http:// or https://.",
+    "releaseInfoInvalid": "Could not read the latest yt-dlp release: {{detail}}",
+    "checksumMissing": "The yt-dlp checksum is missing from the release: update abandoned.",
+    "checksumMismatch": "The downloaded yt-dlp does not match its checksum: update abandoned."
   },
   "battery": {
     "accessFailed": "Reaching the battery: {{detail}}",

@@ -502,10 +502,99 @@ pub async fn get_yt_dlp_version(app: tauri::AppHandle) -> AppResult<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+const YT_DLP_RELEASES: &str = "https://github.com/yt-dlp/yt-dlp/releases";
+const YT_DLP_LATEST_API: &str = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+const MAX_YT_DLP_SIZE: u64 = 200 * 1024 * 1024;
+
+#[derive(serde::Deserialize)]
+struct Release {
+    tag_name: String,
+}
+
+// yt-dlp tags are dates ("2025.09.26"): anything else is not a tag we can
+// put in a download URL.
+fn is_plausible_tag(tag: &str) -> bool {
+    !tag.is_empty()
+        && tag.len() <= 64
+        && tag
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+}
+
+/// Hash of `asset` in the release's SHA2-256SUMS (`<hex>  <name>` per line).
+fn expected_sha256(sums: &str, asset: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let hash = parts.next()?;
+        let name = parts.next()?.trim_start_matches('*');
+        (name == asset && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
+}
+
+fn installed_yt_dlp_version(app: &tauri::AppHandle) -> Option<String> {
+    let out = silent_command(find_yt_dlp_with_app(app))
+        .arg("--version")
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+// Removes the download on every early return: a failed update must not
+// leave a half-written or unverified binary behind.
+struct TempFile(PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+async fn fetch_ok(client: &reqwest::Client, url: &str) -> AppResult<reqwest::Response> {
+    let response = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, "regie-son")
+        .send()
+        .await
+        .map_err(fail("download.failed"))?;
+    if !response.status().is_success() {
+        return Err(
+            AppError::new("download.httpStatusUpdate").with("status", response.status().as_u16())
+        );
+    }
+    Ok(response)
+}
+
 #[tauri::command]
 pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
+    use sha2::{Digest, Sha256};
     use std::io::Write;
     use tauri::Manager;
+
+    // The launch-time update and the Settings button may overlap: the second
+    // waits, then finds the binary already current.
+    static UPDATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _lock = UPDATE_LOCK.lock().await;
+
+    let client = download_client()?;
+
+    // A few hundred bytes instead of the whole binary on every launch.
+    let tag = fetch_ok(&client, YT_DLP_LATEST_API)
+        .await?
+        .json::<Release>()
+        .await
+        .map_err(fail("download.releaseInfoInvalid"))?
+        .tag_name;
+    if !is_plausible_tag(&tag) {
+        return Err(AppError::new("download.releaseInfoInvalid").detail(&tag));
+    }
+    if let Some(current) = installed_yt_dlp_version(&app) {
+        if current == tag {
+            return Ok(current);
+        }
+    }
 
     let dir = app
         .path()
@@ -513,62 +602,83 @@ pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
         .map_err(fail("download.dataDirUnknown"))?;
     fs::create_dir_all(&dir).map_err(fail("io.createDirFailed"))?;
     let target_path = dir.join(yt_dlp_target_name());
-    let tmp_path = target_path.with_extension("download");
 
-    let url = format!(
-        "https://github.com/yt-dlp/yt-dlp/releases/latest/download/{}",
-        yt_dlp_asset_name()
-    );
+    // Both files come from the same tag: "latest" could move between the two
+    // requests. The binary is run below, and then preferred over the signed
+    // sidecar, so it must match the published checksum first.
+    let asset = yt_dlp_asset_name();
+    let sums = fetch_ok(
+        &client,
+        &format!("{YT_DLP_RELEASES}/download/{tag}/SHA2-256SUMS"),
+    )
+    .await?
+    .text()
+    .await
+    .map_err(fail("io.readFailed"))?;
+    let expected = expected_sha256(&sums, asset).ok_or_else(missing("download.checksumMissing"))?;
 
-    let client = download_client()?;
-
-    let mut response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(fail("download.failed"))?;
-
-    if !response.status().is_success() {
-        return Err(
-            AppError::new("download.httpStatusUpdate").with("status", response.status().as_u16())
-        );
-    }
-
-    let mut file = fs::File::create(&tmp_path).map_err(|e| {
+    let mut response = fetch_ok(
+        &client,
+        &format!("{YT_DLP_RELEASES}/download/{tag}/{asset}"),
+    )
+    .await?;
+    let tmp = TempFile(dir.join(format!("yt-dlp-{}.download", uuid::Uuid::new_v4())));
+    let mut file = fs::File::create(&tmp.0).map_err(|e| {
         AppError::new("download.createPathFailed")
-            .with("path", tmp_path.display())
+            .with("path", tmp.0.display())
             .detail(e)
     })?;
-
+    let mut hasher = Sha256::new();
+    let mut total: u64 = 0;
     while let Some(chunk) = response.chunk().await.map_err(fail("io.readFailed"))? {
+        total += chunk.len() as u64;
+        if total > MAX_YT_DLP_SIZE {
+            return Err(AppError::new("download.fileTooLargeLimit")
+                .with("limit", MAX_YT_DLP_SIZE / (1024 * 1024)));
+        }
+        hasher.update(&chunk);
         file.write_all(&chunk).map_err(fail("io.writeFailed"))?;
     }
+    file.sync_all().map_err(fail("io.writeFailed"))?;
     drop(file);
+
+    let actual = format!("{:x}", hasher.finalize());
+    if actual != expected {
+        return Err(AppError::new("download.checksumMismatch").detail(actual));
+    }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&tmp_path)
+        let mut perms = fs::metadata(&tmp.0)
             .map_err(fail("download.metadataFailed"))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&tmp_path, perms).map_err(fail("download.chmodFailed"))?;
+        fs::set_permissions(&tmp.0, perms).map_err(fail("download.chmodFailed"))?;
     }
 
-    let version_check = silent_command(&tmp_path).arg("--version").output();
-    let ok = version_check
-        .as_ref()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !ok {
-        let _ = fs::remove_file(&tmp_path);
-        return Err(AppError::new("download.notExecutable"));
-    }
-    let version = String::from_utf8_lossy(&version_check.unwrap().stdout)
-        .trim()
-        .to_string();
+    let version_check = silent_command(&tmp.0).arg("--version").output();
+    let version = match version_check {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        _ => return Err(AppError::new("download.notExecutable")),
+    };
 
-    fs::rename(&tmp_path, &target_path).map_err(fail("download.replaceBinaryFailed"))?;
+    // A running yt-dlp.exe cannot be replaced, but it can be moved aside.
+    #[cfg(target_os = "windows")]
+    {
+        let old = dir.join("yt-dlp.old");
+        let _ = fs::remove_file(&old);
+        if target_path.exists() {
+            fs::rename(&target_path, &old).map_err(fail("download.replaceBinaryFailed"))?;
+        }
+        if let Err(e) = fs::rename(&tmp.0, &target_path) {
+            let _ = fs::rename(&old, &target_path);
+            return Err(AppError::new("download.replaceBinaryFailed").detail(e));
+        }
+        let _ = fs::remove_file(&old);
+    }
+    #[cfg(not(target_os = "windows"))]
+    fs::rename(&tmp.0, &target_path).map_err(fail("download.replaceBinaryFailed"))?;
 
     Ok(version)
 }
@@ -599,5 +709,30 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    #[test]
+    fn checksum_is_read_for_the_right_asset() {
+        let a = "a".repeat(64);
+        let b = "B".repeat(64);
+        let sums = format!("{a}  yt-dlp\n{b}  yt-dlp_linux\n{a}  yt-dlp.exe\n");
+        assert_eq!(expected_sha256(&sums, "yt-dlp_linux"), Some("b".repeat(64)));
+        assert_eq!(expected_sha256(&sums, "yt-dlp_macos"), None);
+        assert_eq!(
+            expected_sha256(&format!("{b} *yt-dlp.exe"), "yt-dlp.exe"),
+            Some("b".repeat(64))
+        );
+        assert_eq!(
+            expected_sha256("nothex  yt-dlp_linux", "yt-dlp_linux"),
+            None
+        );
+    }
+
+    #[test]
+    fn only_date_like_tags_are_used() {
+        assert!(is_plausible_tag("2025.09.26"));
+        assert!(!is_plausible_tag(""));
+        assert!(!is_plausible_tag("../../evil"));
+        assert!(!is_plausible_tag("2025.09.26?x=1"));
     }
 }

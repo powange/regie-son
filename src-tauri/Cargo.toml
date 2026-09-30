@@ -26,6 +26,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tokio = { version = "1", features = ["process", "sync", "time", "macros"] }
 starship-battery = "0.11"
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = "2"
