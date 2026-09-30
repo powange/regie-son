@@ -73,6 +73,9 @@ export function initI18n(storedLanguage: string | null | undefined) {
     // React échappe déjà tout ce qu'il rend ; laisser i18next le refaire
     // transformerait les apostrophes et guillemets en entités HTML visibles.
     interpolation: { escapeValue: false },
+    // i18next-cli extract fills a new key with "" in every locale: an
+    // untranslated key must fall back to French, not show an empty label.
+    returnEmptyString: false,
   });
 
   return i18next;

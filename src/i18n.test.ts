@@ -69,6 +69,48 @@ describe("catalogue parity", () => {
     expect(SUPPORTED_LNGS).toContain(FALLBACK_LNG);
   });
 
+  // A misspelt {{param}} in a translation renders the placeholder as is.
+  function params(value: unknown, prefix = "", out: Record<string, string> = {}): Record<string, string> {
+    if (typeof value === "string") {
+      out[prefix] = [...value.matchAll(/{{\s*([\w.]+)/g)].map((m) => m[1]).sort().join(",");
+    } else if (value && typeof value === "object") {
+      for (const [k, v] of Object.entries(value)) params(v, prefix ? `${prefix}.${k}` : k, out);
+    }
+    return out;
+  }
+  const raw: Record<string, Record<string, unknown>> = {};
+  for (const [path, content] of Object.entries(modules)) {
+    const [, lng, ns] = /\/locales\/([^/]+)\/([^/]+)\.json$/.exec(path)!;
+    (raw[lng] ??= {})[ns] = content;
+  }
+
+  function emptyKeys(value: unknown, prefix: string): string[] {
+    if (typeof value === "string") return value.trim() === "" ? [prefix] : [];
+    if (!value || typeof value !== "object") return [];
+    return Object.entries(value).flatMap(([k, v]) => emptyKeys(v, `${prefix}.${k}`));
+  }
+
+  it.each(Object.keys(raw))("%s has no empty string", (lng) => {
+    const empty = Object.entries(raw[lng]).flatMap(([ns, content]) => emptyKeys(content, ns));
+    expect(empty).toEqual([]);
+  });
+
+  it.each(others)("%s uses the same {{params}} as the reference locale", (lng) => {
+    for (const ns of Object.keys(raw[FALLBACK_LNG])) {
+      const ref = params(raw[FALLBACK_LNG][ns]);
+      const cur = params(raw[lng][ns]);
+      // Plural forms differ by language: compare each base key against the
+      // union of its reference forms.
+      const base = (k: string) => k.replace(PLURAL_SUFFIX, "");
+      const refByBase: Record<string, Set<string>> = {};
+      for (const [k, p] of Object.entries(ref)) (refByBase[base(k)] ??= new Set()).add(p);
+      for (const [k, p] of Object.entries(cur)) {
+        expect(refByBase[base(k)], `${lng} ${ns}:${k}`).toBeDefined();
+        expect([...refByBase[base(k)]], `${lng} ${ns}:${k} has {{${p}}}`).toContain(p);
+      }
+    }
+  });
+
   it.each(others)("%s has exactly the keys of the reference locale", (lng) => {
     expect(Object.keys(byLocale[lng]).sort()).toEqual(Object.keys(byLocale[FALLBACK_LNG]).sort());
     for (const ns of Object.keys(byLocale[FALLBACK_LNG])) {
