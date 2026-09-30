@@ -1,0 +1,8 @@
+# The workflows pin actions to commit SHAs (a moved tag cannot swap the code
+# that receives the signing key); Dependabot keeps those pins current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
