@@ -111,18 +111,26 @@ fn parse_zenity_selection(stdout: &[u8]) -> Vec<String> {
         .collect()
 }
 
-pub(crate) fn default_projects_dir() -> String {
+// Folder names under the user's Documents. They are paths on existing
+// installs, not interface text: never translate them (see CLAUDE.md).
+const SHOWS_FOLDER: &str = "Spectacles";
+const ACTS_FOLDER: &str = "Numéros";
+
+// The one place that decides where new shows and acts go by default. Android
+// has no user Documents folder; its port will give this a mobile branch.
+fn default_dir(folder: &str) -> PathBuf {
     let base = dirs::document_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Spectacles").to_string_lossy().to_string()
+    base.join(folder)
+}
+
+pub(crate) fn default_projects_dir() -> String {
+    default_dir(SHOWS_FOLDER).to_string_lossy().to_string()
 }
 
 pub(crate) fn default_numeros_dir() -> String {
-    let base = dirs::document_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Numéros").to_string_lossy().to_string()
+    default_dir(ACTS_FOLDER).to_string_lossy().to_string()
 }
 
 #[tauri::command]
@@ -570,6 +578,18 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_folders_sit_side_by_side_under_documents() {
+        let shows = PathBuf::from(default_projects_dir());
+        let acts = PathBuf::from(default_numeros_dir());
+        assert_eq!(shows.file_name().unwrap(), "Spectacles");
+        assert_eq!(acts.file_name().unwrap(), "Numéros");
+        assert_eq!(shows.parent(), acts.parent());
+        if let Some(docs) = dirs::document_dir() {
+            assert_eq!(shows.parent(), Some(docs.as_path()));
+        }
+    }
 
     #[test]
     fn safe_filename_accepts_bare_names_only() {
