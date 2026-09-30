@@ -12,6 +12,7 @@ import { translateError } from "../errorMessage";
 import { formatLongDuration } from "../duration";
 import { mergeWithDefaults, resolveAction } from "../keyBindings";
 import { useAudioDurations } from "../useAudioDurations";
+import { isModalOpen } from "../useModal";
 import {
   DndContext,
   closestCenter,
@@ -174,10 +175,13 @@ export default function ProjectEditor({ project, settings, onProjectChange, onCl
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // A modal owns the keyboard: Escape closes it (see useModal) and must not
+      // stop the show, and Space or the arrows typed in it must not reach the player.
+      if (isModalOpen()) return;
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
       }
       // Undo / Redo — hardcoded, take priority over custom bindings
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {

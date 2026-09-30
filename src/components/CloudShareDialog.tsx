@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { X, Copy, Check, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useModal } from "../useModal";
 
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 
 export default function CloudShareDialog({ status, code, error, onClose }: Props) {
   const { t } = useTranslation(["share", "common"]);
+  useModal(onClose, status !== "uploading");
   const [copied, setCopied] = useState(false);
 
   async function copyCode() {

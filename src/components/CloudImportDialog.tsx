@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Cloud, AlertCircle, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { translateError } from "../errorMessage";
+import { useModal } from "../useModal";
 
 
 interface Props {
@@ -14,6 +15,7 @@ export default function CloudImportDialog({ kind, onSubmit, onClose }: Props) {
   const { t } = useTranslation(["share", "common"]);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  useModal(onClose, !busy);
   const [error, setError] = useState<string | null>(null);
 
   const title = kind === "project" ? t("share:import.showTitle") : t("share:import.actTitle");

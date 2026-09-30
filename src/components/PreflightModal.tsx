@@ -2,6 +2,7 @@ import { CheckCircle2, AlertTriangle, AlertCircle, X, MonitorPlay } from "lucide
 import { useTranslation } from "react-i18next";
 import { PreflightIssue } from "../preflight";
 import { preflightMessage } from "../preflightMessage";
+import { useModal } from "../useModal";
 
 interface Props {
   issues: PreflightIssue[];
@@ -12,6 +13,7 @@ interface Props {
 
 export default function PreflightModal({ issues, onClose, onConfirm, confirmLabel }: Props) {
   const { t } = useTranslation(["preflight", "common"]);
+  useModal(onClose);
   const errors = issues.filter((i) => i.severity === "error");
   const warnings = issues.filter((i) => i.severity === "warning");
   const hasErrors = errors.length > 0;

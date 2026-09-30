@@ -1,5 +1,6 @@
 import { ListMusic, Coffee, MicVocal, FileInput, Cloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useModal } from "../useModal";
 
 interface Props {
   onSelectNumero: () => void;
@@ -19,6 +20,7 @@ export default function AddPartModal({
   onClose,
 }: Props) {
   const { t } = useTranslation(["parts", "editor"]);
+  useModal(onClose);
 
   function pick(handler: () => void) {
     onClose();

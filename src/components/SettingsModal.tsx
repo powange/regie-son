@@ -19,6 +19,7 @@ import {
   isModifierKey,
   mergeWithDefaults,
 } from "../keyBindings";
+import { useModal } from "../useModal";
 
 interface AudioDevice {
   deviceId: string;
@@ -36,6 +37,7 @@ interface Props {
 
 export default function SettingsModal({ settings, onUpdate, onClose, updaterState, onCheckUpdate, onInstallUpdate }: Props) {
   const { t } = useTranslation(["settings", "common"]);
+  useModal(onClose);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState("");
