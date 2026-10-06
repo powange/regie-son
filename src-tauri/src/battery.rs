@@ -87,6 +87,20 @@ fn combine(readings: &[Reading]) -> Option<BatteryStatus> {
 // Ok(None) on a machine without a battery: desktop tower, most VMs.
 #[tauri::command(async)]
 pub fn get_battery_status() -> AppResult<Option<BatteryStatus>> {
+    #[cfg(desktop)]
+    {
+        read_batteries()
+    }
+    // starship-battery does not build for Android; its BatteryManager reading
+    // comes with the show-mode plugin (Android plan, step 4).
+    #[cfg(mobile)]
+    {
+        Ok(None)
+    }
+}
+
+#[cfg(desktop)]
+fn read_batteries() -> AppResult<Option<BatteryStatus>> {
     use starship_battery::units::{energy::joule, power::watt, ratio::percent, time::second};
     use starship_battery::{Manager, State};
 

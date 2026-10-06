@@ -128,5 +128,8 @@
     "http403": "Accès refusé par le serveur (403).",
     "http404": "URL introuvable (404).",
     "http5xx": "Erreur côté serveur, réessayez plus tard."
+  },
+  "platform": {
+    "unsupported": "Cette fonction n'est pas disponible sur cet appareil."
   }
 }

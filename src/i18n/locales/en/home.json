@@ -37,5 +37,10 @@
     "projectNotFound": "Project not found: \"{{name}}\". It may have been moved or deleted.",
     "actNotFound": "Act not found: \"{{name}}\". It may have been moved or deleted.",
     "folderPicker": "Could not open the folder picker: {{detail}}"
+  },
+  "demo": {
+    "create": "Demo show",
+    "name": "Demo",
+    "act": "Test tones"
   }
 }

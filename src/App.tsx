@@ -16,6 +16,7 @@ import { useRecentNumeros } from "./useRecentNumeros";
 import { useSettings } from "./useSettings";
 import { useUpdater } from "./useUpdater";
 import "./App.css";
+import { isMobile } from "./platform";
 
 function App() {
   const { t } = useTranslation(["app", "updater"]);
@@ -115,7 +116,7 @@ function App() {
     // Background yt-dlp self-update (silent). Runs once per app launch when
     // the setting is not explicitly disabled. Failures are swallowed — the
     // existing bundled sidecar remains usable.
-    if (settings.autoUpdateYtDlp !== false) {
+    if (settings.autoUpdateYtDlp !== false && !isMobile) {
       invoke("update_yt_dlp").catch((err) => {
         console.warn("yt-dlp auto-update failed:", err);
       });

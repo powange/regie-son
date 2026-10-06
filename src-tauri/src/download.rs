@@ -500,6 +500,10 @@ pub async fn download_youtube_audio(
     download_id: String,
     app: tauri::AppHandle,
 ) -> AppResult<AudioFile> {
+    // yt-dlp is a desktop sidecar: Android has no way to run it.
+    #[cfg(mobile)]
+    return Err(AppError::new("platform.unsupported"));
+
     use tokio::io::AsyncBufReadExt;
 
     let url = validate_http_url(&url)?;
@@ -757,6 +761,10 @@ pub async fn download_audio_from_url(
 
 #[tauri::command]
 pub async fn get_yt_dlp_version(app: tauri::AppHandle) -> AppResult<String> {
+    // yt-dlp is a desktop sidecar: Android has no way to run it.
+    #[cfg(mobile)]
+    return Err(AppError::new("platform.unsupported"));
+
     let yt_dlp = find_yt_dlp_with_app(&app);
     let out = silent_command(&yt_dlp)
         .arg("--version")
@@ -850,6 +858,10 @@ async fn fetch_ok(client: &reqwest::Client, url: &str) -> AppResult<reqwest::Res
 
 #[tauri::command]
 pub async fn update_yt_dlp(app: tauri::AppHandle) -> AppResult<String> {
+    // yt-dlp is a desktop sidecar: Android has no way to run it.
+    #[cfg(mobile)]
+    return Err(AppError::new("platform.unsupported"));
+
     use sha2::{Digest, Sha256};
     use std::io::Write;
     use tauri::Manager;

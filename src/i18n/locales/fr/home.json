@@ -37,5 +37,10 @@
     "projectNotFound": "Projet introuvable : \"{{name}}\". Il a peut-être été déplacé ou supprimé.",
     "actNotFound": "Numéro introuvable : \"{{name}}\". Il a peut-être été déplacé ou supprimé.",
     "folderPicker": "Impossible d'ouvrir le sélecteur : {{detail}}"
+  },
+  "demo": {
+    "create": "Spectacle de démonstration",
+    "name": "Démonstration",
+    "act": "Sons de test"
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "regie-son"
-version = "0.4.16"
+version = "0.4.17"
 description = "Régie son pour spectacles cabaret"
 authors = ["pcomble"]
 edition = "2021"
@@ -15,8 +15,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
@@ -24,12 +22,16 @@ dirs = "6.0.0"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
 zip = { version = "4", default-features = false, features = ["deflate"] }
 tokio = { version = "1", features = ["process", "sync", "time", "macros", "fs", "io-util"] }
-starship-battery = "0.11"
 sha2 = "0.10"
 bytes = "1"
 
+# Desktop only: none of these builds or makes sense on Android (no updater
+# or relaunch on mobile, and starship-battery has no Android backend).
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+starship-battery = "0.11"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", features = [
