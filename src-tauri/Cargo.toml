@@ -48,3 +48,12 @@ windows = { version = "0.62", features = [
 codegen-units = 1
 lto = true
 strip = true
+
+# Keeps src-tauri/target from growing to tens of GB: dependencies (tauri,
+# wry, tokio…) carry no debug info, and our own crate only line tables, so
+# backtraces still point at file and line. Release builds are unaffected.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
